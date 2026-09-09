@@ -74,9 +74,10 @@ Everything it keeps -- the map, your characters, your triggers and the session
 logs -- goes in %LOCALAPPDATA%\\{slug}, not in this folder, so this folder
 can be replaced wholesale by an update without touching any of it.
 
-If nothing appears, run {slug}-console.cmd instead: it is the same thing
-with the console kept open, and that is the only place a failure will say
-what it was.
+If nothing appears, look in %LOCALAPPDATA%\\{slug}\\client.log -- with no
+console there is nowhere else for the client to say what went wrong, so it
+writes it there.  {slug}-console.cmd runs the same thing with the console
+kept open if you would rather watch it.
 
 The window is drawn by Edge, which every Windows 10 and 11 machine has.  It
 runs in a profile of its own, so your browser, your extensions and your logins

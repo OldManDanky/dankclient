@@ -284,3 +284,45 @@ def test_the_installer_puts_data_where_the_program_is_not():
     assert "LocalAppDataFolder" in src and "ProgramMenuFolder" in src
     assert 'InstallScope="perUser"' in src
     assert 'InstallPrivileges="limited"' in src, "no UAC prompt to play a MUD"
+
+
+def test_no_console_is_not_a_reason_to_die():
+    """pythonw.exe has no standard streams at all -- sys.stderr is None -- so
+    the first thing that prints raises AttributeError inside a process with
+    nowhere to report it. From outside that is a program which starts and then
+    closes with no error, which is what the first installed run did."""
+    import mud.__main__ as m
+
+    was = sys.stderr
+    try:
+        sys.stderr = None
+        assert m.colour_works() is False       # must not raise
+    finally:
+        sys.stderr = was
+
+
+def test_with_no_console_it_writes_to_a_file_instead():
+    """Not silence: a client that fails invisibly cannot be reported, and "it
+    closed" is not something anybody can act on."""
+    import mud.__main__ as m
+
+    tmp = temp()
+    out, err = sys.stdout, sys.stderr
+    try:
+        with at(tmp, DANK_HOME=str(tmp / "data")):
+            sys.stdout = sys.stderr = None
+            handle = m.speak_to_a_file()
+            assert handle is not None
+            assert sys.stderr is handle and sys.stdout is handle
+            print("hello from a program with no console", file=sys.stderr)
+            handle.flush()
+            wrote = (tmp / "data" / "client.log").read_text()
+    finally:
+        sys.stdout, sys.stderr = out, err
+    assert "no console" in wrote
+
+
+def test_a_console_is_left_alone():
+    import mud.__main__ as m
+
+    assert m.speak_to_a_file() is None, "it must not hijack a working stream"

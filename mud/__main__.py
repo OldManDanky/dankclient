@@ -50,6 +50,8 @@ def colour_works() -> bool:
     Redirected output is a separate question with the same answer: a log file
     full of escape codes is a log file nobody can read.
     """
+    if sys.stderr is None or not hasattr(sys.stderr, "isatty"):
+        return False
     if not sys.stderr.isatty():
         return False
     if sys.platform != "win32":
@@ -246,6 +248,11 @@ async def amain(args: argparse.Namespace) -> int:
         lines: queue.Queue[str | None] = queue.Queue()
 
         def pump() -> None:
+            if sys.stdin is None:
+                # No console to type at: pythonw, or a service.  The browser
+                # is the interface anyway.
+                lines.put(None)
+                return
             for raw in sys.stdin:
                 lines.put(raw)
             lines.put(None)
@@ -430,7 +437,36 @@ def report(session: Session) -> None:
               file=sys.stderr)
 
 
+def speak_to_a_file() -> object | None:
+    """Give the client somewhere to talk when it has no console.
+
+    pythonw.exe has no standard streams at all -- sys.stderr is None -- and the
+    first thing that prints to it raises AttributeError inside a process with
+    nowhere to report it.  Seen from outside, that is a program that starts and
+    then closes with no error, which is exactly what it did.
+
+    So the streams get a file.  Not silence: a client that fails invisibly
+    cannot be reported, and "it closed" is not something anybody can act on.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return None
+    path = home() / "client.log"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "a", encoding="utf-8", errors="replace",
+                      buffering=1)
+    except OSError:
+        return None
+    if sys.stdout is None:
+        sys.stdout = handle
+    if sys.stderr is None:
+        sys.stderr = handle
+    print(f"\n--- {datetime.now():%Y-%m-%d %H:%M:%S} ---", file=sys.stderr)
+    return handle
+
+
 def main() -> int:
+    written = speak_to_a_file()
     if not colour_works():
         plain()
     args = build_parser().parse_args()
@@ -438,6 +474,17 @@ def main() -> int:
         return asyncio.run(amain(args))
     except KeyboardInterrupt:
         return 0
+    except Exception:
+        # With no console this is the only account of what happened, and
+        # without it the process simply vanishes.
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        if written is not None:
+            print(f"see {home() / 'client.log'}", file=sys.stderr)
+        return 1
+    finally:
+        if written is not None:
+            written.flush()
 
 
 if __name__ == "__main__":

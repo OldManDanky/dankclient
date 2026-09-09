@@ -569,7 +569,15 @@ installer puts the program in Program Files where the user it installed for
 cannot write.  That also means the folder can be replaced wholesale by an
 update without touching any of it.
 
-Three things were wrong the first time it ran on Windows, and all three are the
+Installed, it started and then closed again with no error at all.  `pythonw.exe`
+has no standard streams -- `sys.stderr` is `None` -- so the first thing that
+printed raised `AttributeError` inside a process with nowhere to report it.
+There is a log now: with no console, the streams are pointed at
+`%LOCALAPPDATA%\dankclient\client.log`, and an unhandled exception is written
+there before the process goes.  A client that fails invisibly cannot be
+reported, and "it closed" is not something anybody can act on.
+
+Three more things were wrong the first time it ran on Windows, and all three are the
 same kind of thing -- a client somebody double-clicked cannot answer a problem
 with a traceback.
 
