@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""Wrap the built folder in an installer.
+
+The Windows build already produces exactly what an installer has to lay down
+-- an interpreter, the client, and two launchers -- so this is mostly the
+bookkeeping: a component for every file, a stable identity for every component,
+and the handful of declarations that make Windows treat a second install as an
+upgrade of the first rather than a second copy.
+
+    python3 tools/build_msi.py          build dist/dankclient, then the MSI
+
+It uses wixl, from msitools, which builds MSIs on Linux -- so this can be
+produced from the same machine as everything else rather than needing a
+Windows build host.
+
+    sudo apt install wixl
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+from xml.sax.saxutils import escape
+
+HERE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HERE))
+
+from mud import NAME, SLUG, __version__  # noqa: E402
+
+#: Never change this.  Windows recognises a new version as an upgrade of an
+#: old one by matching upgrade codes, so a changed one installs a second copy
+#: beside the first and neither knows about the other.
+UPGRADE_CODE = "6F2A9C41-7B3D-4E58-9A16-2C7E5D840B93"
+
+#: Per-user, into LocalAppData.  Program Files would need an administrator,
+#: and asking a player to elevate to install a MUD client is asking a lot for
+#: something that only ever writes inside their own profile anyway.
+PROGRAMS = "Programs"
+
+#: A component's identity has to be stable across builds for an upgrade to
+#: replace a file rather than leave two.  Derived from the path, so it is the
+#: same every time without anything having to be written down.
+NAMESPACE = uuid.UUID("1b671a64-40d5-491e-99b0-da01ff1f3341")
+
+
+def guid(text: str) -> str:
+    return str(uuid.uuid5(NAMESPACE, f"{SLUG}/{text}")).upper()
+
+
+def ident(text: str) -> str:
+    """A WiX identifier: letters, digits and underscores, and not too long."""
+    clean = "".join(c if c.isalnum() else "_" for c in text)
+    if not clean or clean[0].isdigit():
+        clean = "f_" + clean
+    # Identifiers are capped at 72 characters, and python's own tree has some
+    # long ones; a hash of the whole path keeps them distinct after trimming.
+    if len(clean) > 60:
+        clean = clean[:52] + "_" + guid(text)[:8]
+    return clean
+
+
+def tree(root: Path):
+    """Every directory and file under `root`, depth first, as XML."""
+    lines: list[str] = []
+    components: list[str] = []
+
+    def walk(where: Path, depth: int) -> None:
+        pad = "  " * depth
+        for path in sorted(where.iterdir()):
+            rel = path.relative_to(root).as_posix()
+            if path.is_dir():
+                lines.append(
+                    f'{pad}<Directory Id="d_{ident(rel)}" '
+                    f'Name="{escape(path.name)}">')
+                walk(path, depth + 1)
+                lines.append(f"{pad}</Directory>")
+            else:
+                cid = f"c_{ident(rel)}"
+                components.append(cid)
+                lines.append(
+                    f'{pad}<Component Id="{cid}" Guid="{guid(rel)}">\n'
+                    f'{pad}  <File Id="f_{ident(rel)}" '
+                    f'Name="{escape(path.name)}" '
+                    f'Source="{escape(str(path))}" KeyPath="yes"/>\n'
+                    f"{pad}</Component>")
+
+    walk(root, 5)
+    return "\n".join(lines), components
+
+
+def source(root: Path) -> str:
+    body, components = tree(root)
+    refs = "\n".join(f'      <ComponentRef Id="{c}"/>' for c in components)
+    launcher = str(root / f"{SLUG}.cmd")
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="{escape(NAME)}" Language="1033"
+           Version="{__version__}" Manufacturer="OldManDanky"
+           UpgradeCode="{UPGRADE_CODE}">
+    <Package InstallerVersion="200" Compressed="yes"
+             InstallScope="perUser" InstallPrivileges="limited"
+             Description="{escape(NAME)} {__version__}"
+             Comments="A MIP-native MUD client for 3Kingdoms. GPLv3."/>
+
+    <!-- Replace an older one rather than sit beside it. -->
+    <Upgrade Id="{UPGRADE_CODE}">
+      <UpgradeVersion Minimum="0.0.0" Maximum="{__version__}"
+                      IncludeMinimum="yes" IncludeMaximum="no"
+                      Property="OLDERFOUND"/>
+    </Upgrade>
+    <InstallExecuteSequence>
+      <RemoveExistingProducts After="InstallInitialize"/>
+    </InstallExecuteSequence>
+
+    <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsDir" Name="{PROGRAMS}">
+          <Directory Id="INSTALLDIR" Name="{escape(NAME)}">
+{body}
+          </Directory>
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="MenuDir" Name="{escape(NAME)}">
+          <Component Id="c_shortcut" Guid="{guid('shortcut')}">
+            <Shortcut Id="s_play" Name="{escape(NAME)}"
+                      Description="Play 3Kingdoms"
+                      Target="[INSTALLDIR]{SLUG}.cmd"
+                      WorkingDirectory="INSTALLDIR"/>
+            <RemoveFolder Id="MenuDir" On="uninstall"/>
+            <RegistryValue Root="HKCU"
+                           Key="Software\\OldManDanky\\{SLUG}"
+                           Name="installed" Type="integer" Value="1"
+                           KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Complete" Title="{escape(NAME)}" Level="1">
+{refs}
+      <ComponentRef Id="c_shortcut"/>
+    </Feature>
+  </Product>
+</Wix>
+"""
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--from", dest="folder",
+                    default=str(HERE / "dist" / SLUG),
+                    help="the built client folder")
+    ap.add_argument("--out", default=str(
+        HERE / "dist" / f"{SLUG}-{__version__}.msi"))
+    ap.add_argument("--wxs-only", action="store_true",
+                    help="write the WiX source and stop")
+    args = ap.parse_args(argv[1:])
+
+    root = Path(args.folder)
+    if not root.exists():
+        print(f"no {root} -- run tools/build_windows.py first", file=sys.stderr)
+        return 1
+
+    wxs = Path(args.out).with_suffix(".wxs")
+    wxs.parent.mkdir(parents=True, exist_ok=True)
+    wxs.write_text(source(root))
+    files = sum(1 for p in root.rglob("*") if p.is_file())
+    print(f"  {files} files -> {wxs}")
+    if args.wxs_only:
+        return 0
+
+    if shutil.which("wixl") is None:
+        print("  wixl is not installed:  sudo apt install wixl", file=sys.stderr)
+        return 2
+
+    done = subprocess.run(["wixl", "-v", "-o", args.out, str(wxs)],
+                          capture_output=True, text=True)
+    if done.returncode != 0:
+        sys.stderr.write(done.stdout + done.stderr)
+        return done.returncode
+    size = Path(args.out).stat().st_size
+    print(f"  {args.out} ({size // 1048576} MB)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

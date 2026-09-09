@@ -586,6 +586,37 @@ console will not have it or when the output is being redirected to a file.
 And a path was printed with a trailing forward slash on a machine that uses
 backslashes.
 
+## The installer
+
+```bash
+sudo apt install wixl          # msitools; builds MSIs on Linux
+python3 tools/build_msi.py
+```
+
+Eleven megabytes, carrying the twenty-two megabyte folder.  Built on Linux, so
+there is no Windows build host to keep.
+
+It installs **per user**, into `%LOCALAPPDATA%\Programs\Dank Mud Client`.
+Program Files would need an administrator, and asking somebody to elevate to
+install a MUD client is a lot for a program that only ever writes inside their
+own profile -- so there is no UAC prompt at all.
+
+Three pieces of bookkeeping make an upgrade an upgrade rather than a second
+copy.  The upgrade code is pinned and must never change: Windows matches
+versions by it, and a changed one installs 0.2.0 beside 0.1.0 with neither
+aware of the other.  Component GUIDs are derived from the file path rather than
+generated, so two builds of the same file agree and an upgrade replaces it
+instead of leaving both.  And `RemoveExistingProducts` runs after
+`InstallInitialize`, so the old files go before the new ones arrive.
+
+Your map and characters survive all of that, because they were never in the
+program folder: `%LOCALAPPDATA%\dankclient` is a different place, and the
+installer has no reason to touch it.
+
+The built MSI was taken apart again to check: 84 files in, 84 out, every
+SHA-256 matching, installing to the right directory with the "elevated
+privileges are not required" bit set.
+
 The interpreter is pinned by version *and* by SHA-256: a build that quietly
 picks up a different one is a build whose bugs cannot be reproduced.  What the
 client needs from it was checked rather than assumed -- `_sqlite3` for the map,

@@ -250,3 +250,37 @@ def test_renaming_the_application_does_not_lose_anybody_a_map():
     (tmp / SLUG).mkdir()
     with at(temp(), XDG_DATA_HOME=str(tmp)):
         assert home() == tmp / SLUG
+
+
+def test_the_installer_can_upgrade_itself():
+    """Windows matches a new version to an old one by upgrade code. A changed
+    one installs the new version beside the old with neither aware of the
+    other; component GUIDs that move do the same thing per file."""
+    import tools.build_msi as msi
+
+    assert len(msi.UPGRADE_CODE) == 36, "pinned, and never regenerated"
+    # Derived from the path, so two builds of the same file agree.
+    assert msi.guid("mud/web.py") == msi.guid("mud/web.py")
+    assert msi.guid("mud/web.py") != msi.guid("mud/session.py")
+
+
+def test_installer_identifiers_fit_what_windows_allows():
+    """A WiX identifier is capped at 72 characters and Python's own tree has
+    some long paths in it."""
+    import tools.build_msi as msi
+
+    long = "python/Lib/site-packages/" + "a" * 90 + "/module.py"
+    got = msi.ident(long)
+    assert len(got) <= 72 and got.replace("_", "").isalnum()
+    assert msi.ident("3k.cmd")[0].isalpha(), "cannot start with a digit"
+
+
+def test_the_installer_puts_data_where_the_program_is_not():
+    """The program folder is replaced wholesale by an upgrade. Anything the
+    client writes has to be somewhere else or an update eats the map."""
+    import tools.build_msi as msi
+
+    src = msi.source(Path(__file__).resolve().parents[1] / "mud")
+    assert "LocalAppDataFolder" in src and "ProgramMenuFolder" in src
+    assert 'InstallScope="perUser"' in src
+    assert 'InstallPrivileges="limited"' in src, "no UAC prompt to play a MUD"
