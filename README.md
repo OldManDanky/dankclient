@@ -621,6 +621,17 @@ Your map and characters survive all of that, because they were never in the
 program folder: `%LOCALAPPDATA%\dankclient` is a different place, and the
 installer has no reason to touch it.
 
+It has a licence dialog, a progress bar and a finish dialog that says where it
+went -- `wixl` ships the WixUI_Minimal set, off unless `--ext ui` asks for it.
+The first installed build had no interface at all, which meant it landed
+somewhere without saying where and left a Start Menu entry and no account of
+what it had done.
+
+The client says the same things whenever asked, in **Options -> About**: the
+map, the characters, the scripts, the captures and the log, each with a word
+about what it is.  "Where is my map" is a question that gets asked more than
+once -- before an update, before a backup, when something has gone wrong.
+
 The built MSI was taken apart again to check: 84 files in, 84 out, every
 SHA-256 matching, installing to the right directory with the "elevated
 privileges are not required" bit set.

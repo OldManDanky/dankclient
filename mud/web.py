@@ -284,6 +284,32 @@ class WebServer:
             },
             "who": self._who(),
             "link": self._link(),
+            "where": self._where(),
+        }
+
+    def _where(self) -> dict:
+        """What this client is and where it keeps things.
+
+        Installed, it says none of this: it lands somewhere without announcing
+        it, and afterwards there is a Start Menu entry and no way to find out
+        what it did.  "Where is my map" is a question asked more than once.
+        """
+        from . import NAME, __version__
+        from .paths import home, program
+
+        store = getattr(self.session, "store", None)
+        return {
+            "name": NAME,
+            "version": __version__,
+            "program": str(program()),
+            "data": str(home().resolve()),
+            "map": str(getattr(store, "path", "") or "(not mapping)"),
+            "profiles": (str(self.characters.root.resolve())
+                         if self.characters is not None else ""),
+            "scripts": (str(Path(self.scripts.dir).resolve())
+                        if getattr(self.scripts, "dir", None) else ""),
+            "log": str((home() / "client.log").resolve()),
+            "captures": str((home() / "captures").resolve()),
         }
 
     def _scrollback(self) -> dict | None:

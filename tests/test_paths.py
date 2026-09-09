@@ -282,8 +282,12 @@ def test_the_installer_puts_data_where_the_program_is_not():
 
     src = msi.source(Path(__file__).resolve().parents[1] / "mud")
     assert "LocalAppDataFolder" in src and "ProgramMenuFolder" in src
-    assert 'InstallScope="perUser"' in src
-    assert 'InstallPrivileges="limited"' in src, "no UAC prompt to play a MUD"
+    # perUser is what sets the "elevated privileges are not required" bit in
+    # the summary information -- checked on the built MSI, where it comes out
+    # as word count 10. InstallPrivileges was in here too and did nothing:
+    # wixl has no such property and said so.
+    assert 'InstallScope="perUser"' in src, "no UAC prompt to play a MUD"
+    assert "InstallPrivileges" not in src, "wixl ignores it; do not pretend"
 
 
 def test_no_console_is_not_a_reason_to_die():
@@ -326,3 +330,15 @@ def test_a_console_is_left_alone():
     import mud.__main__ as m
 
     assert m.speak_to_a_file() is None, "it must not hijack a working stream"
+
+
+def test_the_installer_says_where_it_put_things():
+    """It installed silently the first time -- no confirmation, no path, just
+    a Start Menu entry and no idea what had happened."""
+    import tools.build_msi as msi
+
+    src = msi.source(Path(__file__).resolve().parents[1] / "mud")
+    assert '<UIRef Id="WixUI_Minimal"/>' in src, "silence is not a confirmation"
+    assert "WIXUI_EXITDIALOGOPTIONALTEXT" in src
+    assert "[INSTALLDIR]" in src and "client.log" in src
+    assert "ARPURLINFOABOUT" in src, "Apps & Features shows a name and nothing else"

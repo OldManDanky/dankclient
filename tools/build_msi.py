@@ -92,6 +92,19 @@ def tree(root: Path):
     return "\n".join(lines), components
 
 
+def licence_rtf(plain: Path) -> str:
+    """The GPL as RTF, because the licence dialog will not read anything else.
+
+    Not a conversion so much as an escaping: the text is the text, wrapped in
+    the smallest header a reader will accept.
+    """
+    body = plain.read_text(encoding="utf-8", errors="replace")
+    body = (body.replace("\\", r"\\\\").replace("{", r"\{").replace("}", r"\}")
+                .replace("\n", r"\par" + "\n"))
+    return (r"{\rtf1\ansi\deff0{\fonttbl{\f0\fmodern Courier New;}}"
+            r"\fs16 " + body + "}")
+
+
 def source(root: Path) -> str:
     body, components = tree(root)
     refs = "\n".join(f'      <ComponentRef Id="{c}"/>' for c in components)
@@ -102,7 +115,7 @@ def source(root: Path) -> str:
            Version="{__version__}" Manufacturer="OldManDanky"
            UpgradeCode="{UPGRADE_CODE}">
     <Package InstallerVersion="200" Compressed="yes"
-             InstallScope="perUser" InstallPrivileges="limited"
+             InstallScope="perUser"
              Description="{escape(NAME)} {__version__}"
              Comments="A MIP-native MUD client for 3Kingdoms. GPLv3."/>
 
@@ -117,6 +130,21 @@ def source(root: Path) -> str:
     </InstallExecuteSequence>
 
     <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>
+
+    <!-- Silence is not a confirmation.  The first installed run put itself
+         somewhere without saying where, which leaves you with a Start Menu
+         entry and no idea what it did. -->
+    <UIRef Id="WixUI_Minimal"/>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+              Value="Installed to [INSTALLDIR] -- your map, characters, triggers and session logs live separately in %LOCALAPPDATA%\\{SLUG}, so updating this program never touches them. That folder also holds client.log, which is where it writes down anything that goes wrong."/>
+
+    <!-- What Apps &amp; Features shows.  Without these it is a name and
+         nothing else. -->
+    <Property Id="ARPURLINFOABOUT"
+              Value="https://github.com/OldManDanky/dankclient"/>
+    <Property Id="ARPHELPLINK"
+              Value="https://github.com/OldManDanky/dankclient/issues"/>
+    <Property Id="ARPNOREPAIR" Value="1"/>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="LocalAppDataFolder">
@@ -171,6 +199,7 @@ def main(argv: list[str]) -> int:
 
     wxs = Path(args.out).with_suffix(".wxs")
     wxs.parent.mkdir(parents=True, exist_ok=True)
+    (wxs.parent / "License.rtf").write_text(licence_rtf(HERE / "LICENSE"))
     wxs.write_text(source(root))
     files = sum(1 for p in root.rglob("*") if p.is_file())
     print(f"  {files} files -> {wxs}")
@@ -181,7 +210,8 @@ def main(argv: list[str]) -> int:
         print("  wixl is not installed:  sudo apt install wixl", file=sys.stderr)
         return 2
 
-    done = subprocess.run(["wixl", "-v", "-o", args.out, str(wxs)],
+    # The dialogs live in an extension that is off unless it is asked for.
+    done = subprocess.run(["wixl", "--ext", "ui", "-o", args.out, str(wxs)],
                           capture_output=True, text=True)
     if done.returncode != 0:
         sys.stderr.write(done.stdout + done.stderr)

@@ -224,6 +224,10 @@
   #side-acts button{flex:1 1 0;min-width:0;padding:6px 4px;font-size:11px}
   #side-acts .danger:hover,#side-acts .danger:focus-visible{
     border-color:var(--bad);color:var(--bad)}
+  .about-path{display:block;font-size:11px;color:var(--accent);
+              background:var(--sunk);border:1px solid var(--line);
+              border-radius:3px;padding:4px 6px;margin:3px 0;
+              overflow-wrap:anywhere;cursor:text}
   #route-now{margin-bottom:8px}
   #route-now .fill{background:var(--accent)}
   #route-name{color:var(--accent)!important;text-transform:none;
@@ -614,6 +618,7 @@
       <button type="button" data-tab="settings">Character setup</button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
       <button type="button" data-tab="updates">Updates<span class="n"></span></button>
+      <button type="button" data-tab="about">About</button>
     </nav>
 
     <div class="opt-main">
@@ -634,6 +639,25 @@
           </div>
           <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
                data-none="No routes yet. Paste a path into a new one."></div>
+        </section>
+
+        <!-- about -------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="about" hidden>
+          <div class="opt-head">
+            <div>
+              <h4 id="about-name">Dank Mud Client</h4>
+              <p id="about-blurb">A MIP-native client for 3Kingdoms.</p>
+            </div>
+          </div>
+          <div class="fset">
+            <p class="fhint">Where everything lives. The program folder is
+               replaced wholesale by an update; nothing you own is in it.</p>
+            <div id="about-paths"></div>
+          </div>
+          <p class="fhint">Free software under the GNU General Public License
+             v3. Includes xterm.js under the MIT licence.
+             <a id="about-repo" href="https://github.com/OldManDanky/dankclient"
+                target="_blank" rel="noreferrer">Source and releases</a>.</p>
         </section>
 
         <!-- updates ------------------------------------------------------ -->
@@ -1080,6 +1104,7 @@
   <script src="map.js"></script>
   <script src="routes.js"></script>
   <script src="updates.js"></script>
+  <script src="about.js"></script>
   <script src="panels.js"></script>
 </body>
 </html>

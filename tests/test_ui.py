@@ -605,3 +605,21 @@ def test_a_timer_cannot_be_tested_against_a_line():
     assert "const TESTABLE" in js
     body = js[js.index("const TESTABLE"):]
     assert "'timer'" not in body[:body.index("]")]
+
+
+def test_the_client_can_say_where_it_keeps_things():
+    """Installed, it says none of this: it lands somewhere without announcing
+    it, and afterwards there is a Start Menu entry and no way to find out what
+    it did. "Where is my map" gets asked more than once."""
+    page, js = html(), scripts()["about.js"]
+    assert 'data-pane="about"' in page and 'data-tab="about"' in page
+    for element in ("about-name", "about-paths", "about-repo"):
+        assert f'id="{element}"' in page, element
+    for key in ("map", "profiles", "captures", "log", "data", "program"):
+        assert f"'{key}'" in js, key
+
+
+def test_the_about_pane_is_not_rebuilt_under_the_cursor():
+    """Third time this trap has come up, so it is checked now."""
+    js = scripts()["about.js"]
+    assert "JSON.stringify(where)" in js and "=== shown" in js

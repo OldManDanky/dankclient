@@ -475,6 +475,7 @@ function render(s) {
   if (window.renderWho) window.renderWho(s.who);
 
   if (s.messages && window.seedMessages) window.seedMessages(s.messages);
+  if (s.where && window.renderAbout) window.renderAbout(s.where);
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {
     mipLabels = s.labels;
