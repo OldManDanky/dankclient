@@ -119,10 +119,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-profiles", action="store_true",
                    help="one shared set of rules for every character")
     p.add_argument("--no-scripts", action="store_true", help="don't load scripts")
-    p.add_argument("--web-host", default="127.0.0.1", metavar="ADDR",
-                   help="bind address for the UI. Defaults to loopback only; "
-                        "use 0.0.0.0 to reach it from another machine on the "
-                        "LAN instead of tunnelling (no auth -- trusted networks only)")
     p.add_argument("--no-bootstrap", action="store_true",
                    help="on a first run, do not fetch the map and bots from "
                         "3kdb")
@@ -268,7 +264,10 @@ async def amain(args: argparse.Namespace) -> int:
         # it is free and the next one along if it is not.  A number that was
         # actually typed is honoured exactly, and fails if it cannot be.
         asked, spare = (8080, 20) if args.web == -1 else (args.web, 0)
-        web = WebServer(session, host=args.web_host, port=asked,
+        # Loopback, always.  Opening the app is how you play on a machine; a
+        # second machine is a second app, not a second window onto this one --
+        # and everything the socket accepts is total control of the character.
+        web = WebServer(session, host="127.0.0.1", port=asked,
                         scripts=host, characters=chars)
         try:
             port = await web.start(spare)
@@ -281,16 +280,9 @@ async def amain(args: argparse.Namespace) -> int:
         if port != asked and asked:
             print(f"{DIM}  port {asked} was taken; using {port}{RESET}",
                   file=sys.stderr)
-        if args.web_host in ("127.0.0.1", "localhost"):
-            print(f"{GREEN}  UI on http://127.0.0.1:{port}{RESET}"
-                  f"{DIM}  (over ssh: -L {port}:localhost:{port}){RESET}",
-                  file=sys.stderr)
-        else:
-            import socket as _s
-            ip = _s.gethostbyname(_s.gethostname())
-            print(f"{GREEN}  UI on http://{ip}:{port}{RESET}"
-                  f"{YELLOW}  (bound to {args.web_host} -- unauthenticated){RESET}",
-                  file=sys.stderr)
+        print(f"{GREEN}  UI on http://127.0.0.1:{port}{RESET}"
+              f"{DIM}  (from elsewhere, over ssh: "
+              f"-L {port}:localhost:{port}){RESET}", file=sys.stderr)
 
     window = None
     if web is not None and (args.app or args.open_ui):

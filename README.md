@@ -503,6 +503,33 @@ def _(m): send(f"kill {m['args']}")
 
 `scripts/_example.py` shows every hook. Files starting with `_` are not loaded.
 
+## Who can reach it
+
+The interface is served to loopback and nowhere else, and there is no flag to
+change that.  Opening the app is how you play on a machine; a second machine is
+a second app, not a second window onto this one.  To reach it from elsewhere,
+forward the port over ssh -- the startup line prints the command -- which is
+real encryption and real authentication instead of a password field over plain
+HTTP.
+
+That is not the whole of it, though, because binding to loopback is not the
+protection it looks like.  WebSockets are not subject to the same-origin
+policy: any page a player visits while playing can open one to `127.0.0.1` and
+drive this client -- send commands as them, write triggers that fire later,
+read the session log.  The connection comes from their own browser, and both
+the port and the message format are public.
+
+So the handshake is refused unless it comes from our own page.  Browsers always
+send `Origin`; anything without one is not a browser -- a test, a script, a
+tool on the same machine -- and something already running locally can do as it
+likes anyway.  The port is deliberately not part of the check, because an ssh
+tunnel forwards to whatever local port it likes and the page is then served
+from that one.
+
+What the socket accepts is worth knowing, because it is the reason any of this
+matters: commands as the character, playing a saved character with a saved
+password, writing triggers and routes, and the whole log through `/find`.
+
 ## Scrollback
 
 A refresh used to empty the terminal, and a refresh is what you do after every

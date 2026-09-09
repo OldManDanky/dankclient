@@ -435,3 +435,80 @@ def test_a_multi_line_note_does_not_walk_across_the_screen():
     bare = body.count("\n") - body.count("\r\n")
     assert bare == 0, f"{bare} newline(s) with no carriage return"
     assert "first\r\nsecond\r\nthird" in body
+
+
+# --- who is allowed to open a socket -----------------------------------------
+
+def test_somebody_elses_page_cannot_drive_this_client():
+    """WebSockets are not subject to the same-origin policy, so any page a
+    player visits while playing can open one to 127.0.0.1 and send commands as
+    them, write triggers, or read the log. Binding to loopback does not help:
+    the connection comes from their own browser, and the port and the message
+    format are both public."""
+    from mud.web import ours
+
+    for evil in ("https://some-random-site.example", "http://192.168.1.20:8080",
+                 "http://127.0.0.1.evil.example", "null",
+                 "http://localhost.evil.example"):
+        assert ours(evil) is False, evil
+
+
+def test_our_own_page_is_allowed_whatever_port_it_is_on():
+    """An ssh tunnel forwards to whatever local port it likes and the page is
+    then served from that one, so the port cannot be part of the test."""
+    from mud.web import ours
+
+    for fine in ("http://127.0.0.1:8080", "http://localhost:9000",
+                 "http://[::1]:8080"):
+        assert ours(fine) is True, fine
+
+
+def test_something_that_is_not_a_browser_is_let_through():
+    """No Origin means no browser -- a test, a script, a tool on the same
+    machine -- and anything running locally can already do as it likes."""
+    from mud.web import ours
+
+    assert ours("") is True
+
+
+def test_a_refused_handshake_gets_a_refusal_not_a_socket():
+    async def scenario():
+        import base64
+
+        async def mud(reader, writer):
+            writer.write(b"hi\r\n")
+            await writer.drain()
+            while await reader.read(256):
+                pass
+
+        srv = await asyncio.start_server(mud, "127.0.0.1", 0)
+        session = Session("127.0.0.1", srv.sockets[0].getsockname()[1],
+                          sec_code=1)
+        await session.connect()
+        web = WebServer(session, port=0)
+        port = await web.start()
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        key = base64.b64encode(os.urandom(16)).decode()
+        writer.write(
+            f"GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+            f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"Origin: https://evil.example\r\n\r\n".encode())
+        await writer.drain()
+        head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 5)
+        writer.close()
+        await web.stop()
+        await session.aclose()
+        srv.close()
+        return head
+
+    assert b"403" in asyncio.run(scenario())
+
+
+def test_the_ui_is_loopback_only():
+    """Opening the app is how you play on a machine. A second machine is a
+    second app, not a second window onto this one -- and everything the socket
+    accepts is total control of the character."""
+    source = (Path(__file__).resolve().parents[1] / "mud" / "__main__.py").read_text()
+    assert 'host="127.0.0.1"' in source
+    assert "--web-host" not in source, "there is no remote mode to misconfigure"

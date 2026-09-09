@@ -23,6 +23,7 @@ import math
 import mimetypes
 import struct
 import time
+import urllib.parse
 from importlib import resources
 from pathlib import Path
 
@@ -65,6 +66,28 @@ def ui_file(name: str) -> bytes:
 SCROLLBACK = 400
 
 OP_TEXT, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG = 0x1, 0x2, 0x8, 0x9, 0xA
+
+
+def ours(origin: str) -> bool:
+    """Is this websocket coming from our own page, or from somebody else's?
+
+    WebSockets are not subject to the same-origin policy: any page a player
+    visits while playing can open one to 127.0.0.1 and drive this client --
+    send commands as them, write triggers, read the log.  Binding to loopback
+    does not help, because the connection comes from their own browser, and
+    the port and the message format are both public.
+
+    Browsers always send Origin on the handshake.  Anything without one is not
+    a browser -- a test, a script, a tool on the same machine -- and something
+    running locally can already do anything, so those are let through.
+
+    The port is deliberately not checked: an ssh tunnel forwards to whatever
+    local port it likes, and the page is then served from that one.
+    """
+    if not origin:
+        return True
+    host = urllib.parse.urlsplit(origin).hostname
+    return host in ("127.0.0.1", "localhost", "::1")
 
 
 def _accept_key(key: str) -> str:
@@ -568,6 +591,14 @@ class WebServer:
 
         upgrade = headers.get("upgrade", "").lower() == "websocket"
         log(f"{method} {path}" + ("  [websocket]" if upgrade else ""))
+        if upgrade and not ours(headers.get("origin", "")):
+            # Somebody else's page, in this player's browser, opening a socket
+            # to this client.  Refuse before the handshake.
+            log(f"refused a websocket from {headers.get('origin', '')!r}")
+            writer.write(b"HTTP/1.1 403 Forbidden\r\n"
+                         b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            _shut(writer)
+            return
         try:
             if upgrade:
                 await self._websocket(reader, writer, headers)
