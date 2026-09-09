@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Session captures: large, personal, and irreplaceable -- keep them local.
+captures/
+
+# The map: personal, large, and rewritten every session.  It is built by
+# importing a tt++ map and by walking, both of which are reproducible; the
+# git history is not the place for fifteen megabytes of it per commit.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# What you have configured: rules, routes, the markup prefixes.  Yours, not
+# the client's.
+scripts/*.json
+
+# packaging
+build/
+dist/
+*.spec
+profiles/
+map.sqlite.before-prune
+*.sqlite.*

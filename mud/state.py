@@ -1,0 +1,250 @@
+"""Live world state, rebuilt from MIP messages.
+
+Everything here is *pushed* by the MUD, so none of it is scraped.  Handlers
+register for changes and are called with (name, new, old).
+"""
+
+from __future__ import annotations
+
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Callable
+
+from . import codes, events
+from .codes import Chat, GlineField, RoomObject, Tell
+from .events import Bus
+
+Listener = Callable[[str, object, object], None]
+
+
+@dataclass
+class Player:
+    hp: int | None = None
+    max_hp: int | None = None
+    sp: int | None = None
+    max_sp: int | None = None
+    gp1: int | None = None
+    max_gp1: int | None = None
+    gp2: int | None = None
+    max_gp2: int | None = None
+    gline1: str = ""
+    gline2: str = ""
+    enemy: str = ""
+    enemy_pct: int | None = None
+    enemy_image: str = ""
+
+    @staticmethod
+    def _pct(cur: int | None, mx: int | None) -> float | None:
+        if cur is None or not mx:
+            return None
+        return round(100.0 * cur / mx, 1)
+
+    @property
+    def hp_pct(self) -> float | None:
+        return self._pct(self.hp, self.max_hp)
+
+    @property
+    def sp_pct(self) -> float | None:
+        return self._pct(self.sp, self.max_sp)
+
+    @property
+    def gline(self) -> dict[str, GlineField]:
+        """Guild state lifted out of the colour markup in both guild lines."""
+        merged = dict(codes.parse_gline(self.gline1))
+        merged.update(codes.parse_gline(self.gline2))
+        return merged
+
+
+@dataclass
+class Room:
+    short: str = ""
+    exits: list[str] = field(default_factory=list)
+    #: When the block that describes this room began arriving.  The mapper
+    #: matches arrivals against the command that caused them within a second,
+    #: and a block does not settle until the next unrelated message -- up to a
+    #: tick later -- so settling time would put the move outside the window.
+    opened_at: float | None = None
+    #: HAA records -- things you can act on (npc / player / item)
+    contents: list[RoomObject] = field(default_factory=list)
+    #: HAB records -- scenery nouns you can examine
+    scenery: list[RoomObject] = field(default_factory=list)
+
+    def of_kind(self, kind: str) -> list[RoomObject]:
+        return [o for o in self.contents if o.kind == kind]
+
+    def mobs(self) -> list[RoomObject]:
+        return self.of_kind("npc")
+
+    def players(self) -> list[RoomObject]:
+        return self.of_kind("player")
+
+    def items(self) -> list[RoomObject]:
+        return self.of_kind("item")
+
+    def find(self, name: str) -> RoomObject | None:
+        want = name.lower()
+        for o in self.contents:
+            if want in o.name.lower():
+                return o
+        return None
+
+
+class World:
+    """Applies MIP messages to state and reports what changed."""
+
+    def __init__(self, bus: Bus | None = None) -> None:
+        self.bus = bus or Bus()
+        self.player = Player()
+        self.room = Room()
+        self.caption = ""
+        self.uptime = ""
+        self.reboot = ""
+        self.mudlag = ""
+        self.editing = ""
+        self.combat_special = ""
+        self.guild_special = ""
+        self.enemy_label = ""          # 3k.org sends this via AAB, not M
+        #: BBA/BBB/BBC/BBD -- Portal calls these "masks", but they are simply
+        #: the display names for the gauges (UpdateMasks assigns them as the
+        #: hint on GaugeGP1 and friends).  3k.org has never been observed to
+        #: send them, so these stay empty and the UI falls back to your own.
+        self.labels: dict[str, str] = {}
+        self.tells: deque[Tell] = deque(maxlen=500)
+        self.chat: deque[Chat] = deque(maxlen=1000)
+        #: tells and channels in arrival order, for the monitor
+        self.messages: deque[dict] = deque(maxlen=500)
+        self.unknown_codes: dict[str, int] = {}
+        self._listeners: list[Listener] = []
+        self._event_listeners: list[Callable[[str, object], None]] = []
+        self._last_code: str | None = None
+        self._room_open_at: float | None = None
+
+    def on_change(self, fn: Listener) -> Listener:
+        self._listeners.append(fn)
+        return fn
+
+    def on_event(self, fn: Callable[[str, object], None]):
+        """Discrete events -- tells, chat -- as opposed to state changes."""
+        self._event_listeners.append(fn)
+        return fn
+
+    #: Set by the session when there is somewhere to write.  Tells and chat
+    #: are logged as themselves rather than only as raw output lines, so
+    #: "everything one player said" is one query rather than a guess at their wording.
+    log_to = None
+
+    def log(self, kind: str, text: str, channel: str, who: str) -> None:
+        if self.log_to is not None:
+            self.log_to.add(kind, text, channel, who)
+
+    def _emit(self, kind: str, obj: object) -> None:
+        self.bus.emit(kind, obj)
+        for fn in self._event_listeners:
+            fn(kind, obj)
+
+    def _set(self, obj: object, name: str, value: object) -> None:
+        old = getattr(obj, name, None)
+        if old == value:
+            return
+        setattr(obj, name, value)
+        self.bus.emit(events.STATE, name, value, old)
+        for fn in self._listeners:
+            fn(name, value, old)
+
+    def apply(self, code: str, data: str) -> None:
+        # A room block is a DDD plus the run of H** records after it, and it
+        # has settled once anything unrelated arrives.  Waiting for the
+        # records themselves would miss a room that has neither scenery nor
+        # contents -- rare, but one missed room puts dead reckoning off by one
+        # for the rest of the session.
+        opening = code == "DDD" and self._last_code != "BAD"
+        if self._room_open_at is not None and (
+                opening or code not in codes.ROOM_RECORD_CODES):
+            # A new block clears the old room, so tell anyone waiting on the
+            # previous one before that happens.
+            self.room.opened_at = self._room_open_at
+            self._room_open_at = None
+            self.bus.emit(events.ROOM, self.room)
+        try:
+            self._apply(code, data)
+        finally:
+            if opening:
+                self._room_open_at = time.time()
+            self._last_code = code
+
+    def _apply(self, code: str, data: str) -> None:
+        if code == "FFF":
+            values, unknown = codes.parse_composite(data)
+            for name, value in values.items():
+                self._set(self.player, name, value)
+            for tag in unknown:
+                self._count_unknown(f"FFF:{tag}")
+
+        elif code == "DDD":
+            # DDD arrives in two distinct roles, which a capture makes obvious
+            # but the wire does not announce:
+            #
+            #   DDD + H** records        -> genuine room entry
+            #   BAD then DDD, no records -> periodic refresh, same exits
+            #
+            # Across 43 observed DDDs the split is exact: every BAD-preceded
+            # DDD carried no contents, every standalone one did.  Clearing on
+            # both would empty the room a couple of seconds after entering it.
+            if self._last_code != "BAD":
+                self.room.contents.clear()
+                self.room.scenery.clear()
+            self._set(self.room, "exits", codes.parse_ddd(data))
+
+        elif code == "HAA":
+            self.room.contents.append(codes.parse_haa(data))
+
+        elif code == "HAB":
+            self.room.scenery.append(codes.parse_hab(data))
+
+        elif code == "BAB":
+            tell = codes.parse_bab(data)
+            self.tells.append(tell)
+            self.messages.append({
+                "kind": "tell", "at": time.time(), "who": tell.who,
+                "channel": "tell", "text": tell.message, "mine": tell.from_me,
+            })
+            self._emit("tell", tell)
+            self.log("tell", tell.message, "tell", tell.who)
+
+        elif code == "CAA":
+            chat = codes.parse_caa(data)
+            self.chat.append(chat)
+            self.messages.append({
+                "kind": "chat", "at": time.time(), "who": chat.who,
+                "channel": chat.channel, "command": chat.command,
+                "text": chat.message, "mine": False,
+            })
+            self._emit("chat", chat)
+            self.log("chat", chat.message, chat.channel, chat.who)
+
+        elif code == "AAB":
+            # Spec says <filename>~<label> for an image.  3k.org sends an empty
+            # filename and puts the enemy's name and condition in the label.
+            _, label = codes.fields(data, 2)[:2]
+            self._set(self, "enemy_label", label)
+
+        elif code in codes.SIMPLE:
+            attr = codes.SIMPLE[code]
+            target = self.room if attr == "room_short" else self
+            self._set(target, "short" if attr == "room_short" else attr, data)
+
+        elif code in codes.GAUGE_LABELS:
+            name = codes.GAUGE_LABELS[code]
+            if self.labels.get(name) != data:
+                self.labels[name] = data
+                self.bus.emit(events.STATE, f"label:{name}", data, None)
+
+        elif code in codes.KNOWN_UNHANDLED:
+            pass
+
+        else:
+            self._count_unknown(code)
+
+    def _count_unknown(self, code: str) -> None:
+        self.unknown_codes[code] = self.unknown_codes.get(code, 0) + 1

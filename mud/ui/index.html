@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dank Mud Client</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230d0f13'/%3E%3Crect x='3' y='3' width='4' height='4' rx='1' fill='%2339404f'/%3E%3Crect x='9' y='3' width='4' height='4' rx='1' fill='%2339404f'/%3E%3Crect x='3' y='9' width='4' height='4' rx='1' fill='%2339404f'/%3E%3Crect x='9' y='9' width='4' height='4' rx='1' fill='%236f9beb'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+  :root{
+    --bg:#111318; --panel:#181b22; --sunk:#0d0f13; --line:#262b35;
+    --ink:#d8dde6; --dim:#7d8698; --accent:#6f9beb;
+    --hp:#c8553d; --sp:#4a90d9; --gp:#5aa66f; --enemy:#b8863b;
+    --good:#5aa66f; --bad:#c8553d;
+    /* One gutter for every outer edge, so the first line of the terminal,
+       the vitals strip, the input box and the docked map all start on the
+       same lines instead of within a couple of pixels of each other. */
+    --gut:10px;
+    /* Inherited, so this reaches xterm's viewport too -- see below. */
+    scrollbar-width:thin; scrollbar-color:#39404f transparent;
+  }
+  *{box-sizing:border-box}
+  /* One scrollbar everywhere.  The terminal's is xterm's own, in its own
+     stylesheet; these two properties inherit, so setting them once on the
+     root reaches it as well and every scrolling box on the page reads as the
+     same control.  ::-webkit-scrollbar is the fallback for browsers that
+     have not caught up -- where both are understood the standard ones win,
+     so they cannot fight. */
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#39404f;border-radius:5px;
+                            border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#4a5365;background-clip:padding-box}
+  ::-webkit-scrollbar-corner{background:transparent}
+  /* An id selector setting `display` outranks the browser's [hidden] rule, so
+     toggling .hidden on a panel silently did nothing.  Make it unconditional. */
+  [hidden]{display:none!important}
+  body{margin:0;height:100vh;display:flex;background:var(--bg);color:var(--ink);
+       font:13px/1.5 system-ui,sans-serif;overflow:hidden}
+  main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+
+  /* --- messages: tells, emotes and channels, in one window --- */
+  /* Docked across the top of the output rather than floating over it.  Two
+     panels that could be dragged anywhere meant two things to place and two
+     things in the way of the text; one window with a tag per channel says
+     the same and asks nothing. */
+  /* The border sits one pixel outside the terminal's text column so that the
+     content box inside it -- and the scrollbar at the edge of that -- lands
+     on exactly the same line as the terminal's own. */
+  #msgmon{margin:var(--gut) calc(var(--gut) - 1px) 0;
+          height:clamp(96px,17vh,230px)}
+  .cm-count{letter-spacing:0;text-transform:none;color:var(--accent)}
+  .cm-body{flex:1;min-height:0;overflow-y:scroll;padding:6px 0 6px 8px;
+           display:flex;flex-direction:column;gap:3px;
+           font:11px/1.45 Consolas,"DejaVu Sans Mono",monospace}
+  .cm-filters{display:flex;flex-wrap:wrap;gap:3px;padding:5px 8px;flex:none;
+              border-bottom:1px solid var(--line)}
+  .cm-filters:empty{display:none}
+  .cm-filters button{padding:1px 6px}
+  .cm-filters button.on{color:var(--ink);border-color:var(--accent)}
+  .cm-msg{display:flex;gap:5px;align-items:baseline;cursor:pointer}
+  .cm-msg:hover{background:rgba(111,155,235,.10)}
+  .cm-who{flex:none;color:var(--accent)}
+  .cm-txt{flex:1;min-width:0;word-break:break-word;color:var(--ink)}
+  .cm-msg.mine .cm-who{color:var(--gp)}
+  .cm-empty{color:var(--dim);font-style:italic}
+  /* The map is docked at the top of the sidebar rather than floating over
+     the terminal: it is the thing you glance at most, and a panel you have to
+     put somewhere is a panel that is in the way of the text underneath it. */
+  /* An <aside> inside the sidebar, so the sidebar's own width, padding and
+     gap land on it unless they are put back. */
+  .dock{flex:none;display:flex;flex-direction:column;overflow:hidden;
+        width:auto;padding:0;gap:0;
+        border:1px solid var(--line);border-radius:4px;background:var(--sunk)}
+  .dock>header{flex:none;display:flex;align-items:center;gap:6px;
+               padding:5px 8px;border-bottom:1px solid var(--line);
+               cursor:pointer;font-size:10px;letter-spacing:.12em;
+               text-transform:uppercase;color:var(--dim);font-weight:600}
+  .dock>header b{flex:1;font-weight:600}
+  .dock.collapsed>*:not(header){display:none}
+  .dock.collapsed>header{border-bottom:0}
+  /* The drawing takes its height from its width, so a wider sidebar buys
+     rooms in both directions rather than a longer letterbox. */
+  #mapmon{height:auto}
+  #mapmon .map-body{flex:none;aspect-ratio:4/3;min-height:150px;max-height:38vh}
+  /* The canvas is positioned, so it lends the body no height of its own: with
+     min-height:0 the body is free to collapse to nothing, and the map draws
+     correctly into a box no taller than a hairline.  A real floor keeps the
+     drawing surface honest whatever the flex maths decides. */
+  .map-body{flex:1;min-height:120px;position:relative;overflow:hidden;
+            background:rgba(0,0,0,.18)}
+  .map-body canvas{display:block;position:absolute;inset:0}
+
+  .map-where{flex:none;padding:4px 8px;border-top:1px solid var(--line);
+             font:10px/1.4 Consolas,"DejaVu Sans Mono",monospace;
+             color:var(--dim);white-space:nowrap;overflow:hidden;
+             text-overflow:ellipsis}
+  /* The output area, and the box the floating panels live in.  Keeping it
+     separate from main means a panel can never be dragged over the vitals
+     strip or the input line -- those are the two things you always want in
+     front of you. */
+  #out{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+  #term{flex:1;min-height:0;padding:var(--gut) var(--gut) 0}
+  /* The terminal is output-only, so a cursor there just implies you can type
+     into it.  xterm 5.3 has no cursorInactiveStyle:"none", so hide the marker
+     the DOM renderer draws -- restoring the cell's own colours, since the
+     block style swaps foreground and background. */
+  #term .xterm-cursor-block,
+  #term .xterm-cursor-outline,
+  #term .xterm-cursor-bar,
+  #term .xterm-cursor-underline,
+  #term .xterm-cursor{
+    background-color:transparent!important;
+    border-color:transparent!important;
+    box-shadow:none!important;
+    color:inherit!important;
+    outline:none!important;
+  }
+  #bar{border-top:1px solid var(--line);background:var(--panel);
+       padding:8px var(--gut);display:flex;align-items:center;gap:8px}
+  #bar::before{content:'>';color:var(--accent);font:14px/1 Consolas,monospace;flex:none}
+  #cmd{flex:1;min-width:0;background:var(--sunk);border:1px solid var(--line);
+       color:var(--ink);font:14px/1.4 Consolas,"DejaVu Sans Mono",monospace;
+       padding:7px 9px;border-radius:3px}
+  #cmd:focus{outline:none;border-color:var(--accent)}
+  #cmd::placeholder{color:#4b525f}
+  aside{width:330px;flex:none;border-left:1px solid var(--line);background:var(--panel);
+        overflow-y:auto;padding:var(--gut);display:flex;flex-direction:column;
+        gap:var(--gut)}
+  /* Half a screen is the common case, and a third of it is too much to give
+     a sidebar.  So: give ground as the window narrows, but never below the
+     width the room contents need to stay readable, and take a decent share
+     of a wide one -- the map is the widest thing in here and every extra
+     thirty pixels is another column of rooms. */
+  #side{width:auto;flex:0 0 clamp(248px,24vw,392px)}
+  section{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:10px}
+  h2{margin:0 0 8px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+     color:var(--dim);font-weight:600;display:flex;justify-content:space-between}
+  h2 span{color:var(--accent);letter-spacing:0}
+  .bar{margin-bottom:7px}
+  .bar:last-child{margin-bottom:0}
+  .bar-top{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+  .bar-top b{font-weight:600;color:var(--dim);letter-spacing:.06em}
+  .bar-top i{font-style:normal;font-variant-numeric:tabular-nums}
+  .track{height:7px;background:#000;border-radius:3px;overflow:hidden}
+  .fill{height:100%;width:0;border-radius:3px;transition:width .18s ease}
+  .hp .fill{background:var(--hp)} .sp .fill{background:var(--sp)}
+  .gp .fill{background:var(--gp)} .en .fill{background:var(--enemy)}
+  #enemy-name{font-size:13px;margin-bottom:6px;color:var(--ink)}
+  #enemy-marks{color:var(--dim);font-size:11px}
+  .none{color:var(--dim);font-style:italic}
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+  li{display:flex;align-items:baseline;gap:6px;font-size:12px}
+  .kind{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+        border:1px solid var(--line);border-radius:2px;padding:0 4px;flex:none}
+  .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acts{display:flex;gap:3px;flex:none}
+  button{background:transparent;color:var(--dim);border:1px solid var(--line);
+         border-radius:2px;font:inherit;font-size:10px;padding:0 5px;cursor:pointer}
+  button:hover{color:var(--ink);border-color:var(--accent)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  #exits{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+  #exits button{color:var(--accent)}
+  /* --- the status strip, sat on top of the input line --- */
+  /* Vitals and the guild line live here rather than in the sidebar: they are
+     the numbers you steer by, so they belong where your eyes already are.
+
+     One line, always.  The four vitals share the strip as equal cells, and
+     the bar inside each is the elastic part: label and number keep the width
+     their text needs, and the bar takes whatever is left.  Sizing off the
+     strip's own width rather than the window's matters here, because the
+     sidebar takes its cut first and vw does not know that. */
+  #vitals{flex:none;display:flex;align-items:center;flex-wrap:nowrap;
+          container-type:inline-size;
+          gap:clamp(8px,1.2vw,16px);
+          padding:6px var(--gut);border-top:1px solid var(--line);
+          background:var(--panel);font-size:11px}
+  .v{flex:1 1 0;min-width:0;display:flex;align-items:center;gap:6px}
+  .v b{font-weight:600;color:var(--dim);letter-spacing:.06em;flex:none;
+       white-space:nowrap}
+  /* No reserved column: the bars were aligned one above another in the
+     sidebar, and side by side there is nothing to align to. */
+  .v i{font-style:normal;font-variant-numeric:tabular-nums;flex:none;
+       text-align:right;white-space:nowrap;
+       font-family:Consolas,"DejaVu Sans Mono",monospace}
+  /* The bar is whatever is left over, so it thins as the window narrows
+     instead of forcing the strip to overflow or wrap.  A floor here would do
+     exactly that, which is why there is none. */
+  .v .track{flex:1 1 auto;width:auto;min-width:0;max-width:88px;height:6px}
+  /* Past these points the bar is a stub either way, so give the numbers the
+     room; a second row comes last, once even those will not sit side by side.
+     Measured against the strip, not the window: the sidebar has already taken
+     its cut by the time the strip gets to lay out. */
+  @container (max-width:480px){ .v .track{display:none} }
+  @container (max-width:400px){
+    #vitals{flex-wrap:wrap;row-gap:4px}
+    .v{flex:1 1 40%}
+  }
+  /* The guild line follows the vitals behind a divider, and gives up room
+     before they do -- the four bars are what you steer by. */
+  #guild{flex:0 1 auto;min-width:0;
+         padding-left:16px;border-left:1px solid var(--line)}
+  #gline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px}
+  #gline div{display:flex;align-items:baseline;gap:5px}
+  #gline b{font-weight:400;color:var(--dim);letter-spacing:.06em}
+  .g-good{color:var(--good)} .g-bad{color:var(--bad)}
+  #chrome{font-size:10px;color:var(--dim);display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  /* What a route is doing, where you are already watching the connection.
+     Which step of how many, because "walking" on its own does not tell you
+     whether to wait or to go and do something else. */
+  /* The connection itself.  Only on screen when there is something wrong
+     with it -- and then above everything else in here, because a terminal
+     that has gone quiet gives no other sign of why. */
+  #link{margin-bottom:8px;padding:6px 8px;border-radius:3px;font-size:11px;
+        background:color-mix(in srgb,var(--bad) 18%,transparent);
+        border:1px solid color-mix(in srgb,var(--bad) 45%,transparent);
+        color:var(--fg)}
+  #link b{color:var(--bad)}
+  #link-again{margin-top:6px;width:100%}
+  /* Three across, equal share.  Disconnect is the one you must not press by
+     accident, so it is quiet until you are over it rather than loud all the
+     time -- a red button beside two grey ones is where the eye lands. */
+  #side-acts{display:flex;gap:6px}
+  #side-acts button{flex:1 1 0;min-width:0;padding:6px 4px;font-size:11px}
+  #side-acts .danger:hover,#side-acts .danger:focus-visible{
+    border-color:var(--bad);color:var(--bad)}
+  #route-now{margin-bottom:8px}
+  #route-now .fill{background:var(--accent)}
+  #route-name{color:var(--accent)!important;text-transform:none;
+              letter-spacing:0;font-size:11px;overflow:hidden;
+              text-overflow:ellipsis;white-space:nowrap}
+  #route-note{font-size:10px;color:var(--dim);margin-top:3px;
+              word-break:break-word}
+  #route-note:empty{display:none}
+  #apm{margin:8px 0 4px}
+  #apm .fill{background:var(--gp)}
+  #apm.warn .fill{background:var(--enemy)}
+  #apm.hot .fill{background:var(--bad)}
+  #mip{width:100%;padding:5px;font-size:11px;letter-spacing:.06em}
+  #mip.waiting{color:var(--bad);border-color:var(--bad)}
+  #mip.live{color:var(--good);border-color:var(--good)}
+  #status{font-size:10px;color:var(--dim);letter-spacing:.06em;margin-top:6px}
+  #status.live{color:var(--good)}
+
+  /* --- the login screen --- */
+  /* Over everything, because until somebody says who is playing, the client
+     does not know whose triggers to load -- and loading the wrong ones is
+     worse than loading none. */
+  #login{position:fixed;inset:0;z-index:40;display:flex;
+         align-items:center;justify-content:center;padding:24px;
+         background:rgba(9,11,14,.82);backdrop-filter:blur(4px)}
+  .login-card{width:min(560px,100%);max-height:100%;overflow-y:auto;
+              background:var(--panel);border:1px solid var(--line);
+              border-radius:6px;box-shadow:0 24px 64px rgba(0,0,0,.6);
+              display:flex;flex-direction:column}
+  .login-card>header{padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+  .login-card h2{margin:0;font-size:17px;font-weight:600;letter-spacing:.01em;
+                 display:block}
+  #login-state{margin:6px 0 0;font-size:11.5px;line-height:1.55;color:var(--dim)}
+  #char-list{padding:14px 20px;display:flex;flex-direction:column;gap:8px}
+  #char-list:empty{display:none}
+  .char{border:1px solid var(--line);border-radius:4px;background:var(--sunk);
+        padding:11px 13px;display:flex;align-items:center;gap:12px}
+  .char.on{border-color:var(--accent)}
+  .char .who{flex:1;min-width:0}
+  .char .nm{font-size:14px;font-weight:600}
+  .char .sub{font-size:10.5px;color:var(--dim);margin-top:2px;
+             font-family:Consolas,monospace}
+  .char .acts{display:flex;gap:6px;flex:none}
+  .char .acts button{padding:5px 12px;font-size:11px}
+  .char .ask{flex-basis:100%;display:flex;gap:6px;align-items:center;
+             margin-top:4px}
+  .login-foot{padding:0 20px 18px;display:flex;gap:8px;align-items:center}
+  .login-foot button{padding:6px 12px;font-size:11px}
+  #char-form{padding:16px 20px 18px;border-top:1px solid var(--line);
+             display:flex;flex-direction:column;gap:12px}
+  #char-form h3{margin:0;font-size:13px;font-weight:600}
+  #open-login{width:100%;padding:6px;font-size:11px;letter-spacing:.06em;
+              margin-top:4px;overflow:hidden;text-overflow:ellipsis;
+              white-space:nowrap}
+  #open-login.on{color:var(--ink);border-color:var(--line)}
+  #setup-who{color:var(--accent);font-weight:600}
+
+  /* --- options: one panel for routes, rules and character setup --- */
+  #open-options{width:100%;padding:7px;font-size:11px;letter-spacing:.06em}
+  #open-options.live{border-color:var(--accent);color:var(--accent)}
+
+  /* An <aside>, so the sidebar's own padding, gap and scrolling land on it
+     unless they are put back -- which is a 12px frame around the whole panel
+     and a scrollbar down the side of a thing that scrolls its panes instead. */
+  #options{position:fixed;top:0;right:0;bottom:0;width:min(900px,100%);z-index:20;
+           background:var(--panel);border-left:1px solid var(--line);
+           box-shadow:-16px 0 40px rgba(0,0,0,.5);
+           display:flex;flex-direction:column;
+           padding:0;gap:0;overflow:hidden}
+  #options>header{flex:none;display:flex;align-items:center;gap:10px;
+                  padding:11px 14px;border-bottom:1px solid var(--line)}
+  #options h3{margin:0;font-size:13px;font-weight:600;letter-spacing:.02em}
+  /* One box, beside the title, filtering whatever list is showing.  Six of
+     them -- one per tab -- would be six places to look for the same thing. */
+  #opt-search{flex:0 1 240px;min-width:0;padding:4px 8px;font-size:11.5px}
+  #opt-search::placeholder{color:#4b525f}
+  #opt-where{flex:1;min-width:0;font-size:11px;color:var(--dim);
+             text-align:right;
+             overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #options-close{border:0;font-size:19px;line-height:1;padding:0 6px;
+                 color:var(--dim);flex:none}
+  .opt-frame{flex:1;min-height:0;display:flex}
+
+  /* the rail */
+  #opt-tabs{flex:none;width:174px;overflow-y:auto;padding:10px 8px;
+            border-right:1px solid var(--line);background:rgba(0,0,0,.16);
+            display:flex;flex-direction:column;gap:1px}
+  .opt-group{font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+             color:var(--dim);font-weight:600;padding:10px 9px 4px}
+  .opt-group:first-child{padding-top:2px}
+  #opt-tabs button{display:flex;align-items:center;gap:6px;width:100%;
+                   text-align:left;border:0;border-radius:3px;
+                   padding:7px 9px;font-size:12px;color:var(--dim)}
+  #opt-tabs button:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+  #opt-tabs button.on{color:var(--ink);background:rgba(111,155,235,.15);
+                      box-shadow:inset 2px 0 0 var(--accent)}
+  #opt-tabs .n{margin-left:auto;font-size:10px;color:var(--dim);
+               font-variant-numeric:tabular-nums}
+  #opt-tabs .n:empty{display:none}
+  #opt-tabs button.on .n{color:var(--accent)}
+
+  /* the pane area, and the editors that cover it */
+  .opt-main{flex:1;min-width:0;display:flex;flex-direction:column;
+            position:relative}
+  #opt-panes{flex:1;min-height:0;overflow-y:auto;padding:16px 18px}
+  .opt-pane{display:flex;flex-direction:column;gap:14px}
+  .opt-head{display:flex;align-items:flex-start;gap:14px}
+  .opt-head h4{margin:0;font-size:15px;font-weight:600}
+  .opt-head p{margin:4px 0 0;font-size:11.5px;line-height:1.55;
+              color:var(--dim);max-width:64ch}
+  .opt-head .acts{margin-left:auto;flex:none;display:flex;gap:6px}
+  .opt-head .acts button{padding:5px 10px;font-size:11px}
+  button.primary{color:var(--ink);border-color:var(--accent)}
+  button.primary:hover{background:rgba(111,155,235,.14)}
+  .card-list{display:flex;flex-direction:column;gap:6px}
+  .card-list:empty::after{content:attr(data-empty);color:var(--dim);
+                          font-style:italic;font-size:11.5px}
+
+  .opt-editor{position:absolute;inset:0;z-index:2;background:var(--panel);
+              display:flex;flex-direction:column}
+  .opt-editor>header{flex:none;display:flex;align-items:center;gap:8px;
+                     padding:11px 16px;border-bottom:1px solid var(--line)}
+  .opt-editor>header h4{margin:0;font-size:14px;font-weight:600}
+  .opt-editor .back{border:0;font-size:15px;line-height:1;padding:1px 6px;
+                    color:var(--dim)}
+  .opt-editor .body{flex:1;min-height:0;overflow-y:auto;padding:16px 18px;
+                    display:flex;flex-direction:column;gap:14px}
+
+  /* form furniture */
+  .fset{border:1px solid var(--line);border-radius:4px;background:var(--sunk)}
+  .fset>h5{margin:0;padding:7px 12px;border-bottom:1px solid var(--line);
+           font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;
+           color:var(--dim);font-weight:600}
+  .fset>.in{padding:12px;display:flex;flex-direction:column;gap:12px}
+  .fset>.in>#grp-text,.fset>.in>#grp-event,.fset>.in>#grp-watch{
+           display:flex;flex-direction:column;gap:12px}
+  .frow{display:grid;grid-template-columns:112px minmax(0,1fr);
+        gap:4px 12px;align-items:start}
+  .frow>label:first-child{grid-column:1;font-size:11px;color:var(--dim);
+                          text-align:right;justify-self:end;padding-top:7px}
+  .frow>*:not(label:first-child){grid-column:2}
+  .frow .ctl{display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
+  .frow .stack{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .fhint,.say{font-size:11px;line-height:1.55;color:var(--dim);margin:0}
+  .say{max-width:64ch}
+  .check{display:flex;align-items:center;gap:6px;font-size:11.5px;
+         color:var(--ink);text-align:left}
+  .frow .check{justify-self:start}
+  input.num{flex:0 0 74px;min-width:0}
+  input.mono,textarea.mono{font-family:Consolas,"DejaVu Sans Mono",monospace}
+  code{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:.95em;
+       color:var(--ink);background:rgba(255,255,255,.05);
+       border-radius:2px;padding:0 3px}
+  .fbar{display:flex;align-items:center;gap:8px;padding-top:2px}
+  .fbar .err{margin:0;flex:1;min-width:0}
+  .fbar button{padding:6px 12px;font-size:11px}
+
+  /* rule and route cards */
+  .rule,.route{border:1px solid var(--line);border-radius:4px;padding:9px 11px;
+               background:var(--sunk);display:flex;flex-direction:column;gap:5px}
+  .route.running{border-color:var(--accent)}
+  .rule .top,.route .top{display:flex;align-items:baseline;gap:8px}
+  .rule .pat{flex:1;min-width:0;font-family:Consolas,monospace;font-size:11.5px;
+             overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .route .nm{flex:1;min-width:0;font-weight:600;font-size:12.5px}
+  .rule .meta,.route .meta{font-size:10.5px;color:var(--dim);
+                           font-family:Consolas,monospace;word-break:break-word}
+  .rule.off{opacity:.5}
+  .rule .acts,.route .acts,.route .top>button{flex:none}
+  .rule .acts{display:flex;gap:4px;flex:none}
+  .route .go{color:var(--good)}
+  .route.running .go{color:var(--enemy)}
+  .tag{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+       border:1px solid var(--line);border-radius:2px;padding:0 4px;flex:none}
+  .tag.alias{color:var(--accent);border-color:var(--accent)}
+  .tag.on{color:var(--good);border-color:var(--good)}
+
+  /* try a line */
+  #opt-test{flex:none;border-top:1px solid var(--line);padding:9px 18px 11px;
+            background:rgba(0,0,0,.14)}
+  #rule-test-form{display:flex;align-items:center;gap:8px}
+  #rule-test-form label{font-size:11px;color:var(--dim);flex:none}
+  #rule-test-form button{padding:6px 12px;font-size:11px;flex:none}
+  #rule-test-out{font-size:11px;color:var(--dim);margin-top:6px;
+                 font-family:Consolas,monospace;white-space:pre-wrap}
+  #rule-test-out:empty{display:none}
+  #rule-test-out .hit{color:var(--good)}
+
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .hint{color:var(--dim);opacity:.8;font-size:11px}
+  input[type=text],input[type=password],input[type=search],select,textarea{
+    background:var(--sunk);border:1px solid var(--line);
+    color:var(--ink);font:12px/1.4 system-ui,sans-serif;padding:6px 8px;
+    border-radius:3px}
+  .opt-editor input[type=text],.opt-editor textarea{
+    font-family:Consolas,"DejaVu Sans Mono",monospace}
+  input[type=text],input[type=password],textarea{flex:1;min-width:0}
+  input[type=search]{font-family:inherit}
+  #char-form input,.char .ask input{font-family:Consolas,"DejaVu Sans Mono",monospace}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{width:100%;resize:vertical;min-height:52px}
+  #f-code{min-height:140px;margin-top:4px}
+  .err{color:var(--bad);font-size:11px}
+  .action-row{display:flex;gap:6px;margin-bottom:6px}
+  .action-row:last-of-type{margin-bottom:0}
+
+  /* a narrow window stacks the label above its control */
+  @media (max-width:720px){
+    #opt-tabs{width:132px}
+    .frow{grid-template-columns:minmax(0,1fr)}
+    .frow>label:first-child{text-align:left;justify-self:start}
+    .frow>*:not(label:first-child){grid-column:1}
+  }
+</style>
+</head>
+<body>
+  <main>
+    <div id="out">
+      <aside id="msgmon" class="dock">
+        <header title="Click to collapse">
+          <b>Messages</b><span class="cm-count"></span><span class="cm-toggle">&minus;</span>
+        </header>
+        <div class="cm-filters"></div>
+        <div class="cm-body"></div>
+      </aside>
+
+      <div id="term"></div>
+
+    </div>
+    <div id="vitals">
+      <div class="v hp"><b id="lbl-hp">HP</b>
+        <div class="track"><div class="fill" id="hp-b"></div></div>
+        <i id="hp-n">&ndash;</i></div>
+      <div class="v sp"><b id="lbl-sp">SP</b>
+        <div class="track"><div class="fill" id="sp-b"></div></div>
+        <i id="sp-n">&ndash;</i></div>
+      <div class="v gp"><b id="lbl-gp1">GP1</b>
+        <div class="track"><div class="fill" id="g1-b"></div></div>
+        <i id="g1-n">&ndash;</i></div>
+      <div class="v gp"><b id="lbl-gp2">GP2</b>
+        <div class="track"><div class="fill" id="g2-b"></div></div>
+        <i id="g2-n">&ndash;</i></div>
+      <div id="guild" hidden><div id="gline"></div></div>
+    </div>
+    <form id="bar" autocomplete="off">
+      <input id="cmd" type="text" spellcheck="false" autocomplete="off"
+             placeholder="type a command, up/down for history">
+    </form>
+  </main>
+  <aside id="side">
+    <!-- Above the map, because these are the three things you reach for
+         without looking: where the settings are, what is running, and out. -->
+    <div id="side-acts">
+      <button id="open-options" type="button"
+              title="Routes, triggers, aliases and character setup">Options</button>
+      <button id="open-bots" type="button"
+              title="What is running, and starting or stopping it">Bots</button>
+      <button id="hangup" type="button" class="danger"
+              title="Save everything and close the connection">Disconnect</button>
+    </div>
+
+    <aside id="mapmon" class="dock">
+      <header title="Click to collapse">
+        <b>Map</b><span class="cm-toggle">&minus;</span>
+      </header>
+      <div class="map-body"><canvas></canvas></div>
+      <div class="map-where"></div>
+    </aside>
+
+    <section>
+      <h2>Session</h2>
+      <div id="link" hidden>
+        <b>Disconnected</b><span id="link-why"></span>
+        <button id="link-again" type="button" hidden>Choose character</button>
+      </div>
+      <div id="route-now" hidden>
+        <div class="bar-top"><b id="route-name">&mdash;</b><i id="route-step"></i></div>
+        <div class="track"><div class="fill" id="route-bar"></div></div>
+        <div id="route-note"></div>
+      </div>
+      <button id="mip" type="button" title="Re-send the 3klient handshake">
+        MIP: waiting
+      </button>
+      <div id="apm" title="Non-directional commands in the last minute. Movement is free.">
+        <div class="bar-top"><b>APM</b><i id="apm-n">0</i></div>
+        <div class="track"><div class="fill" id="apm-b"></div></div>
+      </div>
+      <div id="chrome"></div>
+      <div id="status">connecting&hellip;</div>
+    </section>
+
+    <button id="open-login" type="button"
+            title="Whose triggers, aliases and markers are loaded">
+      No character</button>
+
+    <section id="combat" hidden>
+      <h2>Combat <span id="round"></span></h2>
+      <div id="enemy-name"></div>
+      <div class="bar en"><div class="bar-top"><b>ENEMY</b><i id="en-n">&ndash;</i></div>
+        <div class="track"><div class="fill" id="en-b"></div></div></div>
+      <div id="enemy-marks"></div>
+    </section>
+
+    <!-- Off unless it is asked for, and last when it is: it is the panel you
+         consult rather than the one you watch. -->
+    <section id="roompanel" hidden>
+      <h2>Room <span id="room-name"></span></h2>
+      <div id="exits"></div>
+      <ul id="contents"></ul>
+    </section>
+  </aside>
+
+<div id="login" hidden>
+  <div class="login-card">
+    <header>
+      <h2>Who is playing?</h2>
+      <p id="login-state"></p>
+    </header>
+    <div id="char-list"></div>
+    <div class="login-foot">
+      <button id="char-add" type="button" class="primary">+ Add a character</button>
+      <span style="flex:1"></span>
+      <button id="login-skip" type="button">Type it myself</button>
+    </div>
+
+    <form id="char-form" hidden>
+      <h3 id="char-form-title">Add a character</h3>
+      <div class="frow">
+        <label for="c-name">Name</label>
+        <input id="c-name" type="text" spellcheck="false" placeholder="your character name">
+        <p class="fhint">Exactly as you type it at the MUD's prompt.</p>
+      </div>
+      <div class="frow">
+        <label for="c-host">Address</label>
+        <div class="ctl">
+          <input id="c-host" type="text" spellcheck="false" placeholder="3k.org">
+          <input id="c-port" type="text" spellcheck="false" class="num"
+                 placeholder="3000">
+        </div>
+      </div>
+      <div class="frow">
+        <label for="c-password">Password</label>
+        <input id="c-password" type="password" placeholder="leave blank to type it each time">
+        <p class="fhint" id="c-password-hint"></p>
+      </div>
+      <div class="frow">
+        <label>Keep it</label>
+        <label class="check"><input id="c-remember" type="checkbox">
+          remember this password on this machine</label>
+        <p class="fhint">Stored in plain text in
+          <code>profiles/characters.json</code>, readable by anything that can
+          read your home directory. The file is created private to you, which
+          is as much as a client can promise.</p>
+      </div>
+      <div class="frow">
+        <label for="c-note">Note</label>
+        <input id="c-note" type="text" placeholder="optional, e.g. the mage">
+      </div>
+      <div class="fbar">
+        <span id="char-error" class="err"></span>
+        <button id="char-cancel" type="button">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<aside id="options" hidden>
+  <header>
+    <h3>Options</h3>
+    <input id="opt-search" type="search" spellcheck="false" hidden
+           placeholder="Search" aria-label="Search this list">
+    <span id="opt-where"></span>
+    <button id="options-close" type="button" title="Close (Esc)">&times;</button>
+  </header>
+
+  <div class="opt-frame">
+    <nav id="opt-tabs">
+      <div class="opt-group">Automation</div>
+      <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
+      <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
+      <button type="button" data-tab="alias">Aliases<span class="n"></span></button>
+      <button type="button" data-tab="event">Events<span class="n"></span></button>
+      <button type="button" data-tab="watch">Stat watches<span class="n"></span></button>
+      <button type="button" data-tab="timer">Timers<span class="n"></span></button>
+      <div class="opt-group">Client</div>
+      <button type="button" data-tab="panels">Panels<span class="n"></span></button>
+      <button type="button" data-tab="settings">Character setup</button>
+      <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
+      <button type="button" data-tab="updates">Updates<span class="n"></span></button>
+    </nav>
+
+    <div class="opt-main">
+      <div id="opt-panes">
+
+        <!-- routes ------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="routes">
+          <div class="opt-head">
+            <div>
+              <h4>Routes &amp; bots</h4>
+              <p>A path to walk and a list of things to kill on the way. A route
+                 runs once and stops at the end unless you tick repeat.</p>
+            </div>
+            <div class="acts">
+              <button id="r-new" type="button" class="primary">+ New route</button>
+              <button id="route-stop-all" type="button">Stop everything</button>
+            </div>
+          </div>
+          <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
+               data-none="No routes yet. Paste a path into a new one."></div>
+        </section>
+
+        <!-- updates ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="updates" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Map &amp; bot updates</h4>
+              <p>The map and the route library come from
+                 <b>jmitchell33/3kdb</b>, a TinTin++ setup for 3K that keeps
+                 growing. Taking an update only ever <i>adds</i>: rooms you do
+                 not have, exits you do not have, routes you have not named.
+                 Nothing you have walked, renamed or edited is touched.</p>
+            </div>
+            <div class="acts">
+              <button id="up-check" type="button">Check now</button>
+              <button id="up-pull" type="button" class="primary">Take updates</button>
+            </div>
+          </div>
+          <div id="up-list" class="card-list"
+               data-empty="Press Check now to ask GitHub what has changed."
+               data-none="Press Check now to ask GitHub what has changed."></div>
+          <p class="fhint" id="up-note">Only the map, the named destinations
+             and the bot library are pulled &mdash; all of them data. Your
+             scripts are Python and hot-reload, so they are deliberately not on
+             this list.</p>
+        </section>
+
+        <!-- triggers ----------------------------------------------------- -->
+        <section class="opt-pane" data-pane="trigger" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Triggers</h4>
+              <p>Fire when the MUD sends a line that matches.</p>
+            </div>
+            <div class="acts">
+              <button id="rule-new-trigger" type="button" class="primary">+ New trigger</button>
+            </div>
+          </div>
+          <div id="list-trigger" class="card-list" data-empty="No triggers yet."
+               data-none="No triggers yet."></div>
+        </section>
+
+        <!-- aliases ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="alias" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Aliases</h4>
+              <p>Fire when <em>you</em> type something &mdash; a short word that
+                 stands for one or more commands.</p>
+            </div>
+            <div class="acts">
+              <button id="rule-new-alias" type="button" class="primary">+ New alias</button>
+            </div>
+          </div>
+          <div id="list-alias" class="card-list" data-empty="No aliases yet."
+               data-none="No aliases yet."></div>
+        </section>
+
+        <!-- events ------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="event" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Events</h4>
+              <p>Fire on something happening &mdash; a tell, a channel line, a
+                 combat round &mdash; already parsed into named fields by MIP,
+                 so there is no pattern to write and nothing to break when a
+                 wizard recolours a name.</p>
+            </div>
+            <div class="acts">
+              <button id="rule-new-event" type="button" class="primary">+ New event rule</button>
+            </div>
+          </div>
+          <div id="list-event" class="card-list" data-empty="No event rules yet."
+               data-none="No event rules yet."></div>
+        </section>
+
+        <!-- stat watches ------------------------------------------------- -->
+        <section class="opt-pane" data-pane="watch" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Stat watches</h4>
+              <p>Fire when a number crosses a line &mdash; health, spell points,
+                 the enemy's health. Once on the crossing, not on every update:
+                 3k.org sends two per combat round.</p>
+            </div>
+            <div class="acts">
+              <button id="rule-new-watch" type="button" class="primary">+ New watch</button>
+            </div>
+          </div>
+          <div id="list-watch" class="card-list" data-empty="No watches yet."
+               data-none="No watches yet."></div>
+        </section>
+
+        <!-- timers --------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="timer" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Timers</h4>
+              <p>Send something every so often. Kept on the game's own two-second
+                 beat rather than the wall clock, and held back the same way
+                 everything else is when the minute is busy &mdash; a timer is
+                 not a reason to trip the APM ceiling.</p>
+            </div>
+            <div class="acts">
+              <button id="rule-new-timer" type="button" class="primary">+ New timer</button>
+            </div>
+          </div>
+          <div id="list-timer" class="card-list"
+               data-empty="No timers yet." data-none="No timers yet."></div>
+          <p class="say">Typing <code>/tick 290 xp</code> makes one of these,
+            and <code>/ticks</code> lists them. <code>/delay 5 quaff heal</code>
+            is the one-off version and is not kept.</p>
+        </section>
+
+        <!-- panels --------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="panels" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Panels</h4>
+              <p>What is on screen. Nothing floats: the messages sit across
+                 the top of the output and the map at the top of the sidebar,
+                 so there is nothing to place and nothing over the text.</p>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Show</h5>
+            <div class="in" id="panel-toggles"></div>
+          </div>
+          <div class="fset">
+            <h5>Terminal</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="term-cols">Width</label>
+                <div class="ctl">
+                  <select id="term-cols"></select>
+                  <span class="hint" id="term-cols-now"></span>
+                </div>
+                <p class="fhint">3k.org draws to about eighty columns &mdash;
+                  its own map is 78 wide and prose wraps well short of that
+                  &mdash; so a wide window leaves a lot of empty terminal.
+                  The cap gathers that space into one piece on the right,
+                  where the floating panels sit, rather than spreading it
+                  across every line. It never bites on a narrow window.</p>
+              </div>
+            </div>
+          </div>
+          <p class="say">Kept in this browser, not on your character, so a
+            second window can be laid out differently.</p>
+        </section>
+
+        <!-- character setup ---------------------------------------------- -->
+        <section class="opt-pane" data-pane="settings" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Character setup</h4>
+              <p>Settings on your character, not changes to the mudlib.
+                 <b id="setup-who"></b></p>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>Line markers</h5>
+            <div class="in">
+              <p class="say">3K can wrap each kind of line in a marker of your
+                choosing, which turns its output from prose into fields with two
+                ends. With them set, this client can name the room you are in
+                about twice as often. You never see them: they go in for the
+                parser and come straight back out before the screen.</p>
+              <p class="say">The first click prints the settings so you can read
+                them. The second sends them.</p>
+              <div class="row">
+                <button id="set-prefixes" type="button"
+                        title="Shows them first; nothing is sent until you confirm."
+                        >Set ANSI prefixes</button>
+                <span class="hint">edits live in scripts/prefixes.json</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- script files ------------------------------------------------- -->
+        <section class="opt-pane" data-pane="scripts" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Script files</h4>
+              <p>Rules registered from Python files in <code>scripts/</code>.
+                 They run in the same engine as everything above; edit the file
+                 to change one.</p>
+            </div>
+          </div>
+          <div id="rule-scripts" class="card-list" data-empty="No script files loaded."
+               data-none="No script files loaded."></div>
+        </section>
+
+      </div>
+
+      <!-- shared footer: try a line against every rule ------------------- -->
+      <div id="opt-test" hidden>
+        <form id="rule-test-form">
+          <label for="rule-test">Try a line</label>
+          <input id="rule-test" type="text" spellcheck="false"
+                 placeholder="paste a line the MUD sent, or a command you would type">
+          <button type="submit">Test</button>
+        </form>
+        <div id="rule-test-out"></div>
+      </div>
+
+      <!-- route editor --------------------------------------------------- -->
+      <div id="route-editor" class="opt-editor" hidden>
+        <header>
+          <button id="route-back" type="button" class="back" title="Back">&larr;</button>
+          <h4 id="route-form-title">New route</h4>
+        </header>
+        <form id="route-form" class="body">
+          <input type="hidden" id="r-id">
+
+          <div class="fset">
+            <h5>The walk</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="r-name">Name</label>
+                <input id="r-name" type="text" spellcheck="false"
+                       placeholder="tradepost circuit">
+              </div>
+              <div class="frow">
+                <label for="r-path">Path</label>
+                <textarea id="r-path" spellcheck="false" rows="4"
+                          placeholder="n n e s w"></textarea>
+                <p class="fhint">Directions separated by spaces, commas, semicolons
+                  or new lines. <code>3n</code> repeats a step. Anything that is not
+                  a direction is sent as a command &mdash; <code>climb pipe</code>,
+                  <code>enter</code>. Wrap a step in <code>{ }</code> to keep
+                  something containing a separator together.</p>
+              </div>
+              <div class="frow">
+                <label for="r-start">Start room</label>
+                <input id="r-start" type="text" spellcheck="false" placeholder="25462">
+                <p class="fhint">A room number. The client walks you there first
+                  and checks it arrived. Leave blank to start wherever you are.</p>
+              </div>
+              <div class="frow">
+                <label for="r-setup">Before starting</label>
+                <textarea id="r-setup" spellcheck="false" rows="2"
+                          placeholder="touch angel rune"></textarea>
+                <p class="fhint">Commands sent once on arrival, one per line.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>The hunt</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="r-targets">Attack on sight</label>
+                <input id="r-targets" type="text" spellcheck="false"
+                       placeholder="Cur, Cancer">
+                <p class="fhint">A name, or any word from the long description
+                  &mdash; <code>archangel</code> catches all ten. Separate with
+                  commas. Leave blank to walk without fighting.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>How it runs</h5>
+            <div class="in">
+              <div class="frow">
+                <label>Repeat</label>
+                <label class="check"><input id="r-loop" type="checkbox">
+                  start over at the end of the path</label>
+                <p class="fhint">Off by default. A route that quietly starts over
+                  is one still walking your character around an hour after you
+                  stopped watching.</p>
+              </div>
+              <div class="frow">
+                <label>Other players</label>
+                <label class="check"><input id="r-polite" type="checkbox">
+                  wait rather than take their kill</label>
+              </div>
+              <div class="frow">
+                <label for="r-rest">Rest</label>
+                <div class="ctl">
+                  <input id="r-rest" type="text" spellcheck="false" value="0"
+                         class="num"> <span class="hint">seconds between steps</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="fbar">
+            <span id="route-error" class="err"></span>
+            <button id="route-cancel" type="button">Cancel</button>
+            <button type="submit" class="primary">Save route</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- rule editor ---------------------------------------------------- -->
+      <div id="rule-editor" class="opt-editor" hidden>
+        <header>
+          <button id="f-back" type="button" class="back" title="Back">&larr;</button>
+          <h4 id="rule-form-title">New rule</h4>
+        </header>
+        <form id="rule-form" class="body">
+          <select id="f-kind" hidden>
+            <option value="trigger">a line from the MUD</option>
+            <option value="alias">a command I type</option>
+            <option value="event">something happens</option>
+            <option value="watch">a number crosses a line</option>
+            <option value="timer">every so often</option>
+          </select>
+
+          <div class="fset">
+            <h5>When</h5>
+            <div class="in">
+              <div id="grp-text">
+                <div class="frow">
+                  <label for="f-mode">Match</label>
+                  <div class="ctl">
+                    <select id="f-mode">
+                      <option value="command">command</option>
+                      <option value="contains">contains</option>
+                      <option value="glob">glob</option>
+                      <option value="regex">regex</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="frow">
+                  <label for="f-pattern">Text</label>
+                  <input id="f-pattern" type="text" spellcheck="false"
+                         placeholder="text to match" class="mono">
+                  <p class="fhint" id="f-hint"></p>
+                </div>
+              </div>
+
+              <div id="grp-event" hidden>
+                <div class="frow">
+                  <label for="f-event">Event</label>
+                  <div class="ctl"><select id="f-event"></select></div>
+                  <p class="fhint" id="f-event-fields"></p>
+                </div>
+                <div class="frow">
+                  <label>Only when</label>
+                  <div class="stack">
+                    <div id="f-conditions"></div>
+                    <button id="f-add-cond" type="button">+ condition</button>
+                  </div>
+                  <p class="fhint">All conditions must hold. Leave empty to fire
+                    every time the event happens.</p>
+                </div>
+              </div>
+
+              <div id="grp-timer" hidden>
+                <div class="frow">
+                  <label for="f-every">Every</label>
+                  <div class="ctl">
+                    <input id="f-every" type="text" class="num" value="290">
+                    <span class="hint">seconds</span>
+                  </div>
+                  <p class="fhint">Checked on the game's beat, so anything under
+                    two seconds is a number the client cannot keep. Nothing
+                    fires until MIP is flowing: before that the beat free-runs,
+                    and the login prompt is no place to send commands.</p>
+                </div>
+              </div>
+
+              <div id="grp-watch" hidden>
+                <div class="frow">
+                  <label for="f-watch-field">Number</label>
+                  <div class="ctl">
+                    <select id="f-watch-field"></select>
+                    <select id="f-op"></select>
+                    <input id="f-value" type="text" placeholder="35" class="num">
+                  </div>
+                  <p class="fhint" id="f-watch-fields"></p>
+                </div>
+                <div class="frow">
+                  <label>Fire</label>
+                  <label class="check"><input type="checkbox" id="f-edge" checked>
+                    only when it first crosses</label>
+                  <p class="fhint">Otherwise it fires on every update while the
+                    condition holds, and 3k.org sends two per combat round.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>Then</h5>
+            <div class="in">
+              <div id="f-actions"></div>
+              <button id="f-add-action" type="button">+ action</button>
+              <p class="say">A capture goes in with braces: <code>{who}</code>,
+                <code>{args}</code>, <code>{1}</code>.</p>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>How</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="f-name">Name</label>
+                <input id="f-name" type="text" placeholder="optional, for the list">
+              </div>
+              <div class="frow">
+                <label for="f-pace">Speed</label>
+                <div class="ctl"><select id="f-pace"></select></div>
+                <p class="fhint" id="f-pace-hint"></p>
+              </div>
+              <div class="frow">
+                <label>Options</label>
+                <div class="stack">
+                  <label class="check"><input type="checkbox" id="f-enabled" checked>
+                    enabled</label>
+                  <label class="check"><input type="checkbox" id="f-stop">
+                    stop after this &mdash; no later rule sees the line</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="fbar">
+            <span id="f-error" class="err"></span>
+            <button type="button" id="f-python">Show as Python</button>
+            <button type="button" id="f-cancel">Cancel</button>
+            <button type="submit" class="primary">Save</button>
+          </div>
+          <textarea id="f-code" hidden readonly spellcheck="false" class="mono"></textarea>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</aside>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/xterm-addon-fit.js"></script>
+  <script src="prefs.js"></script>
+  <script src="app.js"></script>
+  <script src="login.js"></script>
+  <script src="options.js"></script>
+  <script src="rules.js"></script>
+  <script src="chat.js"></script>
+  <script src="map.js"></script>
+  <script src="routes.js"></script>
+  <script src="updates.js"></script>
+  <script src="panels.js"></script>
+</body>
+</html>
