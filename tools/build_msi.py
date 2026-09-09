@@ -131,6 +131,12 @@ def source(root: Path) -> str:
 
     <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>
 
+    <!-- Without one, Windows shows a generic executable box in the Start
+         Menu, on the taskbar and in Apps & Features, and a program that looks
+         like every other unlabelled program is one people lose. -->
+    <Icon Id="app.ico" SourceFile="{escape(str(root / "mud" / "ui" / "icon.ico"))}"/>
+    <Property Id="ARPPRODUCTICON" Value="app.ico"/>
+
     <!-- Silence is not a confirmation.  The first installed run put itself
          somewhere without saying where, which leaves you with a Start Menu
          entry and no idea what it did. -->
@@ -161,7 +167,8 @@ def source(root: Path) -> str:
             <Shortcut Id="s_play" Name="{escape(NAME)}"
                       Description="Play 3Kingdoms"
                       Target="[INSTALLDIR]{SLUG}.cmd"
-                      WorkingDirectory="INSTALLDIR"/>
+                      WorkingDirectory="INSTALLDIR"
+                      Icon="app.ico"/>
             <RemoveFolder Id="MenuDir" On="uninstall"/>
             <RegistryValue Root="HKCU"
                            Key="Software\\OldManDanky\\{SLUG}"

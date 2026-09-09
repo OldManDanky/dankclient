@@ -831,8 +831,15 @@ class WebServer:
                 log("refreshing the routes:\n" + traceback.format_exc())
 
     def note(self, text: str) -> None:
-        """A line from the client itself, not from the MUD."""
-        self.push({"t": "text", "d": f"\r\n\x1b[33m[client] {text}\x1b[0m\r\n"})
+        """A line from the client itself, not from the MUD.
+
+        Every line ending has to be a carriage return as well: a terminal moves
+        *down* on a newline and stays in the column it was in, so a multi-line
+        note arrived as a staircase, each line starting where the last one
+        ended.  /help is thirty-four lines of that.
+        """
+        body = "\r\n".join(str(text).replace("\r\n", "\n").split("\n"))
+        self.push({"t": "text", "d": f"\r\n\x1b[33m[client] {body}\x1b[0m\r\n"})
 
 
 def _shut(writer: asyncio.StreamWriter) -> None:

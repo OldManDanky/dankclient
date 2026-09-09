@@ -623,3 +623,36 @@ def test_the_about_pane_is_not_rebuilt_under_the_cursor():
     """Third time this trap has come up, so it is checked now."""
     js = scripts()["about.js"]
     assert "JSON.stringify(where)" in js and "=== shown" in js
+
+
+def test_there_is_an_icon_and_it_is_a_real_one():
+    """Windows shows a generic executable box for anything without one, and a
+    program that looks like every other unlabelled program is one people
+    lose."""
+    import struct
+
+    path = UI / "icon.ico"
+    assert path.exists(), "run tools/make_icon.py"
+    body = path.read_bytes()
+    reserved, kind, count = struct.unpack("<HHH", body[:6])
+    assert (reserved, kind) == (0, 1), "not an ICO header"
+    assert count >= 4, "Windows asks for several sizes"
+
+    seen, at = [], 6
+    for _ in range(count):
+        w, h, _c, _r, _p, bits, size, offset = struct.unpack(
+            "<BBBBHHII", body[at:at + 16])
+        at += 16
+        seen.append(w or 256)
+        assert bits == 32, "needs an alpha channel to have a rounded corner"
+        assert body[offset:offset + 8] == b"\x89PNG\r\n\x1a\n"
+        assert offset + size <= len(body), "an entry points past the end"
+    assert 16 in seen and 256 in seen, f"16 is the taskbar, 256 is Explorer: {seen}"
+
+
+def test_the_page_offers_the_icon_as_well_as_the_inline_one():
+    """The tab can have an SVG; the app-mode window and the taskbar want a
+    raster."""
+    page = html()
+    assert 'href="icon.ico"' in page
+    assert 'href="data:image/svg+xml,' in page

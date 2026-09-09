@@ -621,6 +621,13 @@ Your map and characters survive all of that, because they were never in the
 program folder: `%LOCALAPPDATA%\dankclient` is a different place, and the
 installer has no reason to touch it.
 
+It carries an icon.  Windows shows a generic executable box for anything
+without one -- in the Start Menu, on the taskbar, in Apps & Features -- and a
+program that looks like every other unlabelled program is one people lose.  The
+mark is the map panel at icon size: four rooms, and the one you are standing in
+lit.  `tools/make_icon.py` draws it at seven sizes with nothing but zlib, four
+times over and averaged down, which is what gives the corners their curve.
+
 It has a licence dialog, a progress bar and a finish dialog that says where it
 went -- `wixl` ships the WixUI_Minimal set, off unless `--ext ui` asks for it.
 The first installed build had no interface at all, which meant it landed

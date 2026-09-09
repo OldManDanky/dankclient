@@ -417,3 +417,21 @@ def test_a_port_that_was_asked_for_by_name_is_not_moved():
         return False
 
     assert asyncio.run(scenario()), "it should have refused"
+
+
+def test_a_multi_line_note_does_not_walk_across_the_screen():
+    """A terminal moves *down* on a newline and stays in the column it was in,
+    so /help arrived as a staircase -- thirty-four lines each starting where
+    the last one ended."""
+    import mud.web as webmod
+
+    sent = []
+    web = webmod.WebServer.__new__(webmod.WebServer)
+    web._clients = {object()}
+    web.push = lambda obj: sent.append(obj["d"])
+    web.note("first\nsecond\nthird")
+
+    body = sent[0]
+    bare = body.count("\n") - body.count("\r\n")
+    assert bare == 0, f"{bare} newline(s) with no carriage return"
+    assert "first\r\nsecond\r\nthird" in body
