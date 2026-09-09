@@ -75,6 +75,69 @@ def _get(url: str, timeout: float) -> bytes:
         return body
 
 
+# --- the client itself -------------------------------------------------------
+#
+# Separate from everything above, and worth saying why: 3kdb is data this
+# client reads, and this is the client.  A new map arrives by pressing a
+# button; a new client arrives by downloading an installer and running it,
+# which is not something a program should do to itself unasked.
+
+CLIENT = "OldManDanky/dankclient"
+RELEASES = f"https://api.github.com/repos/{CLIENT}/releases/latest"
+
+
+def numbers(tag: str) -> tuple:
+    """A version as something comparable.  "v0.2.0" and "0.2.0" are the same.
+
+    Anything after the digits is dropped, so 0.2.0-beta sorts as 0.2.0 rather
+    than raising.  A tag nobody can parse compares as older than everything,
+    which is the safe direction: it will not claim an update exists.
+    """
+    out = []
+    for part in str(tag).lstrip("vV").split("."):
+        digits = ""
+        for ch in part:
+            if not ch.isdigit():
+                break
+            digits += ch
+        if not digits:
+            break
+        out.append(int(digits))
+    return tuple(out)
+
+
+def newer_release(timeout: float = 15.0, have: str = "") -> dict:
+    """Is there a newer client than this one?  One request, and no download.
+
+    Being told is the whole feature.  Fetching and running an installer on
+    somebody's behalf is a different thing entirely, and not one a MUD client
+    should be doing while they are playing.
+    """
+    mine = have or __version__
+    try:
+        found = json.loads(_get(RELEASES, timeout))
+    except (urllib.error.URLError, ValueError, OSError,
+            json.JSONDecodeError) as exc:
+        return {"error": f"{type(exc).__name__}: {exc}", "have": mine}
+    if found.get("draft") or not found.get("tag_name"):
+        return {"error": "", "have": mine, "latest": "", "newer": False}
+
+    tag = str(found["tag_name"])
+    installer = next(
+        (a["browser_download_url"] for a in found.get("assets", ())
+         if str(a.get("name", "")).endswith(".msi")), found.get("html_url", ""))
+    return {
+        "error": "",
+        "have": mine,
+        "latest": tag.lstrip("vV"),
+        "newer": numbers(tag) > numbers(mine),
+        "url": installer,
+        "page": found.get("html_url", ""),
+        "name": found.get("name") or tag,
+        "when": (found.get("published_at") or "")[:10],
+    }
+
+
 def taken(store) -> dict:
     """What we last took, by key.  Read where the store is safe to read."""
     if store is None:

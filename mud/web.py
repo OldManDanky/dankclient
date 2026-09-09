@@ -124,6 +124,10 @@ class WebServer:
         self._live_routes = frozenset()
         self._map_centre = None
         self._server: asyncio.base_events.Server | None = None
+        #: What the latest release is, once we have asked.  Asked once, in the
+        #: background: nobody wants their MUD client stopping to talk to
+        #: GitHub, and the answer does not change while they play.
+        self._release: dict = {}
 
     # --- lifecycle ----------------------------------------------------------
 
@@ -152,7 +156,23 @@ class WebServer:
         self.port = self._server.sockets[0].getsockname()[1]
         self._wire_session()
         asyncio.create_task(self._pump())
+        asyncio.create_task(self._ask_about_releases())
         return self.port
+
+    async def _ask_about_releases(self) -> None:
+        """Find out whether there is a newer client, once, quietly.
+
+        A failure is an empty answer, not a message: somebody playing offline
+        does not need to be told that GitHub was unreachable.
+        """
+        from . import update
+
+        try:
+            self._release = await asyncio.to_thread(update.newer_release)
+        except Exception:
+            log("release check failed:\n" + traceback.format_exc())
+            self._release = {"error": "could not ask"}
+        self._dirty = True
 
     async def stop(self) -> None:
         for w in list(self._clients):
@@ -285,6 +305,9 @@ class WebServer:
             "who": self._who(),
             "link": self._link(),
             "where": self._where(),
+            # Absent until it has been asked, which is also what a
+            # half-built server in a test looks like.
+            "release": getattr(self, "_release", {}),
         }
 
     def _where(self) -> dict:
@@ -473,6 +496,11 @@ class WebServer:
                 log("update check failed:\n" + traceback.format_exc())
                 got = {"error": f"{type(exc).__name__}: {exc}", "items": {}}
             self.push({"t": "update", "op": "state", **got})
+            return
+
+        if op == "client":
+            await self._ask_about_releases()
+            self.push({"t": "update", "op": "release", **self._release})
             return
 
         if op != "pull":

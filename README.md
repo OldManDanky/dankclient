@@ -434,6 +434,18 @@ named destinations and 67 routes.  `--no-bootstrap` skips it, and a failure is
 a note rather than a stop -- the client works without a map, and Options ->
 Updates will retry.
 
+**Options -> About** also says whether there is a newer client than this one.
+Asked once, in the background, when the interface first connects: nobody wants
+their MUD client stopping to talk to GitHub, and the answer does not change
+while they play.  Being offline is an empty answer rather than a message.
+
+It tells you and stops there.  Fetching and running an installer on somebody's
+behalf is a different thing entirely, and not one a MUD client should do while
+they are in a fight -- so it shows the version, links to the release, and
+leaves the decision alone.  A tag nobody can parse counts as older than
+everything, which is the safe direction: a release named "latest" should not
+make every client in the world announce a new version.
+
 The map and the route library came from
 [jmitchell33/3kdb](https://github.com/jmitchell33/3kdb), a TinTin++ setup for
 3K, and it keeps growing.  **Options -> Updates** asks what has changed and

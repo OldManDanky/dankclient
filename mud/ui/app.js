@@ -476,6 +476,7 @@ function render(s) {
 
   if (s.messages && window.seedMessages) window.seedMessages(s.messages);
   if (s.where && window.renderAbout) window.renderAbout(s.where);
+  if (s.release && window.renderRelease) window.renderRelease(s.release);
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {
     mipLabels = s.labels;

@@ -229,6 +229,11 @@
               background:var(--sunk);border:1px solid var(--line);
               border-radius:3px;padding:4px 6px;margin:3px 0;
               overflow-wrap:anywhere;cursor:text}
+  #about-release{margin:0 0 10px}
+  #about-release.new{padding:8px;border-radius:3px;color:var(--ink);
+    background:color-mix(in srgb,var(--accent) 16%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}
+  #about-release a{color:var(--accent)}
   #route-now{margin-bottom:8px}
   #route-now .fill{background:var(--accent)}
   #route-name{color:var(--accent)!important;text-transform:none;
@@ -619,7 +624,7 @@
       <button type="button" data-tab="settings">Character setup</button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
       <button type="button" data-tab="updates">Updates<span class="n"></span></button>
-      <button type="button" data-tab="about">About</button>
+      <button type="button" data-tab="about">About<span class="n"></span></button>
     </nav>
 
     <div class="opt-main">
@@ -649,7 +654,11 @@
               <h4 id="about-name">Dank Mud Client</h4>
               <p id="about-blurb">A MIP-native client for 3Kingdoms.</p>
             </div>
+            <div class="acts">
+              <button id="about-check" type="button">Check for updates</button>
+            </div>
           </div>
+          <div id="about-release" class="fhint"></div>
           <div class="fset">
             <p class="fhint">Where everything lives. The program folder is
                replaced wholesale by an update; nothing you own is in it.</p>

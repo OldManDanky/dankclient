@@ -122,6 +122,10 @@
   }
 
   window.handleUpdate = function (m) {
+    if (m.op === 'release') {
+      if (window.renderRelease) window.renderRelease(m);
+      return;
+    }
     if (m.op === 'working') {
       working = true;
       render();

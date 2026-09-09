@@ -22,6 +22,59 @@
 
   let shown = '';
 
+  /* Whether there is a newer client than this one.
+
+     Being told is the whole feature: it says what is out and links to it, and
+     stops there. Fetching and running an installer on somebody's behalf is a
+     different thing entirely, and not one to do while they are playing. */
+  let told = '';
+
+  window.renderRelease = function (release) {
+    if (!release) return;
+    const key = JSON.stringify(release);
+    if (key === told) return;
+    told = key;
+
+    const box = $('about-release');
+    box.replaceChildren();
+    box.className = 'fhint';
+    if (release.error) {
+      box.textContent = 'Could not ask GitHub whether there is a newer one.';
+      return;
+    }
+    if (!release.latest) {
+      box.textContent = '';
+      return;
+    }
+    if (!release.newer) {
+      box.textContent = `This is the latest release (${release.latest}`
+        + (release.when ? `, ${release.when}` : '') + ').';
+      if (window.options) window.options.count('about', 0);
+      return;
+    }
+    box.className = 'fhint new';
+    box.append(document.createTextNode(
+      `Version ${release.latest} is out — you have ${release.have}. `));
+    const link = document.createElement('a');
+    link.href = release.page || release.url;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.textContent = 'Download the installer';
+    box.append(link);
+    box.append(document.createTextNode(
+      '. Installing it replaces the program and leaves your map, characters '
+      + 'and triggers exactly where they are.'));
+    if (window.options) window.options.count('about', 1);
+  };
+
+  $('about-check').onclick = () => {
+    $('about-release').textContent = 'asking GitHub…';
+    told = '';
+    if (window.ws && window.ws.readyState === 1) {
+      window.ws.send(JSON.stringify({ t: 'update', op: 'client' }));
+    }
+  };
+
   window.renderAbout = function (where) {
     if (!where) return;
     // Redrawn on every snapshot otherwise, which replaces whatever the cursor

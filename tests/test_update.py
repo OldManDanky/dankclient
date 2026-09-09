@@ -193,3 +193,73 @@ def test_a_broken_store_does_not_stop_the_client_starting():
             def execute(*a):
                 raise RuntimeError("no such table")
     assert update.never_run(Wrecked()) is False
+
+
+# --- a newer client ----------------------------------------------------------
+
+def release(tag="v0.2.0", **extra):
+    body = {"tag_name": tag, "name": f"Dank Mud Client {tag}",
+            "html_url": f"https://github.com/{update.CLIENT}/releases/{tag}",
+            "published_at": "2026-10-01T00:00:00Z",
+            "assets": [{"name": "dankclient-0.2.0.msi",
+                        "browser_download_url": "https://example/x.msi"}]}
+    body.update(extra)
+    return lambda url, timeout: json.dumps(body).encode()
+
+
+def asking(fake, **kw):
+    was, update._get = update._get, fake
+    try:
+        return update.newer_release(**kw)
+    finally:
+        update._get = was
+
+
+def test_a_newer_release_is_noticed():
+    got = asking(release("v0.2.0"), have="0.1.0")
+    assert got["newer"] is True and got["latest"] == "0.2.0"
+    assert got["url"].endswith(".msi"), "the installer, not the page"
+
+
+def test_the_one_you_are_running_is_not_an_update():
+    assert asking(release("v0.1.0"), have="0.1.0")["newer"] is False
+    assert asking(release("v0.1.0"), have="0.2.0")["newer"] is False
+
+
+def test_versions_compare_as_numbers_not_as_text():
+    """"0.10.0" sorts before "0.9.0" as a string, and a client that believed
+    that would tell everyone to downgrade forever."""
+    assert update.numbers("v0.10.0") > update.numbers("0.9.0")
+    assert update.numbers("1.0.0") > update.numbers("0.99.99")
+
+
+def test_a_tag_nobody_can_parse_never_claims_an_update():
+    """The safe direction. A release named "latest" should not make every
+    client in the world announce a new version."""
+    assert asking(release("latest"), have="0.1.0")["newer"] is False
+    assert asking(release("v0.2.0-beta"), have="0.1.0")["newer"] is True
+
+
+def test_a_draft_is_not_a_release():
+    got = asking(release("v9.9.9", draft=True), have="0.1.0")
+    assert got["newer"] is False and got["latest"] == ""
+
+
+def test_being_offline_is_not_an_error_worth_showing():
+    def boom(url, timeout):
+        raise OSError("no route to host")
+
+    got = asking(boom, have="0.1.0")
+    assert got["error"] and got["have"] == "0.1.0"
+    assert "newer" not in got, "no claim either way when it could not ask"
+
+
+def test_it_only_tells_you_and_never_installs():
+    """Fetching and running an installer on somebody's behalf is a different
+    thing entirely, and not one to do while they are playing."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "mud" / "update.py").read_text()
+    after = src[src.index("def newer_release"):]
+    for danger in ("urlretrieve", "subprocess", "os.system", "startfile"):
+        assert danger not in after, danger
