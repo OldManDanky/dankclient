@@ -33,13 +33,29 @@ can read, and it is never written to the logs.
 
 The three buttons above the map are the ones you will use most:
 
-- **Options** -- triggers, aliases, timers, bots, panels, updates, and a list
-  of every client command.
+- **Options** -- routes and bots, triggers, aliases and timers; layout, fonts,
+  keyboard and sounds; your character's 3K settings; updates, and a list of
+  every client command.
 - **Bots** -- straight to your routes and bots.
 - **Disconnect** -- stops the bots, saves everything, and closes the
   connection.  It does **not** send `quit`: you go link-dead, exactly as if
   the line had dropped.  The character screen comes back so you can pick who
   to play next.
+
+Under them, **Session** says who is logged in (click it to switch
+character), whether MIP is live, how many commands you have spent this
+minute (APM), and the MUD's uptime.  If the connection drops, the reason
+shows here first.
+
+**The Bot panel**, under the map, runs a bot without opening Options.  Type
+part of a route's name, a step or a creature it hunts, and press **Start**
+beside the one you want (clicking its name just picks it).  **Pause** stops
+it and remembers the step it had reached and the room it was in -- even
+across closing the client; **Resume** walks you back to that room, deals with
+whatever the route hunts there, and carries on from the next step.  **Start
+over** begins again from the top, and **Stop** forgets where it had got to.
+Only one bot walks at a time from here.  You can hide the panel under
+**Options -> Layout -> Show**.
 
 Closing the window does the same as Disconnect, then quits.
 
@@ -69,8 +85,7 @@ line** to hear a ding for that channel (or every tell), or **anything from
 ...** for that person.  A tell chimes twice, a channel once; your own lines
 never ding.  3K's own bell -- what somebody's `wake` sends you -- rings with
 three notes.  Volume, test buttons, *only when the window is in the
-background* and a switch for the bell are under **Options -> Panels ->
-Sounds**.
+background* and a switch for the bell are under **Options -> Sounds**.
 
 **Options -> Character setup** has 3K's own `brief` setting -- short or long
 room descriptions, and whether 3K draws its minimap -- with a button to send
@@ -93,14 +108,14 @@ routes pause where they are and nothing automated is sent -- no triggers, no
 timers -- until you type something, and then everything carries on.  Set the
 minutes, or 0 for off, at the top of **Options -> Routes & bots**.
 
-To walk with the **numpad**, turn it on under **Options -> Panels -> Numpad**:
+To walk with the **numpad**, turn it on under **Options -> Keyboard**:
 8 is north, 2 south, 7 north-west and so on, 5 is `look` then `search`, and
 `+`/`-` are up and down.  Every key can be set to any command, or several
 separated by `;`.  With something typed in the command box the keys type
 numbers as usual.
 
 To send the same command over and over, tick **keep the last command in the
-box** under **Options -> Panels**: it stays there selected, so Enter sends it
+box** under **Options -> Keyboard**: it stays there selected, so Enter sends it
 again and typing replaces it.
 
 ## Updates

@@ -1046,6 +1046,17 @@ class WebServer:
                 return
         elif op == "stop":
             store.stop(msg.get("id", ""))
+        elif op == "pause":
+            problem = store.pause(msg.get("id", ""))
+            if problem:
+                self.push({"t": "routes", "op": "error", "error": problem})
+                return
+        elif op == "resume":
+            self._touched()
+            problem = store.start(msg.get("id", ""), resume=True)
+            if problem:
+                self.push({"t": "routes", "op": "error", "error": problem})
+                return
         elif op == "stop_all":
             self.scripts.bots.stop_all()
             self.session.queue.flush()

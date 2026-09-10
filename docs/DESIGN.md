@@ -199,7 +199,7 @@ manage.  Over every capture that named 175 more rooms and changed none.
 
 ### The markers do not reach the screen
 
-`Set ANSI prefixes` wraps each kind of line in a marker so the client can read
+`Set line markers` wraps each kind of line in a marker so the client can read
 it, and the client takes them straight back out again on the way to the
 terminal, the log and the triggers.  They are scaffolding for the parser, and
 a player who types `look` should not have to read around it.  A room title
@@ -327,9 +327,12 @@ funnels through `Session.send` and is not written down.
 
 Nothing floats.  Panels that can be dragged anywhere are panels you have to
 place, and they sit over the text while you decide.  The sidebar reads top to
-bottom in the order you look at things: three buttons, then the map, then the
-session -- the connection, the pacing, and what a route is doing -- then combat
-when there is any.
+bottom in the order you look at things: three buttons, then the session --
+who is logged in, whether MIP is live, the pacing, the MUD's uptime -- then
+the map, then the Bot panel with what a route is doing (and the deadman's
+note, which is about bots), then combat when there is any.  The session sits
+above the map because it is the line you check before trusting anything
+below it: a map that has stopped moving is often a connection that has.
 
 The buttons come first because they are the ones you reach for without looking:
 **Options**, **Bots** (the routes tab in one press) and **Disconnect**.
@@ -387,7 +390,7 @@ putting back before it can be read, and the whole point of it is being
 readable at a glance without being touched.  Clicking a room still walks
 there, and double-clicking one renames it.
 
-The room panel is off unless it is asked for, under Options -> Panels, and
+The room panel is off unless it is asked for, under Options -> Layout, and
 sits at the bottom when it is on.  It lists everything in the room with a
 button for every action the MUD says each thing takes, which is worth having
 and is not worth a third of the sidebar when you are not using it.
@@ -398,7 +401,7 @@ repeating route's bar shows the current lap rather than filling up and staying
 full.
 
 The terminal takes the width it is given.  It can be capped in columns under
-Options -> Panels, but that is off by default: capping it sounds right and
+Options -> Layout, but that is off by default: capping it sounds right and
 looks wrong however generously it is set, because the text ends up in a block
 with a margin beside it, and a margin is not a tidy edge.  The sidebar is
 where the width goes instead, because it has something to do with it -- the
@@ -542,6 +545,37 @@ never meant for.  A step that produces nothing is *looked* at rather than
 assumed to have failed -- some moves send no room block at all -- and a way out
 that really does not work is remembered, so routing stops choosing it.
 
+### The Bot panel, and pausing
+
+The sidebar's Bot panel starts, pauses and stops a route without opening
+Options.  With a hundred-odd routes imported from 3kdb it is a search rather
+than a list -- name, a step, or a creature it hunts -- and each match has its
+own Start.  Clicking a name only picks it, and Enter picks the first match:
+Enter is the key most often pressed by accident, and a start is a character
+walking off.  Only one route walks at a time from here, because two routes
+driving one character are each walking from a room the other has just left.
+The results are redrawn only when the search or the set of routes changes,
+not as a route takes its steps, so a button is never replaced under the
+cursor between press and release.
+
+**Pause is not stop.**  After every step the runner notes how far through
+its path it is and the room the map says that left it in.  Pause keeps both,
+with the step and kill counts, in `routes-paused.json` beside the routes, so a
+pause outlives closing the client.  **Resume** walks back to that room by the
+ordinary routing -- the same `travel` that gets a route to its start -- does
+what the route does in a room (the creature it came for may be back), then
+takes the *next* step, not the first.  If it cannot get back the pause is
+kept, so Resume can be tried again from nearer; if the map did not know where
+it was, it resumes from where you stand.  Start on a paused route starts
+over, Stop forgets the pause, and a changed path forgets it too, because step
+twelve of another path is another place.  Setup commands are not sent again
+on a resume: they are for walking in at the start.
+
+A paused route reads as paused the moment Pause returns, even though the
+cancelled task only finishes on the loop's next turn -- the list goes back to
+the page straight away, and said "walking" until the next push.  Found by
+driving the server's routes op, not by the store's own tests.
+
 ## The deadman
 
 A bot left walking with nobody at the keyboard keeps walking into whatever
@@ -634,7 +668,7 @@ a half.
 Putting them back sends only what this client changes -- the room fields and
 the `look_*` markers its first pass set -- from the newest reading that holds
 none of this client's markers, first pass included: a reading taken after
-**Set ANSI prefixes** would put the markers straight back.  It is shown first,
+**Set line markers** would put the markers straight back.  It is shown first,
 with each escape printed as `<ESC>`, since one printed raw would be obeyed by
 the terminal.  It goes out as the escape byte itself, the way tt++ sends a
 `\e`.  That is the one thing not yet seen working against the game.

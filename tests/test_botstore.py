@@ -290,3 +290,187 @@ def test_a_polite_route_waits_for_another_player_to_leave():
             assert "waiting" in host.bots.bots["polite"].note
 
         asyncio.new_event_loop().run_until_complete(scenario())
+
+
+# --- pause and resume ---------------------------------------------------------
+
+
+def line_of_rooms(s):
+    """A, B, C in a row: A -n-> B -e-> C, and the way back."""
+    from mud.mapper import Mapper
+    from mud.store import Store
+    store = Store()
+    s.store = store
+    s.mapper = m = Mapper(store)
+    a, b, c = (store.add_room(n) for n in ("Room A", "Room B", "Room C"))
+    store.observe(a, ["n"], ["a"])
+    store.observe(b, ["s", "e"], ["b"])
+    store.observe(c, ["w"], ["c"])
+    store.link(a, "n", b)
+    store.link(b, "s", a)
+    store.link(b, "e", c)
+    store.link(c, "w", b)
+    m.here = a
+    return m, a, b, c
+
+
+def arrive(s, m, room):
+    """A room block for the step just sent, and the map agreeing where."""
+    s._consume(mip("DDD", "s") + mip("HAB", "noun~sky~sky~exa #N"))
+    s._consume(mip("FFF", "A~100"))
+    m.here = room
+
+
+def test_pause_keeps_the_step_and_the_room_and_survives_a_restart():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            arrive(s, m, b)
+            await asyncio.sleep(0.01)
+            assert host.routes.pause(route.id) is None
+            await asyncio.sleep(0)
+            assert host.bots.running == []
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+        row = host.routes.status()[0]
+        assert row["paused"]["step"] == 1 and row["paused"]["room"] == b
+        assert row["paused"]["room_name"] == "Room B"
+        assert row["note"].startswith("paused at step 1 of 2")
+
+        again = RouteStore(host, Path(tmp) / "routes.json")
+        again.load()
+        assert again.paused[route.id]["room"] == b
+
+
+def test_resume_walks_back_to_that_room_and_carries_on():
+    """Paused in B after its first step; somebody walked back to A.  Resume
+    goes to B first, then takes the second step -- not the first again."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            arrive(s, m, b)
+            await asyncio.sleep(0.01)
+            host.routes.pause(route.id)
+            await asyncio.sleep(0)
+            m.here = a                     # walked off while it was paused
+            s.sent.clear()
+
+            assert host.routes.start(route.id, resume=True) is None
+            await asyncio.sleep(0)
+            assert s.sent == ["n"], "back to where it paused"
+            arrive(s, m, b)
+            await asyncio.sleep(0.01)
+            assert s.sent == ["n", "e"], "then the next step, not the first"
+            arrive(s, m, c)
+            await asyncio.sleep(0.05)
+            bot = host.bots.bots["line"]
+            assert "finished" in bot.note and bot.steps == 2
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+        assert host.routes.status()[0]["paused"] is None, "a resume uses it up"
+
+
+def test_resume_does_what_the_route_does_in_that_room_first():
+    """The creature it came for may be back."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert(
+            {"name": "hunt", "path": "n e", "targets": ["rat"]})
+        host.routes.paused[route.id] = {"step": 1, "room": b, "steps": 1,
+                                        "kills": 0}
+        m.here = b
+
+        async def scenario():
+            s._consume(mip("DDD", "s") + mip("HAA", "npc~rat~A rat~kill #N"))
+            s._consume(mip("FFF", "A~100"))
+            host.routes.start(route.id, resume=True)
+            await asyncio.sleep(0.01)
+            assert s.sent == ["kill rat"]
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_start_stop_and_a_new_path_forget_a_pause():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        held = {"step": 1, "room": None, "steps": 1, "kills": 0}
+
+        host.routes.paused[route.id] = dict(held)
+        host.routes.stop(route.id)
+        assert route.id not in host.routes.paused, "Stop means not coming back"
+
+        host.routes.paused[route.id] = dict(held)
+        host.routes.upsert({"id": route.id, "name": "line", "path": "n e s"})
+        assert route.id not in host.routes.paused, "step 1 of another path"
+
+        host.routes.paused[route.id] = dict(held)
+        host.routes.upsert({"id": route.id, "name": "renamed", "path": "n e s"})
+        assert route.id in host.routes.paused, "same path, same place"
+
+        async def scenario():
+            host.routes.start(route.id)            # Start, not Resume
+            await asyncio.sleep(0)
+            assert s.sent == ["n"] and route.id not in host.routes.paused
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_it_cannot_get_back_and_keeps_the_pause():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        lost = s.store.add_room("Nowhere")          # no way to it
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        host.routes.paused[route.id] = {"step": 1, "room": lost, "steps": 1,
+                                        "kills": 0}
+
+        async def scenario():
+            host.routes.start(route.id, resume=True)
+            await asyncio.sleep(0.05)
+            assert s.sent == []
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+        row = host.routes.status()[0]
+        assert row["paused"] and "could not get back" in row["note"]
+
+
+def test_pausing_something_not_walking_says_so():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        assert host.routes.pause(route.id) == "it is not walking"
+        assert host.routes.paused == {}
+
+
+def test_it_reads_as_paused_the_moment_pause_returns():
+    """The list goes back to the page straight after Pause, before the
+    cancelled task has finished -- which it only does on the loop's next turn.
+    Found by driving the web server's routes op, not by the store's tests."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            arrive(s, m, b)
+            await asyncio.sleep(0.01)
+            host.routes.pause(route.id)
+            row = host.routes.status()[0]       # no await: still cancelling
+            assert row["running"] is False and row["paused"]["room"] == b
+            assert row["note"].startswith("paused at step 1")
+
+        asyncio.new_event_loop().run_until_complete(scenario())

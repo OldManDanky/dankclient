@@ -251,12 +251,6 @@
   #link-again{margin-top:6px;width:100%}
   #deadman-note{margin:6px 0;padding:6px 8px;border:1px solid #f2cc60;border-radius:4px;
                 color:#f2cc60;font-size:12px}
-  .deadman-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;
-               color:var(--dim)}
-  .deadman-row label{color:var(--ink);font-weight:600}
-  .deadman-row input{width:64px;background:var(--sunk);border:1px solid var(--line);
-                     border-radius:3px;color:var(--ink);font:inherit;padding:2px 5px}
-  .deadman-row input:focus{outline:none;border-color:var(--accent)}
   /* Three across, equal share.  Disconnect is the one you must not press by
      accident, so it is quiet until you are over it rather than loud all the
      time -- a red button beside two grey ones is where the eye lands. */
@@ -278,18 +272,35 @@
                    color:var(--accent);padding:2px 5px}
   .help-row span{font-size:11px;color:var(--ink)}
   #about-release{margin:0 0 10px}
+  #about-release:empty{display:none}
   #about-release.new{padding:8px;border-radius:3px;color:var(--ink);
     background:color-mix(in srgb,var(--accent) 16%,transparent);
     border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}
   #about-release a{color:var(--accent)}
-  #route-now{margin-bottom:8px}
-  #route-now .fill{background:var(--accent)}
-  #route-name{color:var(--accent)!important;text-transform:none;
-              letter-spacing:0;font-size:11px;overflow:hidden;
-              text-overflow:ellipsis;white-space:nowrap}
-  #route-note{font-size:10px;color:var(--dim);margin-top:3px;
-              word-break:break-word}
-  #route-note:empty{display:none}
+  #bot-now{margin-bottom:8px}
+  #bot-now .fill{background:var(--dim)}
+  #bot-now.live .fill{background:var(--accent)}
+  #bot-now.held .fill{background:var(--enemy)}
+  #bot-name{color:var(--ink)!important;text-transform:none;
+            letter-spacing:0;font-size:11px;overflow:hidden;
+            text-overflow:ellipsis;white-space:nowrap}
+  #bot-now.live #bot-name{color:var(--accent)!important}
+  #bot-note{font-size:10px;color:var(--dim);margin-top:3px;
+            word-break:break-word}
+  #bot-note:empty{display:none}
+  #bot-acts{display:flex;gap:6px;margin-bottom:8px}
+  #bot-acts button{flex:1 1 0;min-width:0;padding:5px 4px;font-size:11px}
+  #bot-find{width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px}
+  #bot-found{display:flex;flex-direction:column;gap:3px;margin-top:6px;
+             max-height:14em;overflow-y:auto}
+  .bf{display:flex;align-items:baseline;gap:6px;min-width:0}
+  .bf-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+           white-space:nowrap;text-align:left;font-size:11px;padding:2px 5px;
+           color:var(--accent)}
+  .bf-meta{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;
+           white-space:nowrap;font-size:10px;color:var(--dim)}
+  .bf-go{flex:none;font-size:10.5px;padding:2px 7px}
+  .bf-none{margin:2px 0;font-size:10.5px;color:var(--dim)}
   #apm{margin:8px 0 4px}
   #apm .fill{background:var(--gp)}
   #apm.warn .fill{background:var(--enemy)}
@@ -333,9 +344,16 @@
   #char-form{padding:16px 20px 18px;border-top:1px solid var(--line);
              display:flex;flex-direction:column;gap:12px}
   #char-form h3{margin:0;font-size:13px;font-weight:600}
-  #open-login{width:100%;padding:6px;font-size:11px;letter-spacing:.06em;
-              margin-top:4px;overflow:hidden;text-overflow:ellipsis;
-              white-space:nowrap}
+  #open-login{padding:6px;font-size:11px;letter-spacing:.06em;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Session: who is playing and whether the line is good, in three rows. */
+  #session h2{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  #session #status{margin:0;text-transform:none;font-weight:400;
+                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sess-row{display:flex;gap:6px}
+  .sess-row #open-login{flex:1.4 1 0;min-width:0}
+  .sess-row #mip{flex:1 1 0;min-width:0;width:auto;overflow:hidden;
+                 text-overflow:ellipsis;white-space:nowrap}
   #open-login.on{color:var(--ink);border-color:var(--line)}
   #setup-who{color:var(--accent);font-weight:600}
 
@@ -366,15 +384,15 @@
   .opt-frame{flex:1;min-height:0;display:flex}
 
   /* the rail */
-  #opt-tabs{flex:none;width:174px;overflow-y:auto;padding:10px 8px;
+  #opt-tabs{flex:none;width:184px;overflow-y:auto;padding:10px 8px;
             border-right:1px solid var(--line);background:rgba(0,0,0,.16);
             display:flex;flex-direction:column;gap:1px}
-  .opt-group{font-size:9px;letter-spacing:.14em;text-transform:uppercase;
-             color:var(--dim);font-weight:600;padding:10px 9px 4px}
+  .opt-group{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+             color:var(--dim);font-weight:600;padding:14px 9px 5px}
   .opt-group:first-child{padding-top:2px}
   #opt-tabs button{display:flex;align-items:center;gap:6px;width:100%;
                    text-align:left;border:0;border-radius:3px;
-                   padding:7px 9px;font-size:12px;color:var(--dim)}
+                   padding:7px 9px;font-size:12.5px;color:var(--dim)}
   #opt-tabs button:hover{color:var(--ink);background:rgba(255,255,255,.05)}
   #opt-tabs button.on{color:var(--ink);background:rgba(111,155,235,.15);
                       box-shadow:inset 2px 0 0 var(--accent)}
@@ -386,11 +404,17 @@
   /* the pane area, and the editors that cover it */
   .opt-main{flex:1;min-width:0;display:flex;flex-direction:column;
             position:relative}
-  #opt-panes{flex:1;min-height:0;overflow-y:auto;padding:16px 18px}
-  .opt-pane{display:flex;flex-direction:column;gap:14px}
+  #opt-panes{flex:1;min-height:0;overflow-y:auto;padding:18px 22px 24px}
+  /* A pane is a <section>, and the sidebar's boxes are sections too: without
+     this every pane sat in a box of its own, inside the panel. */
+  .opt-pane{display:flex;flex-direction:column;gap:16px;max-width:760px;
+            background:none;border:0;border-radius:0;padding:0}
+  .opt-pane a{color:var(--accent)}
+  /* Buttons inside the boxes are buttons, not tags. */
+  .opt-pane .fset button,.opt-editor .fset button{padding:5px 12px;font-size:11.5px}
   .opt-head{display:flex;align-items:flex-start;gap:14px}
-  .opt-head h4{margin:0;font-size:15px;font-weight:600}
-  .opt-head p{margin:4px 0 0;font-size:11.5px;line-height:1.55;
+  .opt-head h4{margin:0;font-size:16px;font-weight:600}
+  .opt-head p{margin:5px 0 0;font-size:12.5px;line-height:1.55;
               color:var(--dim);max-width:64ch}
   .opt-head .acts{margin-left:auto;flex:none;display:flex;gap:6px}
   .opt-head .acts button{padding:5px 10px;font-size:11px}
@@ -413,21 +437,21 @@
   /* form furniture */
   .fset{border:1px solid var(--line);border-radius:4px;background:var(--sunk)}
   .fset>h5{margin:0;padding:7px 12px;border-bottom:1px solid var(--line);
-           font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;
+           font-size:10px;letter-spacing:.12em;text-transform:uppercase;
            color:var(--dim);font-weight:600}
   .fset>.in{padding:12px;display:flex;flex-direction:column;gap:12px}
   .fset>.in>#grp-text,.fset>.in>#grp-event,.fset>.in>#grp-watch{
            display:flex;flex-direction:column;gap:12px}
-  .frow{display:grid;grid-template-columns:112px minmax(0,1fr);
+  .frow{display:grid;grid-template-columns:120px minmax(0,1fr);
         gap:4px 12px;align-items:start}
-  .frow>label:first-child{grid-column:1;font-size:11px;color:var(--dim);
+  .frow>label:first-child{grid-column:1;font-size:12px;color:var(--dim);
                           text-align:right;justify-self:end;padding-top:7px}
   .frow>*:not(label:first-child){grid-column:2}
   .frow .ctl{display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
   .frow .stack{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
-  .fhint,.say{font-size:11px;line-height:1.55;color:var(--dim);margin:0}
+  .fhint,.say{font-size:11.5px;line-height:1.55;color:var(--dim);margin:0}
   .say{max-width:64ch}
-  .check{display:flex;align-items:center;gap:6px;font-size:11.5px;
+  .check{display:flex;align-items:center;gap:6px;font-size:12px;
          color:var(--ink);text-align:left}
   .frow .check{justify-self:start}
   /* A row with no label column: a checkbox that is its own label, a path
@@ -438,8 +462,8 @@
   .frow.one>*:not(label:first-child){grid-column:1}
   .frow.one>label:first-child{grid-column:1;justify-self:start;
                               text-align:left;padding-top:0}
-  .frow.one>label.check:first-child{font-size:11.5px;color:var(--ink)}
-  input.num{flex:0 0 74px;min-width:0}
+  .frow.one>label.check:first-child{font-size:12px;color:var(--ink)}
+  input.num,.frow .ctl input.num{flex:0 0 74px;min-width:0}
   input.mono,textarea.mono{font-family:Consolas,"DejaVu Sans Mono",monospace}
   code{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:.95em;
        color:var(--ink);background:rgba(255,255,255,.05);
@@ -481,7 +505,7 @@
 
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .hint{color:var(--dim);opacity:.8;font-size:11px}
-  input[type=text],input[type=password],input[type=search],select,textarea{
+  input[type=text],input[type=password],input[type=search],input[type=number],select,textarea{
     background:var(--sunk);border:1px solid var(--line);
     color:var(--ink);font:12px/1.4 system-ui,sans-serif;padding:6px 8px;
     border-radius:3px}
@@ -552,6 +576,29 @@
               title="Save everything and close the connection">Disconnect</button>
     </div>
 
+    <!-- Above the map: who is playing and whether the line is good.  The
+         disconnected notice only shows when it is not, and then first. -->
+    <section id="session">
+      <h2>Session <span id="status">connecting&hellip;</span></h2>
+      <div id="link" hidden>
+        <b>Disconnected</b><span id="link-why"></span>
+        <button id="link-again" type="button" hidden>Choose character</button>
+      </div>
+      <div class="sess-row">
+        <button id="open-login" type="button"
+                title="Whose triggers, aliases and markers are loaded">
+          No character</button>
+        <button id="mip" type="button" title="Re-send the 3klient handshake">
+          MIP waiting
+        </button>
+      </div>
+      <div id="apm" title="Non-directional commands in the last minute. Movement is free.">
+        <div class="bar-top"><b>APM</b><i id="apm-n">0</i></div>
+        <div class="track"><div class="fill" id="apm-b"></div></div>
+      </div>
+      <div id="chrome"></div>
+    </section>
+
     <aside id="mapmon" class="dock">
       <header title="Click to collapse">
         <b>Map</b><span class="cm-toggle">&minus;</span>
@@ -560,34 +607,30 @@
       <div class="map-where"></div>
     </aside>
 
-    <section>
-      <h2>Session</h2>
-      <div id="link" hidden>
-        <b>Disconnected</b><span id="link-why"></span>
-        <button id="link-again" type="button" hidden>Choose character</button>
-      </div>
-      <div id="route-now" hidden>
-        <div class="bar-top"><b id="route-name">&mdash;</b><i id="route-step"></i></div>
-        <div class="track"><div class="fill" id="route-bar"></div></div>
-        <div id="route-note"></div>
-      </div>
+    <!-- Under the map: what is walking you, and the three things you do to it. -->
+    <section id="botpanel">
+      <h2>Bot</h2>
       <div id="deadman-note" hidden>
         <b>Paused</b> &mdash; <span id="deadman-why"></span>
       </div>
-      <button id="mip" type="button" title="Re-send the 3klient handshake">
-        MIP: waiting
-      </button>
-      <div id="apm" title="Non-directional commands in the last minute. Movement is free.">
-        <div class="bar-top"><b>APM</b><i id="apm-n">0</i></div>
-        <div class="track"><div class="fill" id="apm-b"></div></div>
+      <div id="bot-now">
+        <div class="bar-top"><b id="bot-name">No bot chosen</b><i id="bot-step"></i></div>
+        <div class="track"><div class="fill" id="bot-bar"></div></div>
+        <div id="bot-note"></div>
       </div>
-      <div id="chrome"></div>
-      <div id="status">connecting&hellip;</div>
+      <div id="bot-acts">
+        <button id="bot-start" type="button" disabled>Start</button>
+        <button id="bot-pause" type="button" disabled
+                title="Stop here and remember where; Resume walks back and carries on"
+                >Pause</button>
+        <button id="bot-stop" type="button" disabled
+                title="Stop, and forget where it had got to">Stop</button>
+      </div>
+      <input id="bot-find" type="search" autocomplete="off" spellcheck="false"
+             placeholder="find a bot: name, step or creature"
+             aria-label="Find a bot">
+      <div id="bot-found" hidden></div>
     </section>
-
-    <button id="open-login" type="button"
-            title="Whose triggers, aliases and markers are loaded">
-      No character</button>
 
     <section id="combat" hidden>
       <h2>Combat <span id="round"></span></h2>
@@ -679,100 +722,56 @@
       <button type="button" data-tab="event">Events<span class="n"></span></button>
       <button type="button" data-tab="watch">Stat watches<span class="n"></span></button>
       <button type="button" data-tab="timer">Timers<span class="n"></span></button>
-      <div class="opt-group">Client</div>
-      <button type="button" data-tab="panels">Panels<span class="n"></span></button>
-      <button type="button" data-tab="fonts">Fonts</button>
-      <button type="button" data-tab="settings">Character setup</button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
-      <button type="button" data-tab="updates">Updates<span class="n"></span></button>
+      <div class="opt-group">Interface</div>
+      <button type="button" data-tab="panels">Layout<span class="n"></span></button>
+      <button type="button" data-tab="fonts">Fonts</button>
+      <button type="button" data-tab="keyboard">Keyboard</button>
+      <button type="button" data-tab="sounds">Sounds</button>
+      <div class="opt-group">Game</div>
+      <button type="button" data-tab="settings">Character setup</button>
+      <div class="opt-group">Client</div>
       <button type="button" data-tab="help">Commands</button>
+      <button type="button" data-tab="updates">Updates<span class="n"></span></button>
       <button type="button" data-tab="about">About<span class="n"></span></button>
     </nav>
 
     <div class="opt-main">
       <div id="opt-panes">
 
+        <!-- Every pane: a title, one line saying what it is for, its actions,
+             then its settings in boxes.  Why each thing works the way it does
+             is in docs/DESIGN.md, not here. -->
+
         <!-- routes ------------------------------------------------------- -->
         <section class="opt-pane" data-pane="routes">
           <div class="opt-head">
             <div>
               <h4>Routes &amp; bots</h4>
-              <p>A path to walk and a list of things to kill on the way. A route
-                 runs once and stops at the end unless you tick repeat.</p>
+              <p>Paths to walk and what to fight on the way. Start them here or
+                 from the Bot panel under the map.</p>
             </div>
             <div class="acts">
               <button id="r-new" type="button" class="primary">+ New route</button>
               <button id="route-stop-all" type="button">Stop everything</button>
             </div>
           </div>
-          <div class="deadman-row">
-            <label for="deadman-min">Deadman</label>
-            <input id="deadman-min" type="number" min="0" max="1440" step="1">
-            <span class="hint">minutes without you typing before bots pause and
-              nothing automated is sent &mdash; 0 is off</span>
+          <div class="fset">
+            <h5>Deadman</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="deadman-min">Pause after</label>
+                <div class="ctl">
+                  <input id="deadman-min" type="number" min="0" max="1440" step="1"
+                         class="num"> <span class="hint">minutes without you typing</span>
+                </div>
+                <p class="fhint">Bots pause and nothing automated is sent until you
+                  type again. 0 turns it off.</p>
+              </div>
+            </div>
           </div>
           <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
                data-none="No routes yet. Paste a path into a new one."></div>
-        </section>
-
-        <!-- commands ------------------------------------------------------ -->
-        <section class="opt-pane" data-pane="help" hidden>
-          <div class="opt-head">
-            <div>
-              <h4>Commands</h4>
-              <p>Typed into the input box like anything else, but these never
-                 reach the MUD. Click one to put it in the box.</p>
-            </div>
-          </div>
-          <div id="help-groups"></div>
-        </section>
-
-        <!-- about -------------------------------------------------------- -->
-        <section class="opt-pane" data-pane="about" hidden>
-          <div class="opt-head">
-            <div>
-              <h4 id="about-name">Dank Mud Client</h4>
-              <p id="about-blurb">A MIP-native client for 3Kingdoms.</p>
-            </div>
-            <div class="acts">
-              <button id="about-check" type="button">Check for updates</button>
-            </div>
-          </div>
-          <div id="about-release" class="fhint"></div>
-          <div class="fset">
-            <p class="fhint">Where everything lives. The program folder is
-               replaced wholesale by an update; nothing you own is in it.</p>
-            <div id="about-paths"></div>
-          </div>
-          <p class="fhint">Free software under the GNU General Public License
-             v3. Includes xterm.js under the MIT licence.
-             <a id="about-repo" href="https://github.com/OldManDanky/dankclient"
-                target="_blank" rel="noreferrer">Source and releases</a>.</p>
-        </section>
-
-        <!-- updates ------------------------------------------------------ -->
-        <section class="opt-pane" data-pane="updates" hidden>
-          <div class="opt-head">
-            <div>
-              <h4>Map &amp; bot updates</h4>
-              <p>The map and the route library come from
-                 <b>jmitchell33/3kdb</b>, a TinTin++ setup for 3K that keeps
-                 growing. Taking an update only ever <i>adds</i>: rooms you do
-                 not have, exits you do not have, routes you have not named.
-                 Nothing you have walked, renamed or edited is touched.</p>
-            </div>
-            <div class="acts">
-              <button id="up-check" type="button">Check now</button>
-              <button id="up-pull" type="button" class="primary">Take updates</button>
-            </div>
-          </div>
-          <div id="up-list" class="card-list"
-               data-empty="Press Check now to ask GitHub what has changed."
-               data-none="Press Check now to ask GitHub what has changed."></div>
-          <p class="fhint" id="up-note">Only the map, the named destinations
-             and the bot library are pulled &mdash; all of them data. Your
-             scripts are Python and hot-reload, so they are deliberately not on
-             this list.</p>
         </section>
 
         <!-- triggers ----------------------------------------------------- -->
@@ -780,7 +779,7 @@
           <div class="opt-head">
             <div>
               <h4>Triggers</h4>
-              <p>Fire when the MUD sends a line that matches.</p>
+              <p>Run commands when the MUD sends a line that matches.</p>
             </div>
             <div class="acts">
               <button id="rule-new-trigger" type="button" class="primary">+ New trigger</button>
@@ -795,8 +794,7 @@
           <div class="opt-head">
             <div>
               <h4>Aliases</h4>
-              <p>Fire when <em>you</em> type something &mdash; a short word that
-                 stands for one or more commands.</p>
+              <p>A short word you type that stands for one or more commands.</p>
             </div>
             <div class="acts">
               <button id="rule-new-alias" type="button" class="primary">+ New alias</button>
@@ -811,10 +809,8 @@
           <div class="opt-head">
             <div>
               <h4>Events</h4>
-              <p>Fire on something happening &mdash; a tell, a channel line, a
-                 combat round &mdash; already parsed into named fields by MIP,
-                 so there is no pattern to write and nothing to break when a
-                 wizard recolours a name.</p>
+              <p>React to a tell, a channel line or a combat round. The client
+                 already knows who said what, so there is no pattern to write.</p>
             </div>
             <div class="acts">
               <button id="rule-new-event" type="button" class="primary">+ New event rule</button>
@@ -829,9 +825,8 @@
           <div class="opt-head">
             <div>
               <h4>Stat watches</h4>
-              <p>Fire when a number crosses a line &mdash; health, spell points,
-                 the enemy's health. Once on the crossing, not on every update:
-                 3k.org sends two per combat round.</p>
+              <p>React when a number crosses a line &mdash; your health, spell
+                 points, or the enemy's health. Fires once, on the crossing.</p>
             </div>
             <div class="acts">
               <button id="rule-new-watch" type="button" class="primary">+ New watch</button>
@@ -846,10 +841,7 @@
           <div class="opt-head">
             <div>
               <h4>Timers</h4>
-              <p>Send something every so often. Kept on the game's own two-second
-                 beat rather than the wall clock, and held back the same way
-                 everything else is when the minute is busy &mdash; a timer is
-                 not a reason to trip the APM ceiling.</p>
+              <p>Send something every so often.</p>
             </div>
             <div class="acts">
               <button id="rule-new-timer" type="button" class="primary">+ New timer</button>
@@ -857,19 +849,31 @@
           </div>
           <div id="list-timer" class="card-list"
                data-empty="No timers yet." data-none="No timers yet."></div>
-          <p class="say">Typing <code>/tick 290 xp</code> makes one of these,
-            and <code>/ticks</code> lists them. <code>/delay 5 quaff heal</code>
-            is the one-off version and is not kept.</p>
+          <p class="fhint">From the command box: <code>/tick 290 xp</code> makes
+            one, <code>/ticks</code> lists them, and <code>/delay 5 quaff heal</code>
+            sends something once.</p>
         </section>
 
-        <!-- panels --------------------------------------------------------- -->
+        <!-- script files ------------------------------------------------- -->
+        <section class="opt-pane" data-pane="scripts" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Script files</h4>
+              <p>Rules from Python files in the <code>scripts</code> folder. Edit
+                 the file to change one; it reloads when saved.</p>
+            </div>
+          </div>
+          <div id="rule-scripts" class="card-list" data-empty="No script files loaded."
+               data-none="No script files loaded."></div>
+        </section>
+
+        <!-- layout --------------------------------------------------------- -->
         <section class="opt-pane" data-pane="panels" hidden>
           <div class="opt-head">
             <div>
-              <h4>Panels</h4>
-              <p>What is on screen. Nothing floats: the messages sit across
-                 the top of the output and the map at the top of the sidebar,
-                 so there is nothing to place and nothing over the text.</p>
+              <h4>Layout</h4>
+              <p>What is on screen. Saved in this browser, so another window can
+                 be set out differently.</p>
             </div>
           </div>
           <div class="fset">
@@ -885,21 +889,32 @@
                   <select id="term-cols"></select>
                   <span class="hint" id="term-cols-now"></span>
                 </div>
-                <p class="fhint">3k.org draws to about eighty columns &mdash;
-                  its own map is 78 wide and prose wraps well short of that
-                  &mdash; so a wide window leaves a lot of empty terminal.
-                  The cap gathers that space into one piece on the right,
-                  where the floating panels sit, rather than spreading it
-                  across every line. It never bites on a narrow window.</p>
+                <p class="fhint">3K draws about 80 columns wide. A cap stops lines
+                  stretching across a wide window; it never affects a narrow one.</p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- keyboard ------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="keyboard" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Keyboard</h4>
+              <p>The command box and the numpad. Saved in this browser.</p>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Command box</h5>
+            <div class="in">
               <div class="frow">
-                <label>Input</label>
+                <label>After sending</label>
                 <div class="stack">
                   <label class="check"><input type="checkbox" id="keep-cmd">
                     keep the last command in the box</label>
                 </div>
-                <p class="fhint">It stays there selected: Enter sends it
-                  again, and typing anything replaces it.</p>
+                <p class="fhint">It stays selected: Enter sends it again, and
+                  typing anything replaces it.</p>
               </div>
             </div>
           </div>
@@ -913,25 +928,32 @@
                   <option value="empty">when the command box is empty</option>
                   <option value="always">always</option>
                 </select></div>
-                <p class="fhint">With something typed in the box, the keys type
-                  numbers as usual &mdash; unless this says always. Holding a
-                  key down sends once.</p>
+                <p class="fhint">With text in the box the keys type numbers,
+                  unless this says always. Holding a key sends once.</p>
               </div>
               <div id="numpad-grid" class="numpad"></div>
               <p class="fhint">Any command, or several separated by
-                <code>;</code>. Leave a key empty and it types its number.</p>
-              <button type="button" id="numpad-reset">Back to the defaults</button>
+                <code>;</code>. An empty key types its number.</p>
+              <div class="row">
+                <button type="button" id="numpad-reset">Back to the defaults</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- sounds --------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="sounds" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Sounds</h4>
+              <p>A tell chimes twice, a channel once, and 3K's bell &mdash; what a
+                 <code>wake</code> sends you &mdash; three times. Choose which lines
+                 ding by right-clicking them in the messages window.</p>
             </div>
           </div>
           <div class="fset">
             <h5>Sounds</h5>
             <div class="in">
-              <p class="say">Dings are chosen in the messages window: right-click
-                a line and pick <b>every &hellip; line</b> for its channel, or
-                <b>anything from &hellip;</b> for that person. A tell chimes
-                twice, a channel once. Your own lines never ding, and nor does a
-                channel you have hidden. 3K's own bell &mdash; what somebody's
-                <code>wake</code> sends you &mdash; rings with three notes.</p>
               <div class="frow">
                 <label for="sound-volume">Volume</label>
                 <div class="ctl"><input id="sound-volume" type="range" min="0"
@@ -946,15 +968,18 @@
                     ring when 3K rings the bell (<code>wake</code>)</label>
                 </div>
               </div>
-              <div class="row">
-                <button type="button" id="sound-test-bell">Test the bell</button>
-                <button type="button" id="sound-test-tell">Test a tell</button>
-                <button type="button" id="sound-test-channel">Test a channel</button>
+              <div class="frow">
+                <label>Try them</label>
+                <div class="ctl">
+                  <button type="button" id="sound-test-bell">Bell</button>
+                  <button type="button" id="sound-test-tell">Tell</button>
+                  <button type="button" id="sound-test-channel">Channel</button>
+                </div>
               </div>
             </div>
           </div>
-          <p class="say">Kept in this browser, not on your character, so a
-            second window can be laid out differently.</p>
+          <p class="fhint">Your own lines never ding, and nor does a channel you
+            have hidden. Saved in this browser.</p>
         </section>
 
         <!-- fonts ------------------------------------------------------------ -->
@@ -962,7 +987,11 @@
           <div class="opt-head">
             <div>
               <h4>Fonts</h4>
-              <p>How the text looks. Changes show at once.</p>
+              <p>How the text looks. Changes show at once, and are saved in this
+                 browser.</p>
+            </div>
+            <div class="acts">
+              <button type="button" id="font-reset">Back to the defaults</button>
             </div>
           </div>
           <div class="fset">
@@ -971,10 +1000,9 @@
               <div class="frow">
                 <label for="font-family">Font</label>
                 <div class="ctl"><select id="font-family"></select></div>
-                <p class="fhint">Only fonts installed on this computer are
-                  listed, and only fixed-width ones: 3K draws maps and tables
-                  in columns, and they line up only when every letter is the
-                  same width. The command box uses it too.</p>
+                <p class="fhint">Fixed-width fonts installed on this computer:
+                  3K's maps and tables only line up in one. The command box uses
+                  it too.</p>
               </div>
               <div class="frow" id="font-other-row" hidden>
                 <label for="font-other">Other</label>
@@ -1002,15 +1030,12 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
               <div class="frow">
                 <label for="font-msg">Size</label>
                 <div class="ctl"><select id="font-msg"></select></div>
-                <p class="fhint">In the terminal's font. Smaller by default,
-                  so a conversation fits.</p>
+                <p class="fhint">In the terminal's font.</p>
               </div>
             </div>
           </div>
-          <p class="say">Kept in this browser, not on your character. Everything
-            else on screen grows and shrinks with <b>Ctrl +</b> and
-            <b>Ctrl &minus;</b>; <b>Ctrl 0</b> puts it back.</p>
-          <button type="button" id="font-reset">Back to the defaults</button>
+          <p class="fhint"><b>Ctrl +</b> and <b>Ctrl &minus;</b> make everything
+            else bigger or smaller; <b>Ctrl 0</b> puts it back.</p>
         </section>
 
         <!-- character setup ---------------------------------------------- -->
@@ -1018,7 +1043,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div class="opt-head">
             <div>
               <h4>Character setup</h4>
-              <p>Settings on your character, not changes to the mudlib.
+              <p>Settings kept on your character in 3K, not in this client.
                  <b id="setup-who"></b></p>
             </div>
           </div>
@@ -1026,18 +1051,14 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div class="fset">
             <h5>Line markers</h5>
             <div class="in">
-              <p class="say">3K can wrap each kind of line in a marker of your
-                choosing, which turns its output from prose into fields with two
-                ends. With them set, this client can name the room you are in
-                about twice as often. You never see them: they go in for the
-                parser and come straight back out before the screen.</p>
-              <p class="say">The first click prints the settings so you can read
-                them. The second sends them.</p>
+              <p class="say">Markers let the client read 3K's room output
+                reliably &mdash; it names the room you are in about twice as
+                often. You never see them. The first click shows what will be
+                sent; the second sends it.</p>
               <div class="row">
                 <button id="set-prefixes" type="button"
                         title="Shows them first; nothing is sent until you confirm."
-                        >Set ANSI prefixes</button>
-                <span class="hint">edits live in scripts/prefixes.json</span>
+                        >Set line markers</button>
               </div>
             </div>
           </div>
@@ -1045,11 +1066,9 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div class="fset">
             <h5>Your own colours</h5>
             <div class="in">
-              <p class="say">The markers stay on your character if you go back
-                to another client. Save your colour settings first &mdash; 3K's
-                <code>ansivars</code> page, read and kept for this character
-                &mdash; and they can be put back afterwards.
-                <b id="ansi-now"></b></p>
+              <p class="say">If you go back to another client, the markers stay on
+                your character. Save your colour settings first and you can put
+                them back later. <b id="ansi-now"></b></p>
               <div class="row">
                 <button id="ansi-save" type="button">Save my current settings</button>
                 <button id="ansi-restore" type="button"
@@ -1062,11 +1081,9 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div class="fset">
             <h5>Brief mode</h5>
             <div class="in">
-              <p class="say">3K's own <code>brief</code> setting. Short
-                descriptions show a room's one-line title instead of its
-                paragraph; the minimap is the one 3K draws beside it. This
-                client draws its own map, so you may not want both.
-                <b id="brief-now"></b></p>
+              <p class="say">3K's <code>brief</code> setting: one-line room titles
+                instead of descriptions, and 3K's own minimap. This client draws
+                its own map either way. <b id="brief-now"></b></p>
               <div class="frow">
                 <label for="brief-desc">Descriptions</label>
                 <div class="ctl"><select id="brief-desc">
@@ -1081,26 +1098,74 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                   <option value="no">hidden</option>
                 </select></div>
               </div>
-              <div class="row">
-                <button id="brief-send" type="button">Send to 3K</button>
-                <button id="brief-ask" type="button">Ask 3K</button>
+              <div class="frow">
+                <label></label>
+                <div class="ctl">
+                  <button id="brief-send" type="button" class="primary">Send to 3K</button>
+                  <button id="brief-ask" type="button">Ask 3K</button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- script files ------------------------------------------------- -->
-        <section class="opt-pane" data-pane="scripts" hidden>
+        <!-- commands ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="help" hidden>
           <div class="opt-head">
             <div>
-              <h4>Script files</h4>
-              <p>Rules registered from Python files in <code>scripts/</code>.
-                 They run in the same engine as everything above; edit the file
-                 to change one.</p>
+              <h4>Commands</h4>
+              <p>Client commands, typed in the command box. They never reach the
+                 MUD. Click one to put it in the box.</p>
             </div>
           </div>
-          <div id="rule-scripts" class="card-list" data-empty="No script files loaded."
-               data-none="No script files loaded."></div>
+          <div id="help-groups"></div>
+        </section>
+
+        <!-- updates ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="updates" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Map &amp; bot updates</h4>
+              <p>The map and the route library come from <b>jmitchell33/3kdb</b>.
+                 An update only adds &mdash; nothing you have walked, renamed or
+                 edited is changed.</p>
+            </div>
+            <div class="acts">
+              <button id="up-check" type="button">Check now</button>
+              <button id="up-pull" type="button" class="primary">Take updates</button>
+            </div>
+          </div>
+          <div id="up-list" class="card-list"
+               data-empty="Press Check now to ask GitHub what has changed."
+               data-none="Press Check now to ask GitHub what has changed."></div>
+          <p class="fhint" id="up-note">Only data is taken: the map, the named
+             destinations and the bots. Your scripts are never touched.</p>
+        </section>
+
+        <!-- about -------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="about" hidden>
+          <div class="opt-head">
+            <div>
+              <h4 id="about-name">Dank Mud Client</h4>
+              <p id="about-blurb">A MIP-native client for 3Kingdoms.</p>
+            </div>
+            <div class="acts">
+              <button id="about-check" type="button">Check for updates</button>
+            </div>
+          </div>
+          <div id="about-release" class="fhint"></div>
+          <div class="fset">
+            <h5>Where things are</h5>
+            <div class="in">
+              <p class="fhint">An update replaces the program folder; nothing you
+                 own is in it.</p>
+              <div id="about-paths"></div>
+            </div>
+          </div>
+          <p class="fhint">Free software under the GNU General Public License
+             v3. Includes xterm.js under the MIT licence.
+             <a id="about-repo" href="https://github.com/OldManDanky/dankclient"
+                target="_blank" rel="noreferrer">Source and releases</a>.</p>
         </section>
 
       </div>
@@ -1179,9 +1244,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                 <label>Repeat</label>
                 <label class="check"><input id="r-loop" type="checkbox">
                   start over at the end of the path</label>
-                <p class="fhint">Off by default. A route that quietly starts over
-                  is one still walking your character around an hour after you
-                  stopped watching.</p>
+                <p class="fhint">Off by default, so a forgotten route does not
+                  keep walking.</p>
               </div>
               <div class="frow">
                 <label>Other players</label>
@@ -1357,6 +1421,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="chat.js"></script>
   <script src="map.js"></script>
   <script src="routes.js"></script>
+  <script src="bots.js"></script>
   <script src="updates.js"></script>
   <script src="help.js"></script>
   <script src="about.js"></script>

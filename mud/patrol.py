@@ -99,6 +99,10 @@ class Bot:
     steps: int = 0
     kills: int = 0
     note: str = ""
+    #: How far through its path it has got -- steps done this lap -- and the
+    #: room that left it in.  What Pause keeps, so Resume can go back there.
+    at: int = 0
+    room: int | None = None
 
     @property
     def running(self) -> bool:

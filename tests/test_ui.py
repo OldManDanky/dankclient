@@ -227,6 +227,32 @@ def test_the_routes_panel_is_wired_up():
     assert "window.handleRoutes(m)" in scripts()["app.js"]
 
 
+def test_options_is_grouped_by_what_you_are_looking_for():
+    """Automation, the screen, the character, the client -- and nobody looks
+    for sounds under "Panels", so they have a tab of their own."""
+    page = html()
+    rail = page[page.index('<nav id="opt-tabs">'):page.index("</nav>")]
+    groups = re.findall(r'<div class="opt-group">([^<]+)</div>', rail)
+    assert groups == ["Automation", "Interface", "Game", "Client"], groups
+    for tab in ("keyboard", "sounds", "panels", "fonts", "settings"):
+        assert f'data-tab="{tab}"' in rail, tab
+    interface = rail[rail.index("Interface"):rail.index("Game")]
+    for tab in ("panels", "fonts", "keyboard", "sounds"):
+        assert f'data-tab="{tab}"' in interface, tab
+    # A pane is a <section>, which the sidebar styles as a box.
+    assert "background:none;border:0;border-radius:0;padding:0" in page
+
+
+def test_every_pane_says_what_it_is_for_in_a_line_or_two():
+    """The why is in docs/DESIGN.md.  A settings pane that opens with an
+    essay is one people stop reading."""
+    page = html()
+    for intro in re.findall(r'<div class="opt-head">\s*<div>\s*<h4[^>]*>[^<]*</h4>\s*'
+                            r'<p[^>]*>(.*?)</p>', page, re.S):
+        words = len(re.sub(r"<[^>]+>", "", intro).split())
+        assert words <= 40, f"{words} words: {intro[:60]!r}"
+
+
 def test_every_tab_has_a_pane_and_every_pane_a_tab():
     """A tab with no pane shows an empty panel and no error anywhere."""
     page = html()
@@ -351,18 +377,20 @@ def test_the_room_panel_is_off_until_it_is_asked_for():
 
 
 def test_the_sidebar_reads_top_to_bottom():
-    """Three buttons, then the map, then what the session is doing.
+    """Three buttons, then the session, then the map, then the bot.
 
     The buttons are the things you reach for without looking -- where the
-    settings are, what is running, and out -- so they are above the map rather
-    than below the block that tells you how the connection is going.
+    settings are, what is running, and out.  The session -- who is playing,
+    whether MIP is live -- moved above the map by request: it is the line you
+    check before trusting anything below it.
     """
     page = html()
     order = [page.index(needle) for needle in (
         '<aside id="side">',
         'id="side-acts"',
+        'id="session"',
         'id="mapmon"',
-        "<h2>Session</h2>",
+        'id="botpanel"',
     )]
     assert order == sorted(order), order
 
@@ -411,15 +439,38 @@ def test_disconnecting_does_not_immediately_reconnect():
     assert "confirm(" in js, "a mis-click leaves you link-dead in the open"
 
 
+def test_session_sits_above_the_map_and_says_only_what_it_should():
+    """Who is playing, whether MIP is live, APM, and the MUD's uptime -- above
+    the map.  The bots' own pause note is in the Bot panel, with the bots."""
+    page = html()
+    side = page[page.index('<aside id="side">'):page.index("</aside>\n\n<div id=\"login\"")]
+    order = [side.index(f'id="{i}"') for i in ("side-acts", "session", "mapmon",
+                                                  "botpanel")]
+    assert order == sorted(order), "buttons, Session, map, Bot"
+    session = side[side.index('id="session"'):side.index('id="mapmon"')]
+    for element in ("status", "link", "open-login", "mip", "apm", "chrome"):
+        assert f'id="{element}"' in session, element
+    assert 'id="deadman-note"' not in session
+    bot = side[side.index('id="botpanel"'):]
+    assert 'id="deadman-note"' in bot
+    js = scripts()["app.js"]
+    assert "'MIP live'" in js and "mip.title" in js, "short, detail on hover"
+
+
 def test_a_running_route_says_which_step_of_how_many():
     """"Walking" on its own does not tell you whether to wait for it or go and
-    do something else."""
-    page, js = html(), scripts()["routes.js"]
-    for element in ("route-now", "route-name", "route-step", "route-bar",
-                    "route-note"):
+    do something else.  Said in the sidebar's Bot panel, with its buttons."""
+    page, js = html(), scripts()["bots.js"]
+    for element in ("botpanel", "bot-now", "bot-name", "bot-step", "bot-bar",
+                    "bot-note", "bot-start", "bot-pause", "bot-stop",
+                    "bot-find", "bot-found"):
         assert f'id="{element}"' in page, f"{element} is not in the page"
+    for element in ("bot-name", "bot-step", "bot-bar", "bot-note", "bot-find"):
         assert f"'{element}'" in js, f"{element} is never filled in"
     assert "step_count" in js and "steps_taken" in js
+    assert '<script src="bots.js">' in page
+    assert "renderBotPanel(routes)" in scripts()["routes.js"]
+    assert "id: 'botpanel'" in scripts()["panels.js"]
 
 
 def test_the_map_cannot_be_dragged_or_scaled():

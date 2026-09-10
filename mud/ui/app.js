@@ -195,6 +195,8 @@ function connect() {
   ws.onopen = () => {
     $('status').textContent = 'connected';
     $('status').className = 'live';
+    // The Bot panel lists them from the start, not once Options is opened.
+    if (window.refreshRoutes) window.refreshRoutes();
     for (const fn of onConnected) {
       try {
         fn();
@@ -458,14 +460,14 @@ $('set-prefixes').addEventListener('click', () => {
   send('/prefixes' + (armed ? ' set' : ''), false);
   $('set-prefixes').dataset.armed = armed ? '' : '1';
   $('set-prefixes').textContent = armed
-    ? 'Set ANSI prefixes' : 'Send them \u2014 click again';
+    ? 'Set line markers' : 'Send them \u2014 click again';
   if (armed) {
     setTimeout(() => { $('set-prefixes').dataset.armed = ''; }, 100);
   } else {
     // Disarm on its own, so a stray click ten minutes later does nothing.
     setTimeout(() => {
       $('set-prefixes').dataset.armed = '';
-      $('set-prefixes').textContent = 'Set ANSI prefixes';
+      $('set-prefixes').textContent = 'Set line markers';
     }, 20000);
   }
 });
@@ -727,13 +729,17 @@ function render(s) {
     // A code the MUD has stopped sending says nothing about itself; the only
     // sign is the room panel quietly emptying.
     mip.className = 'warn';
-    mip.textContent = 'not being sent: ' + s.quiet.join(', ');
+    mip.textContent = 'MIP: ' + s.quiet.join(', ') + ' quiet';
+    mip.title = 'Not being sent: ' + s.quiet.join(', ')
+      + '. Click to re-send the handshake.';
   } else if (s.mip) {
+    // Short, because it shares a row with the character; the detail is on
+    // hover, where it is looked for rather than read every second.
     const live = s.mip.seen;
     mip.className = live ? 'live' : 'waiting';
-    mip.textContent = live
-      ? `MIP live \u00b7 ${s.mip.codes} msgs \u00b7 code ${s.mip.sec}`
-      : `MIP: waiting \u2014 click to re-send handshake`;
+    mip.textContent = live ? 'MIP live' : 'MIP waiting';
+    mip.title = (live ? `${s.mip.codes} messages, security code ${s.mip.sec}. `
+      : 'No MIP yet. ') + 'Click to re-send the 3klient handshake.';
   }
 
   const chrome = $('chrome');

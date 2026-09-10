@@ -85,7 +85,7 @@
     return true;
   };
 
-  // --- Options -> Panels -> Sounds -------------------------------------------
+  // --- Options -> Sounds -----------------------------------------------------
 
   if ($('sound-volume')) {
     $('sound-volume').value = String(volume());

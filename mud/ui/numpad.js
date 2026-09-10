@@ -1,5 +1,5 @@
 /* The numpad as a way to walk: 8 north, 2 south, and so on, each key set to
-   any command in Options -> Panels.
+   any command in Options -> Keyboard.
 
    Off unless asked for -- a new player pressing 8 on the numpad expects an 8.
    When it is on, the usual choice is "when the command box is empty": walk
@@ -99,7 +99,7 @@
   // and PageUp handling, which would otherwise have acted on it already.
   addEventListener('keydown', window.numpadKey, true);
 
-  // --- Options -> Panels -----------------------------------------------------
+  // --- Options -> Keyboard ---------------------------------------------------
 
   function grid() {
     const into = $('numpad-grid');

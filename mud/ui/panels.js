@@ -21,6 +21,9 @@
           + 'output. Each channel gets a tag you can switch off.' },
     { id: 'mapmon', label: 'Map', on: true,
       note: 'Top of the sidebar. Click a room to walk there.' },
+    { id: 'botpanel', label: 'Bot', on: true,
+      note: 'Under the map. Find a route and start, pause or stop it '
+          + 'without opening Options.' },
     { id: 'roompanel', label: 'Room contents and exits', on: false,
       note: 'Bottom of the sidebar, with a button for every action the MUD '
           + 'says a thing takes.' },
@@ -74,9 +77,8 @@
       row.append(label, note);
       box.append(row);
     }
-    if (window.options) {
-      window.options.count('panels', PANELS.filter(shown).length);
-    }
+    // No count beside Layout on the rail: "3" there says nothing a glance
+    // can use.  The counts are for lists -- how many triggers, how many routes.
   }
 
   // --- how wide the terminal is allowed to get -----------------------------

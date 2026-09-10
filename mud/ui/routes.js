@@ -133,28 +133,9 @@
       list.append(row);
     }
 
-    // What is walking, said where you are already watching the connection.
-    // Which step of how many, because "walking" on its own does not tell you
-    // whether to wait for it or go and do something else.
+    // What is walking, and what is paused, in the sidebar's Bot panel.
     const walking = routes.filter((r) => r.running);
-    const now = walking[0];
-    $('route-now').hidden = !now;
-    if (now) {
-      const done = now.steps_taken || 0;
-      const all = now.step_count || 0;
-      $('route-name').textContent = walking.length > 1
-        ? `${now.name} +${walking.length - 1}` : now.name;
-      $('route-step').textContent = all ? `${done} / ${all}` : String(done);
-      // A repeating route walks past its own length, so the bar shows where
-      // it is in the current lap rather than filling up and staying full.
-      $('route-bar').style.width =
-        (all ? Math.min(100, ((now.loop ? done % all : done) / all) * 100) : 0) + '%';
-      $('route-note').textContent = [
-        now.kills ? `${now.kills} killed` : '',
-        now.loop ? `lap ${Math.floor(done / Math.max(1, all)) + 1}` : '',
-        now.note || '',
-      ].filter(Boolean).join('  ·  ');
-    }
+    if (window.renderBotPanel) window.renderBotPanel(routes);
 
     const btn = $('open-options');
     btn.classList.toggle('live', walking.length > 0);
