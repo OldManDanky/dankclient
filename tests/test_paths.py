@@ -342,3 +342,32 @@ def test_the_installer_says_where_it_put_things():
     assert "WIXUI_EXITDIALOGOPTIONALTEXT" in src
     assert "[INSTALLDIR]" in src and "client.log" in src
     assert "ARPURLINFOABOUT" in src, "Apps & Features shows a name and nothing else"
+
+
+def test_the_old_version_is_removed_after_the_new_one_is_installed():
+    """0.2.0 upgraded over 0.1.0 into an install with no interpreter in it.
+
+    Component ids are a hash of the file path, so versions share them, and file
+    costing runs at sequence 1000 -- long before the old product was being
+    removed at 1501. Costing saw python\\pythonw.exe already on disk under the
+    same component, byte for byte the same file, decided there was no work to
+    do, and then the removal deleted it. InstallFiles never put it back.
+
+    Late, the new files go down first and the shared component's reference
+    count reaches two, so removing the old product only takes it back to one.
+    """
+    import tools.build_msi as msi
+
+    src = msi.source(Path(__file__).resolve().parents[1] / "mud")
+    assert '<RemoveExistingProducts After="InstallFinalize"/>' in src
+    assert 'After="InstallInitialize"' not in src
+
+
+def test_the_installer_source_is_valid_xml():
+    """A double hyphen inside an XML comment is illegal, and wixl reports it
+    as "Extra content at the end of the document", which is no help at all."""
+    from xml.dom.minidom import parseString
+
+    import tools.build_msi as msi
+
+    parseString(msi.source(Path(__file__).resolve().parents[1] / "mud"))

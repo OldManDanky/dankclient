@@ -125,8 +125,24 @@ def source(root: Path) -> str:
                       IncludeMinimum="yes" IncludeMaximum="no"
                       Property="OLDERFOUND"/>
     </Upgrade>
+    <!-- After everything is installed, not before it.
+
+         Component ids here are a hash of the file path, so a new version
+         shares them with the old one. File costing runs at sequence 1000, five
+         hundred before the old product would have been removed at 1501, and it
+         saw python\pythonw.exe already on disk under the same component, byte
+         for byte the same file, and decided there was no work to do. The
+         removal then deleted it and InstallFiles never put it back: 0.2.0
+         upgraded over 0.1.0 into an install with no interpreter in it.
+
+         Late instead. The new files go down first, taking each shared
+         component's reference count to two, and removing the old product only
+         takes it back to one, so the files stay. It also means a failed
+         install leaves the working older one in place, which is the better way
+         round to fail. (No double hyphens in here: XML comments forbid them,
+         and wixl says only "Extra content at the end of the document".) -->
     <InstallExecuteSequence>
-      <RemoveExistingProducts After="InstallInitialize"/>
+      <RemoveExistingProducts After="InstallFinalize"/>
     </InstallExecuteSequence>
 
     <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>

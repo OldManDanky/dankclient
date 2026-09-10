@@ -672,6 +672,18 @@ Program Files would need an administrator, and asking somebody to elevate to
 install a MUD client is a lot for a program that only ever writes inside their
 own profile -- so there is no UAC prompt at all.
 
+**`RemoveExistingProducts` goes after `InstallFinalize`, not before.**  0.2.0
+upgraded over 0.1.0 into an install with no interpreter in it, and the reason
+is worth writing down.  Component ids are a hash of the file path, so a new
+version shares them with the old one; file costing runs at sequence 1000, five
+hundred before the old product was being removed at 1501.  Costing saw
+`python\pythonw.exe` already on disk under the same component, byte for byte
+the same file, and decided there was no work to do.  The removal then deleted
+it and `InstallFiles` never put it back.  Scheduled late, the new files go down
+first and each shared component's reference count reaches two, so removing the
+old product only takes it back to one and the files stay.  It also fails the
+better way round: a failed install leaves the working older one in place.
+
 Three pieces of bookkeeping make an upgrade an upgrade rather than a second
 copy.  The upgrade code is pinned and must never change: Windows matches
 versions by it, and a changed one installs 0.2.0 beside 0.1.0 with neither
