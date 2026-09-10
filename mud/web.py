@@ -669,6 +669,8 @@ class WebServer:
             # The worker wrote the file; this side is holding the old list.
             if routes is not None and not got.get("error"):
                 routes.load()
+                self.session.apply_gag_groups()
+                self._gaglib_push()
                 self.push(self._routes_msg(routes))
             self._map_centre = None        # the drawn view may be stale now
             self._dirty = True
@@ -869,6 +871,9 @@ class WebServer:
         if kind == "marks":
             self._marks_op(msg)
             return
+        if kind == "gaglib":
+            self._gaglib_op(msg)
+            return
         if kind == "help":
             from .commands import HELP
 
@@ -1024,6 +1029,24 @@ class WebServer:
         label = (row["name"] if row and row["name"] else f"room #{dest}")
         self.session.travel(dest, "speedwalk", label)
         self.note(f"walking {len(route)} steps")
+
+    def _gaglib_push(self) -> None:
+        """Options -> Gag library: each group, what is in it, and whether it is on."""
+        from .gaglib import load_library
+
+        lib = load_library(self.session.gaglib_path)
+        on = self.session.gag_groups()
+        self.push({"t": "gaglib", "op": "list", "groups": [
+            {"key": g["key"], "title": g["title"], "what": g["what"],
+             "sections": g.get("sections", []), "count": len(g["gags"]),
+             "skipped": g.get("skipped", 0), "on": g["key"] in on,
+             "gags": [x["pattern"] for x in g["gags"]]}
+            for g in lib.get("groups", [])]})
+
+    def _gaglib_op(self, msg: dict) -> None:
+        if msg.get("op") == "set" and isinstance(msg.get("key"), str):
+            self.session.set_gag_group(msg["key"], bool(msg.get("on")))
+        self._gaglib_push()
 
     def _marks_op(self, msg: dict) -> None:
         """Options -> Marks: every named place, and how far each is from here.

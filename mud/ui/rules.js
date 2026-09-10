@@ -332,12 +332,20 @@
 
   // --- rendering ------------------------------------------------------------
 
+  /* A gag and nothing else -- what /gag makes.  Kept as a rule, as it always
+     was, but listed under Options -> Gags rather than among the triggers: a
+     line to hide is not something that reacts.  A trigger that sends commands
+     *and* hides its line is still a trigger, and stays here. */
+  const plainGag = (r) => (r.kind || 'trigger') === 'trigger' && r.gag
+    && !(r.actions && r.actions.length);
+
   function render() {
     const q = window.options ? window.options.query() : '';
+    if (window.renderOwnGags) window.renderOwnGags(cache.rules.filter(plainGag));
     for (const kind of KINDS) {
       const list = $(LIST[kind]);
       list.replaceChildren();
-      const mine = cache.rules.filter((r) => (r.kind || 'trigger') === kind);
+      const mine = cache.rules.filter((r) => (r.kind || 'trigger') === kind && !plainGag(r));
       const shown = mine.filter(matches);
       // The tab counts stay the totals: they are what you have, and a search
       // is a way of looking at it rather than a change to it.

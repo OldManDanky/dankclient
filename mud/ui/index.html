@@ -511,6 +511,9 @@
   .route .go{color:var(--good)}
   /* a mark nobody can walk to: there, but not for going to */
   .route.far{opacity:.55}
+  .gag-list{margin:2px 0 0;max-height:18em;overflow:auto;font-size:11px;
+            color:var(--dim);background:var(--panel);border:1px solid var(--line);
+            border-radius:3px;padding:6px 8px;white-space:pre-wrap}
   .route .dist{flex:none;font-size:11px;color:var(--dim);
                font-variant-numeric:tabular-nums}
   .route.running .go{color:var(--enemy)}
@@ -748,6 +751,7 @@
       <div class="opt-group">Automation</div>
       <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
       <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
+      <button type="button" data-tab="gaglib">Gags<span class="n"></span></button>
       <button type="button" data-tab="alias">Aliases<span class="n"></span></button>
       <button type="button" data-tab="event">Events<span class="n"></span></button>
       <button type="button" data-tab="watch">Stat watches<span class="n"></span></button>
@@ -819,6 +823,39 @@
           </div>
           <div id="list-trigger" class="card-list" data-empty="No triggers yet."
                data-none="No triggers yet."></div>
+        </section>
+
+        <!-- gag library -------------------------------------------------- -->
+        <section class="opt-pane" data-pane="gaglib" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Gags</h4>
+              <p>Lines kept off the screen: your own, and 3kdb's in groups that
+                 start off. Your triggers and the log still see what is hidden.</p>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Your gags</h5>
+            <div class="in">
+              <form id="gag-form" class="row">
+                <input id="gag-new" type="text" spellcheck="false" autocomplete="off"
+                       placeholder="hide every line containing this text"
+                       aria-label="A new gag">
+                <button type="submit" class="primary">Add</button>
+              </form>
+              <p class="fhint" id="gag-say">The same as typing <code>/gag</code>:
+                any line containing the text, capitals and all.</p>
+              <div id="gag-own" class="card-list" data-empty="None yet."
+                   data-none="None yet."></div>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>From 3kdb</h5>
+            <div class="in">
+              <div id="gaglib-list" class="card-list" data-empty="No gag library yet."
+                   data-none="The gag library comes from 3kdb: Options &rarr; Updates, then Take updates."></div>
+            </div>
+          </div>
         </section>
 
         <!-- aliases ------------------------------------------------------ -->
@@ -1472,6 +1509,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="routes.js"></script>
   <script src="bots.js"></script>
   <script src="marks.js"></script>
+  <script src="gaglib.js"></script>
   <script src="updates.js"></script>
   <script src="help.js"></script>
   <script src="about.js"></script>

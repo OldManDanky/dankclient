@@ -40,7 +40,7 @@ HELP = [
         ('/delay <secs> <command>', 'send it once, later'),
         ('/flush', 'drop everything the scripts have queued'),
     ]),
-    ('Gags', 'Lines kept off the screen. Your triggers and the log still see them.', [
+    ('Gags', 'Lines kept off the screen -- also under Options -> Gags. Your triggers and the log still see them.', [
         ('/gag <text>', 'hide every line containing it'),
         ('/gags', 'the ones in force'),
         ('/ungag <text>', 'show it again; /ungag all for every one'),
@@ -512,10 +512,10 @@ def _delay(session, rest: str, note) -> None:
 def _gag(verb: str, rest: str, scripts, note) -> None:
     """Lines kept off the screen, the way tt++'s #gag does it.
 
-    A gag is a trigger with its gag box ticked and nothing else to do, so it
-    is stored with the character and shows up in the triggers panel -- "/gag"
-    is a way of writing one, like "/tick" for a timer.  Contains, and case
-    matters, which is what #gag means.
+    A gag is kept as a rule -- a trigger with its gag box ticked and nothing
+    else to do -- so it is stored with the character, but it is listed under
+    Options -> Gags, not among the triggers: a line to hide is not something
+    that reacts.  Contains, and case matters, which is what #gag means.
     """
     store = getattr(scripts, "rules", None)
     if store is None:

@@ -17,6 +17,7 @@
     map: ['The map', 'Rooms, exits and areas — 3k_shared.map'],
     speedruns: ['Named destinations', 'What /go walks to — speedruns.tin'],
     bots: ['Bot library', 'Routes: where the monsters are, and in what order'],
+    gags: ['Gag library', 'Lines 3kdb players hide — every group off until you switch it on'],
   };
 
   let state = null;           // the last answer from GitHub, or null
@@ -117,6 +118,10 @@
     if (done.bots) {
       said.push(`${done.bots.added} routes added`
                 + (done.bots.kept ? `, ${done.bots.kept} of yours left alone` : ''));
+    }
+    if (done.gags) {
+      said.push(`${done.gags.gags} gags in ${done.gags.groups} groups — switch them on `
+                + 'under Options → Gag library');
     }
     return said.length ? said.join('  ·  ') : 'nothing to take.';
   }

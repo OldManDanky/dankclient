@@ -57,6 +57,9 @@
     // Each list asks the server for itself; opening a tab is when to refresh.
     if (name === 'routes') {
       if (window.refreshRoutes) window.refreshRoutes();
+    } else if (name === 'gaglib') {
+      if (window.refreshGaglib) window.refreshGaglib();
+      if (window.refreshRules) window.refreshRules();       // your own gags
     } else if (name === 'marks') {
       if (window.refreshMarks) window.refreshMarks();
     } else if (name === 'panels') {

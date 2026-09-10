@@ -80,10 +80,16 @@ point at them; **shift-click** opens one in your own browser.  Scrolled up
 and more arrives?  **↓ new output** appears at the bottom; click it, or just
 send a command, to jump back down.
 
-`/gag <text>` hides every line containing that text, as tt++'s `#gag` does;
-`/gags` lists them and `/ungag <text>` shows it again.  Your triggers and the
-log still see gagged lines.  A trigger can gag too: tick **gag** on it in
-**Options -> Triggers**.
+**Gags** have their own page, **Options -> Gags**.  At the top are yours: type
+some text and **Add**, and every line containing it is kept off the screen,
+as tt++'s `#gag` does -- `/gag <text>`, `/gags` and `/ungag <text>` do the
+same from the command box.  Below them is 3kdb's library, seven hundred-odd
+gags in groups -- area monsters, guild combat, items, the ray-gun, blank
+lines -- every group off until you switch it on (**Show them** lists a
+group's gags first).  It arrives with the map through **Options -> Updates**.
+Both are kept for each character, and your triggers and the log still see
+every hidden line.  A trigger that does something *and* hides its line stays
+a trigger: tick **gag** on it in **Options -> Triggers**.
 
 In the messages window, **right-click** a line to colour it: every line on
 that channel, or everything from that person.  Clicking a line still puts a

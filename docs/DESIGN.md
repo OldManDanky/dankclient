@@ -697,9 +697,12 @@ A delay is not stored.  It happens and it is gone.
     /gags                 the ones in force
     /ungag <text>         show it again; /ungag all
 
-tt++'s `#gag`, and a gag is a trigger with its gag box ticked and nothing
-else to do -- so it is stored with the character, listed in the triggers
-panel, and a trigger that does something can also gag the line it fired on.
+tt++'s `#gag`.  A gag is kept as a rule -- a trigger with its gag box ticked
+and nothing else to do -- so it is stored with the character, but it has its
+own page, **Options -> Gags**, with 3kdb's library below it: a line to hide is
+not something that reacts, and a list of them does not belong among the
+triggers.  A trigger that does something can still gag the line it fired on,
+and stays a trigger.
 Scripts have `gag(pattern, mode="contains")`.  Only the screen loses the line:
 the triggers and the log still see it, as in tt++, and a refresh does not put
 it back.
@@ -707,9 +710,13 @@ it back.
 The screen is fed in network chunks rather than lines, and a gag needs the
 whole line to decide, so while there are gags a line is held until its newline
 arrives.  3K marks nothing as a prompt -- there is not one telnet GA or EOR in
-59 captures -- and a prompt has no newline, so an unfinished line is shown
-after a tenth of a second rather than waiting for an ending that is not
-coming.  If the rest of a line already drawn arrives later and is gagged, the
+59 captures.  Its `>` prompt does come with a newline (measured: it ended a
+read without one once in every capture on disk, and the next read began with
+the newline), but the login's questions -- `Password:`, `<continue>` -- do
+not, so an unfinished line is shown after a tenth of a second rather than
+waiting for an ending that is not coming.  An unfinished line is *not* taken
+as finished for matching, though: a room title split across two reads would
+become two lines.  If the rest of a line already drawn arrives later and is gagged, the
 row is wiped.  With no gags nothing is held at all.
 
 ## Your own colours
@@ -742,6 +749,25 @@ none of this client's markers, first pass included: a reading taken after
 with each escape printed as `<ESC>`, since one printed raw would be obeyed by
 the terminal.  It goes out as the escape byte itself, the way tt++ sends a
 `\e`.  That is the one thing not yet seen working against the game.
+
+### 3kdb's gag library
+
+3kdb keeps seven hundred-odd tt++ `#gag` lines in `common/gags/`, in the
+groups its own `gags` alias switches: area monsters, guild combat, items, the
+ray-gun, blank lines.  They come in with the map and the bots -- data, never
+run -- into a library beside the routes, and every group starts **off**.  A
+gag hides text, and a line somebody wanted to read going missing without
+their say is worse than any spam it saves, so each group is a switch they
+throw, after reading its gags if they like.  Which groups are on belongs to
+the character, beside their markers, and follows a character switch.
+
+tt++ patterns are translated, not guessed: `^` and `$` anchor, `%*` is
+anything, `%w` a word, `%d` a number, `%s`/`%S` space and not, `%1`-`%99`
+(or `%%1` inside an alias) a capture, and braces are a regex tt++ passes
+straight through -- `{Tugs|Hugs}`, `{.|!}`, a whole `{^The Spork Lance GASHES
+(.*)\!}`.  The rest is text.  A pattern with any other `%` code is left out
+and counted; of 3kdb's 765, none are.  Only `#gag` lines are taken:
+the `#act`s beside them are scripts, and stay in tt++.
 
 ## Updates
 

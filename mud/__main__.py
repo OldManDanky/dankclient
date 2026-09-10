@@ -252,6 +252,9 @@ async def amain(args: argparse.Namespace) -> int:
         host.rules = RuleStore(host, Path(args.scripts) / "rules.json")
         host.routes = RouteStore(host, Path(args.scripts) / "routes.json")
         host.routes.load()
+        from .gaglib import LIBRARY
+        session.gaglib_path = Path(args.scripts) / LIBRARY
+        session.apply_gag_groups()
         host.rules.load()
         host.load_all()
         host.rules.register()

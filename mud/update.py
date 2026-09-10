@@ -57,13 +57,15 @@ TARBALL = (f"https://codeload.github.com/{OWNER}/{REPO}"
 #: tt++'s void spacers were walked through: 3,478 dropped rooms had been the
 #: only ways into whole areas -- Xenolocles by way of Ravenloft, Westersea,
 #: the Underdark -- and a quarter of the speedruns could not be reached.
-IMPORTERS = {"map": 2, "speedruns": 1, "bots": 2}
+IMPORTERS = {"map": 2, "speedruns": 1, "bots": 2, "gags": 1}
 
 #: What we take, in the order it is worth having.
 WANTED = {
     "map": "common/map/3k_shared.map",
     "speedruns": "common/map/speedruns.tin",
     "bots": "common/bot",
+    #: taken, but every group off until somebody switches it on
+    "gags": "common/gags",
 }
 
 AGENT = f"{SLUG}/{__version__} (+https://github.com/OldManDanky/dankclient)"
@@ -345,6 +347,10 @@ def pull(store, routes, want=None, into: Path | None = None,
                                             "missing": len(missing)}
         if "bots" in want and routes is not None:
             done["did"]["bots"] = import_bots(routes, root)
+        if "gags" in want and routes is not None:
+            from .gaglib import LIBRARY, import_gags
+            done["did"]["gags"] = import_gags(
+                root, Path(routes.path).with_name(LIBRARY))
     finally:
         if into is None:
             holding.cleanup()

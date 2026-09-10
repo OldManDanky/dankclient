@@ -286,6 +286,8 @@ function handle(m) {
     if (window.pushMessage) window.pushMessage(m.t, m.d);
   } else if (m.t === 'rules' && window.handleRules) {
     window.handleRules(m);
+  } else if (m.t === 'gaglib' && window.handleGaglib) {
+    window.handleGaglib(m);
   } else if (m.t === 'marks' && window.handleMarks) {
     window.handleMarks(m);
   } else if (m.t === 'routes' && window.handleRoutes) {

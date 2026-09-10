@@ -38,6 +38,7 @@ from .scanner import Message, Scanner, Text
 from .state import World
 from .telnet import TelnetFilter
 from .gags import HOLD, LineGate
+from . import gaglib
 from .deadman import DEFAULT_MINUTES, Deadman
 from .triggers import TriggerSet
 
@@ -240,6 +241,10 @@ class Session:
         self.gate = LineGate(self.is_gagged, encoding,
                              active=lambda: len(self.gags) > 0)
         self._release: asyncio.TimerHandle | None = None
+        #: 3kdb's gag library -- shared, from Options -> Updates -- and which
+        #: of its groups this character has switched on.  All off to start.
+        self.gaglib_path = Path(prefixes_path).with_name(gaglib.LIBRARY)
+        self.apply_gag_groups()
 
         #: 3K's `brief` setting as it last reported it: {"brief": "on",
         #: "mapping": "yes"}, or None until it has said.  Read off its reply
@@ -647,6 +652,27 @@ class Session:
                              keep=(n for n, _ in self.prefixes.pairs))
         if not self.ansivars.reading:
             self.ansivars = AnsiVars(self._ansivars_path())
+        # Another character's gag groups come with their markers.
+        self.apply_gag_groups()
+
+    # --- 3kdb's gags -------------------------------------------------------------
+
+    def _gag_groups_path(self) -> Path:
+        return Path(self.prefixes_path).with_name(gaglib.ENABLED)
+
+    def gag_groups(self) -> set[str]:
+        return gaglib.load_enabled(self._gag_groups_path())
+
+    def apply_gag_groups(self) -> int:
+        """The library's groups this character has on, into the gags."""
+        return gaglib.apply(self.gags, gaglib.load_library(self.gaglib_path),
+                            self.gag_groups())
+
+    def set_gag_group(self, key: str, on: bool) -> int:
+        groups = self.gag_groups()
+        (groups.add if on else groups.discard)(key)
+        gaglib.save_enabled(self._gag_groups_path(), groups)
+        return self.apply_gag_groups()
 
     # --- the character's own colours ----------------------------------------
 
