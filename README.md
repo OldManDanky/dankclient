@@ -76,6 +76,13 @@ Sounds**.
 room descriptions, and whether 3K draws its minimap -- with a button to send
 it and one to ask 3K what it is set to now.  The map follows you in either.
 
+**Trying it out?**  The line markers this client sets stay on your character
+if you go back to another client.  Before setting them, press **Save my current
+settings** under **Options -> Character setup -> Your own colours**: it reads
+your colours from 3K's `ansivars` page and keeps them for that character.
+**Put them back** shows exactly what it will send, then sends it on a second
+click.  It only touches the settings this client changes.
+
 **Options -> Fonts** sets the terminal's font, size and line spacing, and
 the messages window's size.  It offers the fixed-width fonts installed on
 your computer, or any other by name.  **Ctrl +** and **Ctrl -** make

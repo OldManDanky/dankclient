@@ -12,10 +12,13 @@ function open() {
   load('numpad.js');
 }
 const box = (value, s, t) => { p.els.cmd.value = value; p.els.cmd.selectionStart = s; p.els.cmd.selectionEnd = t; };
+let stopped = false;
 function key(code, over = {}) {
   const e = { code, target: p.els.cmd, repeat: false, ctrlKey: false, altKey: false, metaKey: false,
-    prevented: false, preventDefault() { this.prevented = true; }, ...over };
+    prevented: false, preventDefault() { this.prevented = true; },
+    stopPropagation() { stopped = true; }, ...over };
   sent.length = 0;
+  stopped = false;
   window.numpadKey(e);
   return { sent: [...sent], prevented: e.prevented };
 }
@@ -59,5 +62,16 @@ check('Back to the defaults: 0 types a 0 again', same(key('Numpad0'), { sent: []
 open();
 box('kill orc ', 9, 9);
 check('a reload keeps the mode', same(key('Numpad8').sent, ['n']) && p.els['numpad-mode'].value === 'always');
+
+// NumLock off: the same physical keys, reported as the arrows and PageUp.
+box('', 0, 0);
+check('NumLock off: 8 walks, and the command box never sees ArrowUp',
+  same(key('Numpad8', { key: 'ArrowUp' }).sent, ['n']) && stopped);
+check('NumLock off: 9 walks, and the terminal never sees PageUp',
+  same(key('Numpad9', { key: 'PageUp' }).sent, ['ne']) && stopped);
+check('a key it leaves alone goes on to the page as usual',
+  !key('NumpadDivide', { key: '/' }).prevented && !stopped);
+mode('off');
+check('off: ArrowUp is history again', !key('Numpad8', { key: 'ArrowUp' }).prevented && !stopped);
 
 finish();

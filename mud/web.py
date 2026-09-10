@@ -430,6 +430,8 @@ class WebServer:
             },
             "who": self._who(),
             "brief": getattr(self.session, "brief", None),
+            "ansivars": (self.session.ansivars.summary(self.session.markers())
+                         if getattr(self.session, "ansivars", None) else None),
             "deadman": (self.session.deadman.state()
                         if getattr(self.session, "deadman", None) else None),
             "link": self._link(),

@@ -470,6 +470,29 @@ $('set-prefixes').addEventListener('click', () => {
   }
 });
 
+/* The character's own colours: read off 3K's ansivars page and kept, so they
+   can go back on when somebody returns to the client they had. */
+window.renderAnsivars = function (a) {
+  const own = a && a.own;
+  const now = !a ? '' : a.reading ? 'Reading 3K’s page…'
+    : own ? `Saved ${own.when}: ${own.vars} settings.`
+      : a.latest ? `Saved ${a.latest.when}, but with this client's markers already in.`
+        : 'Nothing saved yet.';
+  if ($('ansi-now').textContent !== now) $('ansi-now').textContent = now;
+  $('ansi-restore').disabled = !own;
+};
+$('ansi-save').addEventListener('click', () => send('/ansivars', false));
+$('ansi-restore').addEventListener('click', () => {
+  const b = $('ansi-restore');
+  const armed = b.dataset.armed === '1';
+  send('/ansivars restore' + (armed ? ' go' : ''), false);
+  b.dataset.armed = armed ? '' : '1';
+  b.textContent = armed ? 'Put them back' : 'Send them — click again';
+  if (!armed) {
+    setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Put them back'; }, 20000);
+  }
+});
+
 $('mip').addEventListener('click', () => {
   if (ws) ws.send(JSON.stringify({ t: 'jumpstart' }));
   cmd.focus();
@@ -494,6 +517,10 @@ $('hangup').addEventListener('click', () => {
 
 function send(text, echo) {
   if (ws) ws.send(JSON.stringify({ t: 'cmd', d: text }));
+  // Back to the bottom, where the answer is going to be.  A terminal left
+  // scrolled up stays there while output arrives beneath it, which from the
+  // chair looks exactly like the game having stopped.
+  if (term) term.scrollToBottom();
   if (echo && term) term.write(`\x1b[2m> ${text}\x1b[0m\r\n`);
   cmd.focus();
 }
@@ -647,6 +674,7 @@ function render(s) {
 
   if (window.renderWho) window.renderWho(s.who);
   if (window.renderBrief) window.renderBrief(s.brief);
+  if (window.renderAnsivars) window.renderAnsivars(s.ansivars);
   if (window.renderDeadman) window.renderDeadman(s.deadman);
   if (window.setMe && s.who) window.setMe(s.who.me);
 

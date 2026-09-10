@@ -32,6 +32,8 @@ from . import patrol
 from .outbound import APMMeter, SendQueue
 from .login import Login
 from .prefixes import Hidden, Prefixes
+from .ansivars import COMMAND as ANSI_COMMAND, MOST as ANSI_MOST
+from .ansivars import QUIET as ANSI_QUIET, AnsiVars
 from .scanner import Message, Scanner, Text
 from .state import World
 from .telnet import TelnetFilter
@@ -244,6 +246,10 @@ class Session:
         #: rather than remembered from what we sent, because the character's
         #: setting is the truth and it can be changed from anywhere.
         self.brief: dict | None = None
+        #: the character's own colour settings, read off 3K's ansivars page
+        #: when asked and kept so they can be put back
+        self.ansivars = AnsiVars(self._ansivars_path())
+        self._ansi_began = self._ansi_heard = 0.0
         self.bus.on(events.LINE, self._on_line)
         # Asked on the game's beat, so the deadman trips when the time is up
         # rather than at the next thing that happens to want to send.
@@ -637,11 +643,70 @@ class Session:
         self.markup = Markup.from_prefixes(self.prefixes)
         self.hidden = Hidden((v for _, v in self.prefixes.pairs),
                              keep=(n for n, _ in self.prefixes.pairs))
+        if not self.ansivars.reading:
+            self.ansivars = AnsiVars(self._ansivars_path())
+
+    # --- the character's own colours ----------------------------------------
+
+    def _ansivars_path(self) -> Path:
+        """Beside the character's markers: one file per character."""
+        return Path(self.prefixes_path).with_name("ansivars.json")
+
+    def markers(self) -> list[str]:
+        return [v for _, v in self.prefixes.pairs if v]
+
+    def ask_ansivars(self) -> None:
+        """Send `ansivars` and read the colours off the page it prints."""
+        if self.ansivars.reading:
+            return
+        self.ansivars.begin()
+        self._ansi_began = self._ansi_heard = time.time()
+        self.send(ANSI_COMMAND)
+        self._ansi_wait()
+
+    def _ansi_wait(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return                      # replaying: finish_ansivars() decides
+        loop.call_later(ANSI_QUIET + 0.05, self._ansi_check)
+
+    def _ansi_check(self) -> None:
+        """Finished once the page has gone quiet -- 3K marks no prompt."""
+        if not self.ansivars.reading:
+            return
+        now = time.time()
+        if (now - self._ansi_heard < ANSI_QUIET
+                and now - self._ansi_began < ANSI_MOST):
+            self._ansi_wait()
+            return
+        self.finish_ansivars()
+
+    def finish_ansivars(self) -> dict | None:
+        snap = self.ansivars.end(who=self.who_am_i)
+        if snap is None:
+            said = "3K's ansivars page had no settings on it -- nothing saved."
+        else:
+            said = (f"saved {len(snap['vars'])} colour settings"
+                    + (" -- these already have this client's markers in them"
+                       if self.ansivars.ours(snap, self.markers()) else "")
+                    + ".  Options > Character setup puts them back.")
+        self.bus.emit(events.TEXT,
+                      f"\r\n\x1b[33m[client] {said}\x1b[0m\r\n".encode("latin-1"))
+        self.bus.emit(events.STATE, "ansivars", snap is not None, None)
+        return snap
 
     def _on_text(self, data: bytes) -> None:
         self.login.feed(data.decode(self.encoding, "replace"))
         self._show(self.hidden.feed(data))
+        if self.ansivars.reading:
+            self._ansi_heard = time.time()
+            if self.ansivars.more(data.decode(self.encoding, "replace")):
+                # The pager waits for a key; Enter is the one that goes on.
+                self.send("")
         for raw, plain in self._lines.feed(data):
+            # Before the markers come out: they are what is being read.
+            self.ansivars.line(raw)
             # The markup reader gets the markers; it is the one thing that
             # wants them.  Everything downstream of here sees the line the
             # player sees, so a trigger can be written against that.

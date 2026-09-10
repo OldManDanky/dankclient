@@ -85,12 +85,19 @@
     const command = (map[key] || '').trim();
     if (!command) return false;           // unset: it types its number
     e.preventDefault();
+    // Taken, so nothing else on the page sees it.  With NumLock off the keys
+    // are also the arrows and PageUp: 8 moved through the command history as
+    // well as walking north, and 9 scrolled the terminal up a page, where it
+    // stayed while everything new arrived out of sight below.
+    if (e.stopPropagation) e.stopPropagation();
     if (e.repeat) return true;            // held down: once is enough
     const parts = command.split(';').map((s) => s.trim()).filter(Boolean);
     for (const part of parts) if (window.sendCommand) window.sendCommand(part);
     return true;
   };
-  addEventListener('keydown', window.numpadKey);
+  // Capturing, on the way down: first, before the command box's own arrow
+  // and PageUp handling, which would otherwise have acted on it already.
+  addEventListener('keydown', window.numpadKey, true);
 
   // --- Options -> Panels -----------------------------------------------------
 

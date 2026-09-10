@@ -619,6 +619,28 @@ def test_the_client_can_say_where_it_keeps_things():
         assert f"'{key}'" in js, key
 
 
+def test_the_numpad_hears_its_keys_before_the_command_box():
+    """With NumLock off, numpad 8 is also ArrowUp and 9 is PageUp.  The
+    command box acted on them first: history moved as the character walked,
+    and 9 scrolled the terminal up out of sight of everything new."""
+    js = scripts()
+    assert "addEventListener('keydown', window.numpadKey, true)" in js["numpad.js"]
+    send = js["app.js"][js["app.js"].index("function send(text, echo)"):]
+    assert "term.scrollToBottom()" in send[:send.index("\n}")]
+
+
+def test_one_column_rows_are_a_class_not_an_inline_width():
+    """Panels -> Show and About drew crooked: they set the row to one column
+    inline, and the form row's own rules still pushed the label right and
+    everything else into a column that was not there."""
+    page, js = html(), scripts()
+    assert ".frow.one>label:first-child{grid-column:1;justify-self:start" in page
+    for name in ("panels.js", "about.js"):
+        assert "'frow one'" in js[name], name
+    for name, body in js.items():
+        assert "gridTemplateColumns" not in body, name
+
+
 def test_the_about_pane_is_not_rebuilt_under_the_cursor():
     """Third time this trap has come up, so it is checked now."""
     js = scripts()["about.js"]

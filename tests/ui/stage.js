@@ -111,6 +111,7 @@ function page(ids = {}, saved = {}) {
     hidden: false,
     hasFocus: () => true,
     createElement: (t) => new El(t),
+    createTextNode: (s) => Object.assign(new El('#text'), { textContent: String(s) }),
     getElementById: (id) => els[id] || null,
     documentElement: { style: { setProperty: (k, v) => { rootStyle[k] = v; } } },
     addEventListener: (t, f) => { (listeners[t] = listeners[t] || new Set()).add(f); },

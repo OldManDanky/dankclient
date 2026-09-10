@@ -55,20 +55,47 @@
     box.className = 'fhint new';
     box.append(document.createTextNode(
       `Version ${release.latest} is out — you have ${release.have}. `));
-    const link = document.createElement('a');
-    // Only ever a GitHub page.  The server checks too; a javascript: address
-    // here would be a script running in the page that drives the character.
-    const href = String(release.page || release.url || '');
-    if (href.startsWith('https://github.com/')) link.href = href;
-    link.target = '_blank';
-    link.rel = 'noreferrer';
-    link.textContent = 'Download the installer';
-    box.append(link);
+    // The installer itself, not the page it is on: the page is a detour
+    // through a list of files to find the one that matters.  The release page
+    // stays one click away for anyone who wants to know what changed.
+    box.append(outside(release.url || release.page, 'Download the installer'));
+    const notes = release.page && release.page !== release.url
+      ? outside(release.page, 'what’s new') : null;
+    if (notes) box.append(document.createTextNode(' ('), notes,
+      document.createTextNode(')'));
     box.append(document.createTextNode(
       '. Installing it replaces the program and leaves your map, characters '
       + 'and triggers exactly where they are.'));
     if (window.options) window.options.count('about', 1);
   };
+
+  /* A link that opens in the player's own browser.
+
+     Only ever a GitHub address: the server checks too, and a javascript:
+     address here would be a script running in the page that drives the
+     character.  And not followed in the page: in app mode that opens inside
+     the client's private profile, which would leave a downloaded installer in
+     a browser window nobody recognises.  The server hands it to the browser
+     they actually use, which downloads it the way it downloads anything. */
+  function outside(address, text) {
+    const link = document.createElement('a');
+    const href = String(address || '');
+    link.textContent = text;
+    if (!href.startsWith('https://github.com/')) return link;
+    link.href = href;
+    link.rel = 'noreferrer';
+    link.onclick = (e) => {
+      e.preventDefault();
+      if (window.ws && window.ws.readyState === 1) {
+        window.ws.send(JSON.stringify({ t: 'open', url: href }));
+      }
+    };
+    return link;
+  }
+
+  // The static link at the foot of the pane, for the same reason.
+  const repo = $('about-repo');
+  if (repo) repo.onclick = outside(repo.href, '').onclick;
 
   $('about-check').onclick = () => {
     $('about-release').textContent = 'asking GitHub…';
@@ -92,8 +119,7 @@
     for (const [key2, label, why] of ROWS) {
       if (!where[key2]) continue;
       const row = document.createElement('div');
-      row.className = 'frow';
-      row.style.gridTemplateColumns = 'minmax(0,1fr)';
+      row.className = 'frow one';
 
       const name = document.createElement('label');
       name.textContent = label;

@@ -55,7 +55,9 @@
     box.replaceChildren();
     for (const p of PANELS) {
       const row = document.createElement('div');
-      row.className = 'frow';
+      // One column: the checkbox is its own label, so a second one beside it
+      // would just be the same words twice.
+      row.className = 'frow one';
 
       const label = document.createElement('label');
       label.className = 'check';
@@ -69,9 +71,6 @@
       note.className = 'fhint';
       note.textContent = p.note;
 
-      // One column: the checkbox is its own label, so a second one beside it
-      // would just be the same words twice.
-      row.style.gridTemplateColumns = 'minmax(0,1fr)';
       row.append(label, note);
       box.append(row);
     }

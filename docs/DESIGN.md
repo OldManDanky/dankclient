@@ -608,6 +608,37 @@ after a tenth of a second rather than waiting for an ending that is not
 coming.  If the rest of a line already drawn arrives later and is gagged, the
 row is wiped.  With no gags nothing is held at all.
 
+## Your own colours
+
+The line markers are settings on the character, so somebody who tries this
+client and goes back to the one they had finds every room title wrapped in
+`-R-_` and their own colours for those lines gone.  So the settings can be
+read and kept first, per character, beside that character's `prefixes.json`.
+
+3K has no command that lists them as values.  (`ansi vars` is not one: "No
+such color vars.")  What it has is a help page, `ansivars`, which draws each
+variable's name *in* its own colours -- prefix, name, suffix -- and that is
+the value, if the line is read raw, before the markers are taken out:
+
+    ESC[34;1mattackESC[0m           Damage and hits that you do
+    attacked         Damage and hits done to you
+
+A variable with nothing around its name has nothing set.  The name is found
+among the known ones first, longest first so `attacked` is never `attack` with
+a prefix, and never inside an escape.  The page is paged at forty lines, and
+the pager's prompt has no newline, so it is watched for in the raw stream and
+answered with Enter; the first line of the next page arrives stuck to it.  3K
+marks no prompt, so the page is over when it has been quiet for a second and
+a half.
+
+Putting them back sends only what this client changes -- the room fields and
+the `look_*` markers its first pass set -- from the newest reading that holds
+none of this client's markers, first pass included: a reading taken after
+**Set ANSI prefixes** would put the markers straight back.  It is shown first,
+with each escape printed as `<ESC>`, since one printed raw would be obeyed by
+the terminal.  It goes out as the escape byte itself, the way tt++ sends a
+`\e`.  That is the one thing not yet seen working against the game.
+
 ## Updates
 
 On a client that has never had a map -- a fresh install -- the world is fetched
@@ -1026,4 +1057,5 @@ one loads it into the input box, because most of them take an argument.
     /name  /merge <id>  /forget <id>  /new         correcting the map
     /dupes  /repair  /lock  /unlock
     /bots  /stop  /prefixes [set]                  what is driving the
-    /scripts  /reload  /test <line>  /triggers     character, and scripting
+    /ansivars [show|restore [go]]                  character, and scripting
+    /scripts  /reload  /test <line>  /triggers

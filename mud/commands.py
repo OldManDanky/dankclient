@@ -65,6 +65,9 @@ HELP = [
         ('/js', 're-send the 3klient handshake'),
         ('/prefixes', "show the character settings that mark up 3K's output"),
         ('/prefixes set', 'send them'),
+        ('/ansivars', 'read and keep your own colour settings from 3K'),
+        ('/ansivars restore', 'show what would put them back'),
+        ('/ansivars restore go', 'send it'),
         ('/help', 'this list'),
     ]),
 ]
@@ -179,6 +182,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb == "prefixes":
         _prefixes(session, rest, note)
+
+    elif verb == "ansivars":
+        _ansivars(session, rest, note)
 
     elif verb == "marks":
         store = getattr(session, "store", None)
@@ -734,6 +740,66 @@ def _prefixes(session, rest: str, note) -> None:
              + f"\n\nedit {marks.path} to change them, /prefixes set to send.")
         return
 
+    for command in commands:
+        session.queue.put(command)
+    note(f"sent {len(commands)} settings; watch for the confirmations")
+
+
+def _ansivars(session, rest: str, note) -> None:
+    """Read the character's own colour settings, or put them back.
+
+    For somebody trying this client who goes back to the one they had: the
+    markers stay on their character, and the colours they chose for those
+    lines are gone.  Putting them back shows first, like /prefixes -- these
+    are commands going to somebody's character.
+    """
+    from .ansivars import shown, touched
+
+    kept = getattr(session, "ansivars", None)
+    if kept is None:
+        note("there is no character here to read settings from")
+        return
+    words = rest.lower().split()
+
+    if not words:
+        if getattr(session, "_writer", None) is None:
+            note("not connected")
+            return
+        note("asking 3K for its ansivars page -- the pager is answered for you")
+        session.ask_ansivars()
+        return
+
+    if words[0] in ("show", "list"):
+        if not kept.saved:
+            note("nothing saved yet -- /ansivars reads them")
+            return
+        snap = kept.saved[-1]
+        note(f"saved {snap['when']}:\n" + "\n".join(
+            f"  {name:<14} {shown(v['pref']) or '-':<14} {shown(v['suff']) or '-'}"
+            for name, v in sorted(snap["vars"].items())))
+        return
+
+    if words[0] not in ("restore", "back"):
+        note("/ansivars, /ansivars show, /ansivars restore")
+        return
+    snap = kept.own(session.markers())
+    if snap is None:
+        note("nothing saved from before this client's markers went on -- "
+             "/ansivars reads them" + (", but every reading so far already has "
+                                       "the markers in it" if kept.saved else ""))
+        return
+    commands = kept.restore(snap, touched(session.prefixes), session.prefixes.verb)
+    if not commands:
+        note(f"the reading from {snap['when']} has none of the settings this "
+             "client changes")
+        return
+    if words[1:2] not in (["go"], ["send"], ["set"]):
+        note(f"from the reading on {snap['when']} -- only what this client "
+             "changes, nothing else:\n"
+             + "\n".join(f"  {shown(c)}" for c in commands)
+             + "\n\nthe map reads rooms less well without the markers; "
+               "/ansivars restore go to send them.")
+        return
     for command in commands:
         session.queue.put(command)
     note(f"sent {len(commands)} settings; watch for the confirmations")

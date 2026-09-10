@@ -430,6 +430,15 @@
   .check{display:flex;align-items:center;gap:6px;font-size:11.5px;
          color:var(--ink);text-align:left}
   .frow .check{justify-self:start}
+  /* A row with no label column: a checkbox that is its own label, a path
+     that is its own heading.  Everything in the one column, from the left --
+     setting only the column count leaves the rules above pushing the label
+     right and everything else into a second column that is not there. */
+  .frow.one{grid-template-columns:minmax(0,1fr)}
+  .frow.one>*:not(label:first-child){grid-column:1}
+  .frow.one>label:first-child{grid-column:1;justify-self:start;
+                              text-align:left;padding-top:0}
+  .frow.one>label.check:first-child{font-size:11.5px;color:var(--ink)}
   input.num{flex:0 0 74px;min-width:0}
   input.mono,textarea.mono{font-family:Consolas,"DejaVu Sans Mono",monospace}
   code{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:.95em;
@@ -1029,6 +1038,23 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                         title="Shows them first; nothing is sent until you confirm."
                         >Set ANSI prefixes</button>
                 <span class="hint">edits live in scripts/prefixes.json</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>Your own colours</h5>
+            <div class="in">
+              <p class="say">The markers stay on your character if you go back
+                to another client. Save your colour settings first &mdash; 3K's
+                <code>ansivars</code> page, read and kept for this character
+                &mdash; and they can be put back afterwards.
+                <b id="ansi-now"></b></p>
+              <div class="row">
+                <button id="ansi-save" type="button">Save my current settings</button>
+                <button id="ansi-restore" type="button"
+                        title="Shows them first; nothing is sent until you confirm."
+                        >Put them back</button>
               </div>
             </div>
           </div>
