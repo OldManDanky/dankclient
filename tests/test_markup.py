@@ -77,6 +77,24 @@ def test_the_markers_come_from_what_the_client_asked_for():
     assert (marks.room, marks.desc) == ("-R-_", "-D-_")
 
 
-def test_a_character_with_no_markers_set_yields_nothing():
+def test_a_character_with_no_markers_set_gets_the_title_by_its_shape():
+    """It used to yield nothing.  A title is recognisable without markers --
+    a name, then its exits in brackets -- and is believed only when those
+    are exactly the exits MIP sends.  Over every capture on disk that named
+    175 more rooms and changed the name of none."""
     marks = read(["A Vortex (e,w,s,enter)", "The area is blurry."])
+    assert marks.take(["e", "w", "s", "enter"]) == ("A Vortex", "")
+
+
+def test_prose_with_no_markers_still_yields_nothing():
+    marks = read(["The area is blurry.", "Somebody says: head north (n,s)"])
     assert marks.take(["e", "w", "s", "enter"]) == ("", "")
+
+
+def test_a_description_that_closes_mid_line_does_not_swallow_the_next_title():
+    """3K often puts the closing marker at the end of the last line of prose
+    rather than on a line of its own."""
+    marks = read(["-R-_The Chapel (w)-R-_", "-D-_A quiet chapel.",
+                  "Candles burn low.-D-_", "-R-_A Vestry (e)-R-_"])
+    assert marks.take(["w"])[1] == "A quiet chapel. Candles burn low."
+    assert marks.take(["e"])[0] == "A Vestry"

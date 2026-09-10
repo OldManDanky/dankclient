@@ -61,12 +61,36 @@ log still see gagged lines.  A trigger can gag too: tick **gag** on it in
 
 In the messages window, **right-click** a line to colour it: every line on
 that channel, or everything from that person.  Clicking a line still puts a
-reply in the command box.
+reply in the command box.  The **mine** tag at the end of the channel tags
+hides what you said yourself, so only everybody else's lines are left.
+
+**Dings.**  Right-click a line in the messages window and choose **every ...
+line** to hear a ding for that channel (or every tell), or **anything from
+...** for that person.  A tell chimes twice, a channel once; your own lines
+never ding.  3K's own bell -- what somebody's `wake` sends you -- rings with
+three notes.  Volume, test buttons, *only when the window is in the
+background* and a switch for the bell are under **Options -> Panels ->
+Sounds**.
+
+**Options -> Character setup** has 3K's own `brief` setting -- short or long
+room descriptions, and whether 3K draws its minimap -- with a button to send
+it and one to ask 3K what it is set to now.  The map follows you in either.
 
 **Options -> Fonts** sets the terminal's font, size and line spacing, and
 the messages window's size.  It offers the fixed-width fonts installed on
 your computer, or any other by name.  **Ctrl +** and **Ctrl -** make
 everything else bigger or smaller.
+
+**Deadman.**  If you haven't typed a command for 15 minutes, bots and
+routes pause where they are and nothing automated is sent -- no triggers, no
+timers -- until you type something, and then everything carries on.  Set the
+minutes, or 0 for off, at the top of **Options -> Routes & bots**.
+
+To walk with the **numpad**, turn it on under **Options -> Panels -> Numpad**:
+8 is north, 2 south, 7 north-west and so on, 5 is `look` then `search`, and
+`+`/`-` are up and down.  Every key can be set to any command, or several
+separated by `;`.  With something typed in the command box the keys type
+numbers as usual.
 
 To send the same command over and over, tick **keep the last command in the
 box** under **Options -> Panels**: it stays there selected, so Enter sends it
@@ -141,6 +165,17 @@ else -- there are no third-party dependencies.
 python3 -m mud --web --app    # a window of its own
 python3 -m mud --web          # then open http://127.0.0.1:8080
 python3 tests/run.py          # the tests
+```
+
+The tests include the browser code, run for real under Node when Node is
+installed; without it they say so and the Python tests still run.  Before any
+release, one command runs everything -- the tests, a check that no player's
+name is in anything to be published, a replay of every recorded session
+through the mapper against the last release, and a build of the installer
+that is then taken apart and checked:
+
+```bash
+python3 tools/release_check.py
 ```
 
 Building the Windows package, on Linux:

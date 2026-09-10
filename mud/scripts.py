@@ -315,7 +315,8 @@ class ScriptHost:
             # once, a burst falls back to the game tick.
             "send": (lambda text, priority=NORMAL, pace=PACED:
                      session.queue.put(text, priority, pace)),
-            "send_now": lambda text: session.queue.now(text),
+            # A script is not a person: its "now" is still held by the deadman.
+            "send_now": lambda text: session.queue.auto_now(text),
             "send_round": (lambda text, priority=NORMAL:
                            session.queue.put(text, priority, ROUND)),
             "flush": lambda: session.queue.flush(),

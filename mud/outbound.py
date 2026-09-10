@@ -84,11 +84,14 @@ class SendQueue:
                  apm: APMMeter | None = None,
                  exits: Callable[[], Iterable[str]] = tuple,
                  per_tick: int = 3, panic_immediate: bool = True,
-                 ready=None):
+                 ready=None, held=None):
         self._send = send
         #: Is there a socket to send down?  Anything put while there is not
         #: waits in the heap for one, rather than raising at the caller.
         self.ready = ready or (lambda: True)
+        #: Has the deadman tripped?  Then nothing automated goes out, and
+        #: nothing is kept for later either.
+        self.held = held or (lambda: False)
         self._clock = clock
         self.apm = apm or APMMeter()
         self.exits = exits
@@ -116,7 +119,20 @@ class SendQueue:
         self.apm.record(line, self.exits())
         self.sent += 1
 
+    def auto_now(self, line: str) -> None:
+        """Send at once, for a script rather than a person: held like put()."""
+        if self.held():
+            self.dropped += 1
+            return
+        self.now(line)
+
     def put(self, line: str, priority: int = NORMAL, pace: str = PACED) -> None:
+        if self.held():
+            # Nobody has typed for a while: nothing automated goes out, and it
+            # is dropped rather than saved -- twenty stale commands going out
+            # the moment somebody comes back is the opposite of the point.
+            self.dropped += 1
+            return
         # Nothing goes out while there is no socket -- it waits.  A rule that
         # fires on a disconnect would otherwise reach `now`, which raises, and
         # the rule would look broken rather than pending.  Coming back is
@@ -146,7 +162,7 @@ class SendQueue:
             for _ in range(self.per_tick):
                 if not self._heap or self.apm.headroom() <= 0:
                     break
-                if not self.ready():
+                if not self.ready() or self.held():
                     break
                 _, _, line = heapq.heappop(self._heap)
                 self.now(line)

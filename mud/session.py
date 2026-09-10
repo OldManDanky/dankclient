@@ -36,10 +36,18 @@ from .scanner import Message, Scanner, Text
 from .state import World
 from .telnet import TelnetFilter
 from .gags import HOLD, LineGate
+from .deadman import DEFAULT_MINUTES, Deadman
 from .triggers import TriggerSet
 
 DEFAULT_HOST = "3k.org"
 DEFAULT_PORT = 3000
+
+#: How long a room title waits for a DDD of its own before the room is made
+#: from the title instead.  Measured over 1,127 titles in long mode: the DDD
+#: follows in a median of 0.03s and 90% within 0.07s.  Every title that went
+#: longer had no DDD of its own at all -- brief mode, mostly -- apart from
+#: titles 3K had cut off mid-list, which never make a room anyway.
+TITLE_WAIT = 0.25
 
 #: How long a quiet connection is trusted, then how often and how many times
 #: the other end is asked whether it is still there.  Dead in about a minute.
@@ -135,9 +143,20 @@ class Session:
                              keep=(n for n, _ in self.prefixes.pairs))
         if self.mapper is not None:
             self.bus.on(events.ROOM, self._on_room)
+        #: Pauses everything automated once nobody has typed for a while.
+        #: Kept with the map, because it is the client enforcing it.
+        minutes = DEFAULT_MINUTES
+        if store is not None:
+            try:
+                minutes = float(store.setting("deadman:minutes",
+                                              str(DEFAULT_MINUTES)))
+            except (ValueError, TypeError):
+                pass
+        self.deadman = Deadman(minutes, on_change=self._deadman_changed)
         # Movement is exempt, and DDD tells us what counts as movement *here*,
         # so named exits like "omp" or "vortex" are free too.
         self.queue = SendQueue(self.send, self.clock, apm=self.apm,
+                               held=lambda: self.deadman.tripped,
                                exits=lambda: self.world.room.exits,
                                # Exactly what `send` can do: anything queued
                                # while there is nothing to write to waits for
@@ -197,6 +216,9 @@ class Session:
         #: Who is playing.  None until somebody says, which is the state the
         #: login screen exists to get out of.
         self.character = None
+        #: The name typed at 3K's own name prompt, for somebody who logged in
+        #: without the login screen.  The character, when chosen, wins.
+        self.me = ""
         #: Answers the name and password prompts when a character is chosen.
         #: Given a lambda rather than the bound method, so it goes through
         #: whatever `send` is at the time -- a bound method captured here is
@@ -217,9 +239,33 @@ class Session:
                              active=lambda: len(self.gags) > 0)
         self._release: asyncio.TimerHandle | None = None
 
+        #: 3K's `brief` setting as it last reported it: {"brief": "on",
+        #: "mapping": "yes"}, or None until it has said.  Read off its reply
+        #: rather than remembered from what we sent, because the character's
+        #: setting is the truth and it can be changed from anywhere.
+        self.brief: dict | None = None
+        self.bus.on(events.LINE, self._on_line)
+        # Asked on the game's beat, so the deadman trips when the time is up
+        # rather than at the next thing that happens to want to send.
+        self.bus.on(events.TICK, lambda *_: self.deadman.tripped)
+        #: The last marked room title still waiting to find out whether a DDD
+        #: is coming for it: (when, exits, contents so far, scenery so far).
+        self._titled: tuple | None = None
+        self._title_timer: asyncio.TimerHandle | None = None
+
         # The two signals that expose the 2s server beat: N while fighting,
         # E while guild points regenerate.  Neither is always present.
         self.bus.on(events.STATE, self._on_state)
+
+    #: "Your brief setting is currently: [on, mapping yes]"
+    BRIEF = re.compile(r"brief setting is currently:\s*\[(on|off),\s*mapping\s+(yes|no)\]",
+                       re.I)
+
+    def _on_line(self, raw: str, plain: str) -> None:
+        hit = self.BRIEF.search(plain)
+        if hit:
+            self.brief = {"brief": hit.group(1).lower(),
+                          "mapping": hit.group(2).lower()}
 
     def _on_state(self, name: str, new, old) -> None:
         if name == "round":
@@ -442,6 +488,10 @@ class Session:
         if self._release is not None:
             self._release.cancel()
             self._release = None
+        self._titled = None
+        if self._title_timer is not None:
+            self._title_timer.cancel()
+            self._title_timer = None
         # Rebuilds the markup reader and the marker filter, both of which hold
         # a fragment across reads, and picks up an edit to the file while it is
         # there.
@@ -471,6 +521,7 @@ class Session:
     # --- inbound ------------------------------------------------------------
 
     def _consume(self, chunk: bytes) -> None:
+        self._room_from_title()          # one that has waited long enough
         if self.raw_log is not None:
             self.raw_log.write(chunk)
             self.raw_log.flush()
@@ -496,6 +547,59 @@ class Session:
                 self.bus.emit(events.PROMPT)
                 for fn in self.on_prompt:
                     fn()
+
+    # --- the deadman ---------------------------------------------------------
+
+    def _deadman_changed(self, tripped: bool) -> None:
+        if tripped:
+            self.queue.flush()            # nothing waiting goes out later
+            minutes = self.deadman.minutes
+            said = (f"deadman: {minutes:g} minute{'s' if minutes != 1 else ''} "
+                    f"without you typing -- bots paused, and nothing automated "
+                    f"will be sent until you type a command.")
+        else:
+            said = "deadman: you're back -- carrying on."
+        self.bus.emit(events.TEXT,
+                      f"\r\n\x1b[33m[client] {said}\x1b[0m\r\n".encode("latin-1"))
+        self.bus.emit(events.STATE, "deadman", tripped, not tripped)
+
+    # --- rooms that arrive as a title alone ---------------------------------
+
+    def _title_arrived(self, exits) -> None:
+        """A marked room title: wait a moment to see if a DDD comes with it."""
+        # One still waiting has had no DDD -- another title came first, which
+        # in long mode never happens -- so it was a room of its own.  Two
+        # brief steps inside the wait used to lose the first of them.
+        self._room_from_title(now=True)
+        room = self.world.room
+        self._titled = (time.time(), list(exits), len(room.contents),
+                        len(room.scenery))
+        if self._title_timer is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return                  # replaying: the next message decides
+            self._title_timer = loop.call_later(TITLE_WAIT + 0.01,
+                                                self._title_timeout)
+
+    def _title_timeout(self) -> None:
+        self._title_timer = None
+        self._room_from_title()
+
+    def _room_from_title(self, now: bool = False) -> None:
+        """No DDD came for the last title: the room is the title's.
+
+        Brief mode sends none with a step, so this is the only way the map
+        hears about it.  In long mode the DDD always comes first and this
+        does nothing.  `now` is for when it is already clear none is coming.
+        """
+        if self._titled is None:
+            return
+        at, exits, contents_from, scenery_from = self._titled
+        if not now and time.time() - at < TITLE_WAIT:
+            return
+        self._titled = None
+        self.world.titled_room(exits, at, contents_from, scenery_from)
 
     # --- the screen ---------------------------------------------------------
 
@@ -541,7 +645,9 @@ class Session:
             # The markup reader gets the markers; it is the one thing that
             # wants them.  Everything downstream of here sees the line the
             # player sees, so a trigger can be written against that.
-            self.markup.feed(plain)
+            title = self.markup.feed(plain)
+            if title and title.get("closed") and title.get("exits"):
+                self._title_arrived(title["exits"])
             shown, was = self.hidden.line(plain), plain
             self.bus.emit(events.LINE, self.hidden.line(raw), shown)
             if self.logbook is not None and (shown.strip() or not was.strip()):
@@ -578,6 +684,10 @@ class Session:
         if int(msg.sec) != self.sec_code:
             self.mismatched += 1
             return
+        if msg.code == "DDD" and self.world._last_code != "BAD":
+            self._titled = None        # the title had a DDD of its own after all
+        else:
+            self._room_from_title()
         self.world.apply(msg.code, msg.data)
         self.bus.emit(events.MIP, msg)
         for fn in self.on_message:
@@ -642,6 +752,10 @@ class Session:
         # command nobody typed -- a rule that puts a tell into what it sends
         # could carry one in from another player -- so it goes as a space.
         line = re.sub(r"[\r\n]+", " ", line)
+        if not secret and self.login.asking_for_name and line.strip():
+            # Typed at 3K's name question: this is who is playing.  Never at
+            # the password question, which asking_for_name rules out.
+            self.me = line.strip().split(" ")[0]
         # Every outbound line funnels through here -- the queue, scripts, the
         # browser, the jumpstart -- so this is the one place the log has to
         # know about.  A password is the one string that must reach the socket
@@ -658,6 +772,12 @@ class Session:
         # reads whatever follows as a telnet command.  Doubled, it is a letter.
         wire = line.encode(self.encoding, "replace").replace(b"\xff", b"\xff\xff")
         self._writer.write(wire + b"\r\n")
+
+    @property
+    def who_am_i(self) -> str:
+        """The playing character's name, however they logged in; "" if unknown."""
+        char = self.character
+        return (getattr(char, "name", "") if char is not None else "") or self.me
 
     def jumpstart(self) -> None:
         """Announce ourselves so the MUD starts sending MIP.

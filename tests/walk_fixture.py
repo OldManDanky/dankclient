@@ -101,4 +101,4 @@ WALK = [
     ("sent", 763.19, 'spam whats pimpin?'),
     ("sent", 1658.3, 'l'),
     ("room", 1658.65, ['e', 'portal', 'w'], ['color', 'portal', 'road', 'tower']),
-    ("sent", 1799.09, 'hug marlon'),]
+    ("sent", 1799.09, 'hug friend'),]

@@ -315,6 +315,20 @@ class Mapper:
             named = self.store.by_name(name, exits)
             if len(named) > 1:
                 named = self._nearest(named)
+            if len(named) > 1 and cmd is not None and self.candidates:
+                # The named rooms are where we might have *arrived*.  What
+                # narrows them is where we might have been: keep the ones the
+                # command leads to from there.  Walking the command on from the
+                # named rooms instead took the step twice -- lost among three
+                # rooms called Eastwick, a step west put us on Eastwick Road,
+                # which is west of one of them, and a room ahead from then on.
+                reachable = {
+                    dest for room in self.candidates
+                    if (dest := self.store.destination(room, cmd)) is not None
+                }
+                narrowed = [r for r in named if r in reachable]
+                if narrowed:
+                    named = narrowed
             if len(named) == 1:
                 self.here = named[0]
                 self.candidates = []
@@ -329,6 +343,14 @@ class Mapper:
                 if (dest := self.store.destination(room, cmd)) is not None
             }
             narrowed = [r for r in reachable if self._fits(r, exits, scenery)]
+            if name and named:
+                # Never somewhere the title contradicts.  When the map has rooms
+                # by the name 3K just printed, landing in one called something
+                # else is wrong by definition -- which is what put a player
+                # told "Eastwick" on Eastwick Road.  Inside a run of rooms that
+                # share a name, the temples of the Tree of Life, the narrowing
+                # still lands on one of them, as it always did.
+                narrowed = [r for r in narrowed if self._called(r, name)]
             if narrowed:
                 self.candidates = narrowed
                 if len(narrowed) == 1:
@@ -368,6 +390,10 @@ class Mapper:
     def _fits(self, room_id: int, exits: list[str],
               scenery: list[str]) -> bool:
         return self.store.consistent(room_id, exits, scenery)
+
+    def _called(self, room_id: int, name: str) -> bool:
+        row = self.store.room(room_id)
+        return bool(row) and (row["name"] or "").strip().lower() == name.strip().lower()
 
     def _record(self, room_id: int, exits: list[str], scenery: list[str],
                 name: str | None, now: float, moved: bool = True) -> None:

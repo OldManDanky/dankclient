@@ -135,6 +135,68 @@ board.
 `/bind` anchors it by hand, `/here` says where it thinks you are, `/lost`
 tells it that it is wrong.
 
+### Brief mode
+
+3K's `brief on` shows each room's one-line title instead of its paragraph,
+and a friend testing it found the map standing still -- "walked from chaos ent
+to resid, map still thinks im at chaos ent ... caught back up when i looked".
+A capture of the same walk showed why.  In brief mode 3K sends the title,
+markers and all, and the room's contents, but **no DDD with the step**.  The
+exits arrive only later, behind BAD's two-second sample -- and a DDD after a
+BAD is deliberately not a new room, because in long mode that pair is a
+repeat.  So no room block ever opened.  `look` sends a full room with its own
+DDD, which is why looking caught it up.
+
+So a marked title that has had no DDD of its own a quarter of a second later
+makes the room itself: its exits from the title's brackets, the contents that
+arrived after it, and the title's own time so the move is credited to the
+command that caused it.  The wait comes from 1,127 titles in long mode, where
+the DDD follows in a median of 0.03s and 90% within 0.07s; every one that took
+longer had no DDD of its own at all.  A second title arriving before the wait
+is up settles the first at once, and a title 3K cut off at sixty characters
+never makes a room -- half an exit list is how a phantom room was once
+invented.  In long mode the DDD always comes first and none of this happens.
+
+Replayed over the brief capture, the released client saw none of the six
+rooms and this sees all six, each where 3K's title says.  Over all sixty
+captures, measured against 3K's own title for every room with one yardstick
+for both versions: 1,160 placed right before and after, 27 wrong before and
+right now, 13 new rooms placed right, and none right before and wrong now.
+
+### Finding yourself by name without taking the step twice
+
+Getting every title to the mapper exposed an older mistake in how it finds
+itself again when lost.  With the title naming several rooms -- 3K's Chaos
+has three called Eastwick with the same four exits -- it narrowed them by the
+command just walked, but walked it *from* the named rooms.  Those are where
+you might have arrived, not where you started, so the step was taken twice:
+a player who walked west into Eastwick was put on Eastwick Road, west of one
+of the others, and a room ahead from then on.
+
+Now the named rooms are narrowed by where you might have *been* when that is
+known, and whatever narrowing follows may not land you in a room whose name
+contradicts the title 3K just printed.  The first fix went further and simply
+stayed lost among the named rooms, and the replay showed 79 rooms it had been
+getting right turned to lost -- the temples of the Tree of Life are runs of
+rooms that share a name, and the old narrowing lands on one of them, which is
+right.  Only the contradiction was the bug.
+
+### A description that closes mid-line
+
+Finding that turned up an older bug.  A description ends with its marker, and
+only a marker on a line of its own was recognised -- but 3K as often puts it
+at the end of the last line of prose, and 249 of the captured descriptions end
+that way.  The reader then took the description to go on for ever and read
+every room title after it as more description: **289 of 1,134 marked titles,
+a quarter of them, never reached the mapper.**  Brief mode, which sends no
+descriptions to close one properly, never got its titles back at all.  A
+marker at the end of a line closes one now, and so does the next title.
+
+The title reader also recognises a room title with no markers at all, by its
+shape -- a name, then its exits in brackets -- but believes it only when those
+exits are exactly the ones MIP sends, which a tell with brackets in it will not
+manage.  Over every capture that named 175 more rooms and changed none.
+
 ### The markers do not reach the screen
 
 `Set ANSI prefixes` wraps each kind of line in a marker so the client can read
@@ -290,6 +352,31 @@ gold".  A person's colour wins over their channel's, being the more particular
 choice, and a channel's shows under its tag so the key is on screen.  Eight
 colours, each light enough to read on the dark ground.
 
+**Dings** are chosen in the same right-click menu as the colours, and for the
+same reason stick to a channel or a person.  A tell chimes twice and a channel
+once, so the two are told apart without looking; the sounds are made with the
+browser's own audio, so there are no files to ship.  Never for your own lines,
+never for a channel you have hidden, and never more than one every 1.2 seconds
+-- a busy channel should be a ding, not a buzzer.  Off until chosen, because an
+update should not start making noise on its own.
+
+3K's own bell is the exception.  `wake` puts a BEL in your output, which a
+terminal has always rung; xterm only announces it and leaves the sound to the
+page, and nothing was listening, so the bell reached the screen and made no
+sound.  It rings now, with three notes of its own, and is on unless switched
+off -- a bell is somebody deliberately waking you, not chatter.  The scrollback
+put back after a refresh has its control characters removed, so an old bell
+never rings again.  Browsers refuse to play
+anything before somebody has clicked or typed on the page, so the audio wakes
+on the first keypress, which in a MUD client is logging in.
+
+The **mine** tag hides your own lines: "I want to see what everybody else
+says, not what I sent."  A tell says itself which way it went; a channel line
+is yours when 3K names your character as its speaker.  So the client has to
+know who is playing even for somebody who typed their name at 3K's own prompt
+-- it takes the line typed while the name question is the last thing asked,
+and never the one typed at the password question that follows.
+
 The map is docked there rather than floating over the terminal.  It is the
 panel you glance at most, and one you have to place somewhere is one that is
 in the way of the text underneath it.  Click its header to roll it up.
@@ -323,6 +410,16 @@ amount and the two stay lined up.
 Everything shares one gutter, `--gut`, so the terminal's first line, the
 vitals strip, the input box and the top of the map all start on the same
 lines rather than within a couple of pixels of each other.
+
+**The numpad** walks, when asked to: 8 north, 2 south, 5 `look;search`,
+`+` and `-` up and down, every key settable to any command or several joined
+with `;`.  Off by default, because a new player pressing 8 expects an 8.  The
+usual setting is "when the command box is empty" -- a box whose whole text is
+selected counts, since that is what keeping the last command leaves -- so it
+walks without thinking and is still a number pad mid-sentence.  It is keyed on
+the physical key, which the browser reports as `Numpad8` whether NumLock is on
+or not, so the digit row is never involved.  Holding a key sends once: auto-
+repeat would send thirty `n`s a second into a map you do not know.
 
 **Fonts** has its own tab: the terminal's font, size and line spacing, which
 the command box follows, and the messages window's size.  A page cannot ask
@@ -444,6 +541,26 @@ first step you are somewhere else, and the rest go out from a room they were
 never meant for.  A step that produces nothing is *looked* at rather than
 assumed to have failed -- some moves send no room block at all -- and a way out
 that really does not work is remembered, so routing stops choosing it.
+
+## The deadman
+
+A bot left walking with nobody at the keyboard keeps walking into whatever
+changed while nobody was looking.  So after fifteen minutes -- settable in
+Routes & bots, 0 for off -- without a command typed by a person, everything
+automated stops: bots and routes pause where they are, and triggers, timers
+and script sends are dropped.  The first command typed brings it all back and
+the bots carry on from the step they were on.
+
+What counts as a person is what only a person does: a line typed in the box
+(numpad included), a click on the map to walk there, starting a route.  What
+is held back is dropped rather than saved up, and anything already waiting in
+the queue goes when it trips, because somebody coming back should not be met
+by a burst of stale commands.  Bots wait *before* each thing they send rather
+than having it dropped: a step dropped mid-route reads as a step that went
+nowhere, and the route would stop instead of pausing.  Logging back in after
+a link death and the MIP handshake are not held -- they keep the connection,
+they do not play the character.  It is enforced by the client rather than the
+page, so the setting is kept with the map, and checked on the game's beat.
 
 ## Timers
 

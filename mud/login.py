@@ -88,6 +88,20 @@ class Login:
         # the password goes in.  Anything after it is the MUD's answer.
         return at >= 0 and bool(self._tail[at + len(ASKS_PASSWORD):].strip())
 
+    @property
+    def asking_for_name(self) -> bool:
+        """Is the name question the last thing 3K asked, and still open?
+
+        So the session can learn who is playing from somebody who typed it in
+        themselves.  The password question comes straight after, and the line
+        typed then must never be taken for a name -- so this is only true
+        while no password prompt has followed the name prompt.
+        """
+        if self.inside:
+            return False
+        at = self._tail.rfind(ASKS_NAME)
+        return at >= 0 and ASKS_PASSWORD not in self._tail[at:]
+
     def feed(self, text: str) -> None:
         self._tail = (self._tail + text.lower())[-TAIL:]
         if ASKS_NAME in self._tail:

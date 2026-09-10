@@ -62,6 +62,44 @@
       || colours.channel[m.channel || 'other'] || '';
   }
 
+  /* Your own lines, hidden on request: "I want to see what everybody else
+     says, not what I sent."  A tell says itself which way it went; a channel
+     line is yours when its speaker is your character, which the server tells
+     us however you logged in. */
+  let me = '';
+  let hideMine = store.get(`cm:${ID}:hidemine`, '') === '1';
+
+  function isMine(m) {
+    return !!m.mine || (!!me && !!m.who && personKey(m.who) === me);
+  }
+
+  /* Dings, chosen from the same right-click menu as the colours: every line
+     on a channel, or anything from a person.  Never for your own lines, and
+     never for a channel you have hidden -- hiding it says you are not
+     listening.  The sound itself is sound.js's. */
+  let dings = { channel: {}, who: {} };
+  try {
+    const got = JSON.parse(store.get(`cm:${ID}:dings`, '{}'));
+    dings = { channel: got.channel || {}, who: got.who || {} };
+  } catch (err) { /* a bad preference is no preference */ }
+
+  function saveDings() {
+    store.set(`cm:${ID}:dings`, JSON.stringify(dings));
+  }
+
+  function wantsDing(m) {
+    if (isMine(m) || muted.has(m.channel || 'other')) return false;
+    return !!((m.who && dings.who[personKey(m.who)])
+      || dings.channel[m.channel || 'other']);
+  }
+
+  window.setMe = function (name) {
+    const key = personKey(name);
+    if (key === me) return;
+    me = key;
+    refresh();
+  };
+
   // --- the frame ------------------------------------------------------------
 
   function collapsed() {
@@ -122,13 +160,16 @@
   function renderTags() {
     const all = tags();
     filterEl.replaceChildren();
-    if (all.length < 2) return;         // nothing to choose between
-    for (const tag of all) {
+    const anyMine = hideMine || messages.some(isMine);
+    if (all.length < 2 && !anyMine) return;         // nothing to choose between
+    for (const tag of all.length >= 2 ? all : []) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = tag;
       if (!muted.has(tag)) b.className = 'on';
-      b.title = muted.has(tag) ? `show ${tag}` : `hide ${tag}`;
+      if (dings.channel[tag]) b.className = `${b.className} dings`.trim();
+      b.title = (muted.has(tag) ? `show ${tag}` : `hide ${tag}`)
+        + (dings.channel[tag] ? ' (dings)' : '');
       // The channel's colour under its tag, so the key is on screen.
       if (colours.channel[tag]) {
         b.style.boxShadow = `inset 0 -2px 0 ${colours.channel[tag]}`;
@@ -144,6 +185,20 @@
       };
       filterEl.append(b);
     }
+    if (anyMine) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'mine';
+      b.className = 'mine' + (hideMine ? '' : ' on');
+      b.title = hideMine ? 'show what you said' : 'hide what you said';
+      b.onclick = (e) => {
+        e.stopPropagation();
+        hideMine = !hideMine;
+        store.set(`cm:${ID}:hidemine`, hideMine ? '1' : '');
+        refresh();
+      };
+      filterEl.append(b);
+    }
   }
 
   // --- the list -------------------------------------------------------------
@@ -153,7 +208,8 @@
       bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 24;
     bodyEl.replaceChildren();
 
-    const shown = messages.filter((m) => !muted.has(m.channel || 'other'));
+    const shown = messages.filter((m) => !muted.has(m.channel || 'other')
+      && !(hideMine && isMine(m)));
     const hidden = messages.length - shown.length;
     countEl.textContent = shown.length
       ? String(shown.length) + (hidden ? ` of ${messages.length}` : '')
@@ -276,6 +332,37 @@
     return part;
   }
 
+  /* The Ding row: every line on this channel, anything from this person.
+     Turning one on plays it once, so you know what you will be listening for. */
+  function dingRow(m, channel) {
+    const part = document.createElement('div');
+    const head = document.createElement('h6');
+    head.textContent = 'Ding';
+    const row = document.createElement('div');
+    row.className = 'cm-dings';
+    const toggle = (label, table, key) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cm-ding' + (table[key] ? ' on' : '');
+      b.textContent = label;
+      b.setAttribute('aria-pressed', table[key] ? 'true' : 'false');
+      b.onclick = () => {
+        if (table[key]) delete table[key];
+        else table[key] = true;
+        saveDings();
+        closeMenu();
+        refresh();
+        if (table[key] && window.ding) window.ding(channel === 'tell' ? 'tell' : 'channel', true);
+      };
+      row.append(b);
+    };
+    toggle(channel === 'tell' ? 'every tell' : `every ${channel} line`,
+           dings.channel, channel);
+    if (m.who) toggle(`anything from ${m.who}`, dings.who, personKey(m.who));
+    part.append(head, row);
+    return part;
+  }
+
   function openMenu(x, y, m) {
     closeMenu();
     menu = document.createElement('div');
@@ -288,6 +375,7 @@
       menu.append(swatches(`Everything from ${m.who}`,
                            colours.who, personKey(m.who)));
     }
+    menu.append(dingRow(m, channel));
     document.body.append(menu);
     // Beside the pointer, but never off the edge of the window.
     const box = menu.getBoundingClientRect();
@@ -317,6 +405,10 @@
           text: d.message, mine: !!d.from_me }
       : { kind, at: Date.now() / 1000, who: d.who, channel: d.channel,
           command: d.command, text: d.message, mine: false });
+    const latest = messages[messages.length - 1];
+    if (wantsDing(latest) && window.ding) {
+      window.ding(latest.kind === 'tell' ? 'tell' : 'channel');
+    }
     if (messages.length > LIMIT * 2) messages = messages.slice(-LIMIT);
     refresh();
   };

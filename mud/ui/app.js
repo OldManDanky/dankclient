@@ -152,6 +152,11 @@ try {
     term.loadAddon(fit);
   }
   term.open($('term'));
+  // 3K's `wake` rings the terminal bell -- a BEL in the output -- and so does
+  // anything else that wants your attention.  xterm only announces it; the
+  // sound is ours.  The scrollback put back after a refresh has its control
+  // characters taken out, so an old bell never rings twice.
+  term.onBell(() => { if (window.ding) window.ding('bell'); });
   refit();
   addEventListener('resize', refit);
   // The status strip grows when the guild line arrives and wraps on a narrow
@@ -411,6 +416,43 @@ if (term && term.registerLinkProvider) {
 // These are commands going to somebody's character, so the first press shows
 // what they are and the second sends them.  A button that fires thirteen
 // settings unseen is a button nobody should press.
+/* 3K's brief setting, as it last reported it.  The switches move only when
+   what 3K says changes, so a choice somebody is part-way through making is
+   not put back by the next snapshot. */
+window.renderBrief = function (b) {
+  const now = !b ? 'Not asked yet — press Ask 3K.'
+    : `3K says: ${b.brief === 'on' ? 'short' : 'long'} descriptions, `
+      + `minimap ${b.mapping === 'yes' ? 'shown' : 'hidden'}.`;
+  if ($('brief-now').textContent === now) return;
+  $('brief-now').textContent = now;
+  if (b) {
+    $('brief-desc').value = b.brief;
+    $('brief-map').value = b.mapping;
+  }
+};
+/* The deadman: how long before bots pause for want of a person, and whether
+   they have.  The box is left alone while somebody is typing in it. */
+window.renderDeadman = function (d) {
+  if (!d) return;
+  const box = $('deadman-min');
+  if (document.activeElement !== box) box.value = String(Math.round(d.minutes));
+  $('deadman-note').hidden = !d.tripped;
+  if (d.tripped) {
+    const m = Math.round(d.minutes);
+    $('deadman-why').textContent =
+      `${m} minute${m === 1 ? '' : 's'} without you typing. Type anything to carry on.`;
+  }
+};
+$('deadman-min').addEventListener('change', () => {
+  const n = Math.max(0, Math.min(1440, parseInt($('deadman-min').value, 10) || 0));
+  $('deadman-min').value = String(n);
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'deadman', minutes: n }));
+});
+
+$('brief-send').addEventListener('click', () =>
+  send(`brief ${$('brief-desc').value} ${$('brief-map').value}`, true));
+$('brief-ask').addEventListener('click', () => send('brief', true));
+
 $('set-prefixes').addEventListener('click', () => {
   const armed = $('set-prefixes').dataset.armed === '1';
   send('/prefixes' + (armed ? ' set' : ''), false);
@@ -455,6 +497,8 @@ function send(text, echo) {
   if (echo && term) term.write(`\x1b[2m> ${text}\x1b[0m\r\n`);
   cmd.focus();
 }
+//: For the numpad: a command sent exactly as if it had been typed.
+window.sendCommand = (text) => send(text, true);
 
 // Gauge names: whatever MIP says (BBA/BBB/BBC/BBD), else whatever you have
 // called it, else the protocol's own name.  3k.org sends no labels, so in
@@ -602,6 +646,9 @@ function render(s) {
   }
 
   if (window.renderWho) window.renderWho(s.who);
+  if (window.renderBrief) window.renderBrief(s.brief);
+  if (window.renderDeadman) window.renderDeadman(s.deadman);
+  if (window.setMe && s.who) window.setMe(s.who.me);
 
   if (s.messages && window.seedMessages) window.seedMessages(s.messages);
   if (s.where && window.renderAbout) window.renderAbout(s.where);

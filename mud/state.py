@@ -173,6 +173,35 @@ class World:
                 self._room_open_at = time.time()
             self._last_code = code
 
+    def titled_room(self, exits, at: float, contents_from: int = 0,
+                    scenery_from: int = 0) -> None:
+        """A room that arrived as its title alone.
+
+        In brief mode 3K sends no DDD with a step -- the title, the contents,
+        and then only the periodic BAD-and-DDD sample a second or two later,
+        which is deliberately not a new room -- so without this no room block
+        ever opened and the map stood still until somebody typed look.  The
+        session calls this when a marked title has had no DDD of its own.
+
+        The contents that arrived after the title are the new room's; anything
+        from before is the old one's.  The room goes out at once, stamped with
+        the title's time, which is when the move happened.
+        """
+        new_contents = self.room.contents[contents_from:]
+        new_scenery = self.room.scenery[scenery_from:]
+        if self._room_open_at is not None:
+            # A block still open is the previous room's: let it finish first.
+            del self.room.contents[contents_from:]
+            del self.room.scenery[scenery_from:]
+            self.room.opened_at = self._room_open_at
+            self._room_open_at = None
+            self.bus.emit(events.ROOM, self.room)
+        self.room.contents[:] = new_contents
+        self.room.scenery[:] = new_scenery
+        self._set(self.room, "exits", list(exits))
+        self.room.opened_at = at
+        self.bus.emit(events.ROOM, self.room)
+
     def _apply(self, code: str, data: str) -> None:
         if code == "FFF":
             values, unknown = codes.parse_composite(data)

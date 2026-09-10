@@ -240,6 +240,7 @@ async def amain(args: argparse.Namespace) -> int:
             if line is None:
                 return
             line = line.rstrip("\n")
+            session.deadman.touched()          # a person at the keyboard
             if line.startswith("/"):
                 commands.handle(line, session, host, _note)
             elif not (host and host.input(line)):

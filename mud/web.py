@@ -429,6 +429,9 @@ class WebServer:
                 "caption": w.caption,
             },
             "who": self._who(),
+            "brief": getattr(self.session, "brief", None),
+            "deadman": (self.session.deadman.state()
+                        if getattr(self.session, "deadman", None) else None),
             "link": self._link(),
             "where": self._where(),
             # Absent until it has been asked, which is also what a
@@ -515,6 +518,9 @@ class WebServer:
         return {
             "offline": offline,
             "character": char.name if char is not None else None,
+            # Whoever is playing, however they got in: the messages window
+            # uses it to tell your own lines from everybody else's.
+            "me": getattr(self.session, "who_am_i", "") or "",
             "known": self.characters.public() if self.characters else [],
             # The screen offers to log you in only while there is a prompt
             # waiting for it.  An hour into playing, picking a name should
@@ -876,6 +882,9 @@ class WebServer:
         if kind == "open":
             self._open_link(msg.get("url"))
             return
+        if kind == "deadman":
+            self._set_deadman(msg.get("minutes"))
+            return
         if kind == "link":
             # Disconnect, and coming back from it.  Not a game command: the
             # session survives it, which is the point of the button.
@@ -907,8 +916,15 @@ class WebServer:
         for line in text.splitlines() or [""]:
             self._command(line)
 
+    def _touched(self) -> None:
+        """A person did something: the deadman starts counting again."""
+        deadman = getattr(self.session, "deadman", None)
+        if deadman is not None:
+            deadman.touched()
+
     def _command(self, text: str) -> None:
         """One line from the input box: the client's, an alias's, or the MUD's."""
+        self._touched()
         # "/" commands are for the client, not the MUD.  Without this, typing
         # /js in the browser sends it to 3K as a game command.
         if text.startswith("/"):
@@ -918,6 +934,21 @@ class WebServer:
         elif not (self.scripts and self.scripts.input(text)):
             # A human is waiting on this one, so it bypasses the pacing queue.
             self.session.queue.now(text)
+
+    def _set_deadman(self, minutes) -> None:
+        """Options -> Routes & bots: minutes before it trips, 0 for never."""
+        deadman = getattr(self.session, "deadman", None)
+        if deadman is None:
+            return
+        try:
+            minutes = min(1440.0, max(0.0, float(minutes)))
+        except (TypeError, ValueError):
+            return
+        deadman.set_minutes(minutes)
+        store = getattr(self.session, "store", None)
+        if store is not None:
+            store.set_setting("deadman:minutes", f"{minutes:g}")
+        self._dirty = True
 
     def _open_link(self, url) -> None:
         """Open an address from the output in the player's own browser.
@@ -981,6 +1012,7 @@ class WebServer:
         mapper = getattr(self.session, "mapper", None)
         if mapper is None or not isinstance(dest, int):
             return
+        self._touched()                     # a click on the map is a person
         route = mapper.route(dest)
         if route is None:
             self.note("no route from here" if mapper.here is not None
@@ -1005,6 +1037,7 @@ class WebServer:
         elif op == "delete":
             store.delete(msg.get("id", ""))
         elif op == "start":
+            self._touched()
             problem = store.start(msg.get("id", ""))
             if problem:
                 self.push({"t": "routes", "op": "error", "error": problem})

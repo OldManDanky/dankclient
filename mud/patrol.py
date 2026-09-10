@@ -173,6 +173,17 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         if hp is not None and hp < HEALTH_FLOOR:
             raise Stopped(f"health {hp:.0f}% is below the {HEALTH_FLOOR:.0f}% floor")
 
+    async def gate() -> None:
+        """Wait here while the deadman has tripped, then carry on.
+
+        Before each thing a bot sends, rather than dropping what it sends: a
+        step dropped mid-route reads as a step that went nowhere, and the
+        route would stop instead of pausing.
+        """
+        deadman = getattr(session, "deadman", None)
+        if deadman is not None:
+            await deadman.wait()
+
     async def walk(direction: str, timeout: float = MOVE_TIMEOUT):
         """Take one step and wait to arrive.  None if we did not move.
 
@@ -190,6 +201,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         check()
         parts = [p.strip() for p in direction.split(";") if p.strip()]
         for part in parts:
+            await gate()
             # Directions do not count against APM, so they go straight out;
             # the queue still meters anything that is not one.
             if session.apm.is_directional(part, world.room.exits):
@@ -205,6 +217,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         mapper = getattr(session, "mapper", None)
         if mapper is not None and parts:
             mapper.expect(parts[-1])
+        await gate()
         session.queue.put(LOOK, HIGH)
         return await bus.wait(events.ROOM, LOOK_TIMEOUT)
 
@@ -219,6 +232,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         actions = getattr(target, "actions", None) or []
         verb = next((a for a in actions if a.split()[0] in ("kill", "attack")),
                     "kill #N")
+        await gate()
         session.queue.put(verb.replace("#N", name), HIGH)
 
         deadline = asyncio.get_running_loop().time() + timeout

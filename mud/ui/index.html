@@ -61,6 +61,7 @@
   .cm-filters:empty{display:none}
   .cm-filters button{padding:1px 6px}
   .cm-filters button.on{color:var(--ink);border-color:var(--accent)}
+  .cm-filters button.mine{margin-left:auto;font-style:italic}
   .cm-msg{display:flex;gap:5px;align-items:baseline;cursor:pointer}
   .cm-msg:hover{background:rgba(111,155,235,.10)}
   .cm-who{flex:none;color:var(--accent)}
@@ -71,6 +72,17 @@
                 border:1px solid var(--line);border-radius:4px;white-space:pre;
                 overflow-x:auto;font-family:var(--term-font)}
   #font-other-hint.warn{color:#f2cc60}
+  .numpad{display:grid;grid-template-columns:repeat(4,minmax(0,84px));gap:5px;margin:8px 0}
+  .numpad .nk{display:flex;flex-direction:column;gap:3px;padding:5px;border:1px solid var(--line);
+              border-radius:4px;background:var(--sunk)}
+  .numpad .nk b{font:600 11px/1 var(--term-font);color:var(--dim)}
+  .numpad .nk input{width:100%;box-sizing:border-box;min-width:0;background:var(--bg);
+                    border:1px solid var(--line);border-radius:3px;color:var(--ink);
+                    font:12px/1.3 var(--term-font);padding:3px 4px}
+  .numpad .nk input:focus{outline:none;border-color:var(--accent)}
+  .numpad .nk.fixed{border-style:dashed;color:var(--dim);font-size:10px}
+  .numpad .nk.tall{grid-row:span 2}
+  .numpad .nk.wide{grid-column:span 2}
   .cm-menu{position:fixed;z-index:60;min-width:200px;padding:6px 9px 2px;
            background:var(--panel);border:1px solid var(--line);border-radius:4px;
            box-shadow:0 8px 22px rgba(0,0,0,.55);font-size:12px}
@@ -80,6 +92,10 @@
   .cm-swatch{width:20px;height:20px;padding:0;border-radius:3px;border:1px solid var(--line)}
   .cm-swatch.on{outline:2px solid var(--ink);outline-offset:1px}
   .cm-swatch.none{width:auto;padding:0 7px;font-size:11px}
+  .cm-dings{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px}
+  .cm-ding{padding:1px 7px;font-size:11px}
+  .cm-ding.on{color:var(--ink);border-color:var(--accent)}
+  .cm-filters button.dings::after{content:" \266A";color:var(--accent)}
   /* The map is docked at the top of the sidebar rather than floating over
      the terminal: it is the thing you glance at most, and a panel you have to
      put somewhere is a panel that is in the way of the text underneath it. */
@@ -233,6 +249,14 @@
         color:var(--fg)}
   #link b{color:var(--bad)}
   #link-again{margin-top:6px;width:100%}
+  #deadman-note{margin:6px 0;padding:6px 8px;border:1px solid #f2cc60;border-radius:4px;
+                color:#f2cc60;font-size:12px}
+  .deadman-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;
+               color:var(--dim)}
+  .deadman-row label{color:var(--ink);font-weight:600}
+  .deadman-row input{width:64px;background:var(--sunk);border:1px solid var(--line);
+                     border-radius:3px;color:var(--ink);font:inherit;padding:2px 5px}
+  .deadman-row input:focus{outline:none;border-color:var(--accent)}
   /* Three across, equal share.  Disconnect is the one you must not press by
      accident, so it is quiet until you are over it rather than loud all the
      time -- a red button beside two grey ones is where the eye lands. */
@@ -538,6 +562,9 @@
         <div class="track"><div class="fill" id="route-bar"></div></div>
         <div id="route-note"></div>
       </div>
+      <div id="deadman-note" hidden>
+        <b>Paused</b> &mdash; <span id="deadman-why"></span>
+      </div>
       <button id="mip" type="button" title="Re-send the 3klient handshake">
         MIP: waiting
       </button>
@@ -668,6 +695,12 @@
               <button id="r-new" type="button" class="primary">+ New route</button>
               <button id="route-stop-all" type="button">Stop everything</button>
             </div>
+          </div>
+          <div class="deadman-row">
+            <label for="deadman-min">Deadman</label>
+            <input id="deadman-min" type="number" min="0" max="1440" step="1">
+            <span class="hint">minutes without you typing before bots pause and
+              nothing automated is sent &mdash; 0 is off</span>
           </div>
           <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
                data-none="No routes yet. Paste a path into a new one."></div>
@@ -861,6 +894,56 @@
               </div>
             </div>
           </div>
+          <div class="fset">
+            <h5>Numpad</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="numpad-mode">Numpad walks</label>
+                <div class="ctl"><select id="numpad-mode">
+                  <option value="off">off</option>
+                  <option value="empty">when the command box is empty</option>
+                  <option value="always">always</option>
+                </select></div>
+                <p class="fhint">With something typed in the box, the keys type
+                  numbers as usual &mdash; unless this says always. Holding a
+                  key down sends once.</p>
+              </div>
+              <div id="numpad-grid" class="numpad"></div>
+              <p class="fhint">Any command, or several separated by
+                <code>;</code>. Leave a key empty and it types its number.</p>
+              <button type="button" id="numpad-reset">Back to the defaults</button>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Sounds</h5>
+            <div class="in">
+              <p class="say">Dings are chosen in the messages window: right-click
+                a line and pick <b>every &hellip; line</b> for its channel, or
+                <b>anything from &hellip;</b> for that person. A tell chimes
+                twice, a channel once. Your own lines never ding, and nor does a
+                channel you have hidden. 3K's own bell &mdash; what somebody's
+                <code>wake</code> sends you &mdash; rings with three notes.</p>
+              <div class="frow">
+                <label for="sound-volume">Volume</label>
+                <div class="ctl"><input id="sound-volume" type="range" min="0"
+                     max="100" step="5"></div>
+              </div>
+              <div class="frow">
+                <label>When</label>
+                <div class="stack">
+                  <label class="check"><input type="checkbox" id="sound-background">
+                    only when the window is in the background</label>
+                  <label class="check"><input type="checkbox" id="sound-bell">
+                    ring when 3K rings the bell (<code>wake</code>)</label>
+                </div>
+              </div>
+              <div class="row">
+                <button type="button" id="sound-test-bell">Test the bell</button>
+                <button type="button" id="sound-test-tell">Test a tell</button>
+                <button type="button" id="sound-test-channel">Test a channel</button>
+              </div>
+            </div>
+          </div>
           <p class="say">Kept in this browser, not on your character, so a
             second window can be laid out differently.</p>
         </section>
@@ -946,6 +1029,35 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                         title="Shows them first; nothing is sent until you confirm."
                         >Set ANSI prefixes</button>
                 <span class="hint">edits live in scripts/prefixes.json</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="fset">
+            <h5>Brief mode</h5>
+            <div class="in">
+              <p class="say">3K's own <code>brief</code> setting. Short
+                descriptions show a room's one-line title instead of its
+                paragraph; the minimap is the one 3K draws beside it. This
+                client draws its own map, so you may not want both.
+                <b id="brief-now"></b></p>
+              <div class="frow">
+                <label for="brief-desc">Descriptions</label>
+                <div class="ctl"><select id="brief-desc">
+                  <option value="off">long</option>
+                  <option value="on">short (brief)</option>
+                </select></div>
+              </div>
+              <div class="frow">
+                <label for="brief-map">3K minimap</label>
+                <div class="ctl"><select id="brief-map">
+                  <option value="yes">shown</option>
+                  <option value="no">hidden</option>
+                </select></div>
+              </div>
+              <div class="row">
+                <button id="brief-send" type="button">Send to 3K</button>
+                <button id="brief-ask" type="button">Ask 3K</button>
               </div>
             </div>
           </div>
@@ -1224,5 +1336,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="about.js"></script>
   <script src="panels.js"></script>
   <script src="fonts.js"></script>
+  <script src="numpad.js"></script>
+  <script src="sound.js"></script>
 </body>
 </html>
