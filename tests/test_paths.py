@@ -363,6 +363,31 @@ def test_the_old_version_is_removed_after_the_new_one_is_installed():
     assert 'After="InstallInitialize"' not in src
 
 
+def test_the_installer_closes_a_running_client_first():
+    """Its interpreter holds files the installer is about to replace.  Closed
+    the way a person would -- its window, so it saves and disconnects itself
+    -- before Windows checks for files in use, and never anything else's."""
+    import base64
+    import re
+
+    import tools.build_msi as msi
+
+    src = msi.source(Path(__file__).resolve().parents[1] / "mud")
+    assert '<Custom Action="FindPowerShell" After="CostFinalize"/>' in src
+    assert '<Custom Action="CloseClient" After="FindPowerShell"/>' in src
+    assert 'Return="ignore"' in src, "a machine where it cannot run still installs"
+    assert "-EncodedCommand [DANKCLOSE]" in src
+    script = base64.b64decode(re.search(r'Property Id="DANKCLOSE" Value="([^"]+)"',
+                                        src).group(1)).decode("utf-16-le")
+    assert script == msi.close_script()
+    assert r"'Programs\Dank Mud Client\'" in script, "only this client's folder"
+    assert r"'dankclient\window'" in script, "only this client's own window"
+    assert script.index("CloseMainWindow") < script.index("Stop-Process"), \
+        "the window first, so it saves; stopping is for what is left"
+    assert "if ($closed)" in script, "nothing to wait for if no window closed"
+    assert "Get-Process msedge" not in script, "never somebody's own Edge"
+
+
 def test_the_installer_source_is_valid_xml():
     """A double hyphen inside an XML comment is illegal, and wixl reports it
     as "Extra content at the end of the document", which is no help at all."""

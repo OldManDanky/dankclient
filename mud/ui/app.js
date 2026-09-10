@@ -286,6 +286,8 @@ function handle(m) {
     if (window.pushMessage) window.pushMessage(m.t, m.d);
   } else if (m.t === 'rules' && window.handleRules) {
     window.handleRules(m);
+  } else if (m.t === 'start' && window.handleStart) {
+    window.handleStart(m);
   } else if (m.t === 'gaglib' && window.handleGaglib) {
     window.handleGaglib(m);
   } else if (m.t === 'marks' && window.handleMarks) {
@@ -720,6 +722,7 @@ function render(s) {
 
   if (window.renderWho) window.renderWho(s.who);
   if (window.renderBrief) window.renderBrief(s.brief);
+  if (window.maybeGetStarted) window.maybeGetStarted(s.start);
   if (window.renderAnsivars) window.renderAnsivars(s.ansivars);
   if (window.renderDeadman) window.renderDeadman(s.deadman);
   if (window.setMe && s.who) window.setMe(s.who.me);

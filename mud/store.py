@@ -176,11 +176,14 @@ _UPGRADES = {
 class Store:
     """The map and the log.  Safe to open on a path that does not exist yet."""
 
-    def __init__(self, path: str | Path = ":memory:") -> None:
+    def __init__(self, path: str | Path = ":memory:", wait: float = 5.0) -> None:
         self.path = path
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path, isolation_level=None)
+        # `wait` is how long a write waits for another connection's to finish.
+        # The session's is short, because it waits on the client's one loop;
+        # a background update's can be long, because nothing waits on it.
+        self.db = sqlite3.connect(path, timeout=wait, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         if path != ":memory:":
@@ -280,7 +283,7 @@ class Store:
             "SELECT room_id, exits, scenery FROM fingerprint "
             "WHERE exits LIKE '%;%'").fetchall()
         fixed = 0
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             for row in rows:
                 kept = [e for e in row["exits"].split(",") if e and ";" not in e]
@@ -315,7 +318,7 @@ class Store:
             "SELECT from_room, command, to_room, seen, failed, last_seen "
             "FROM edge WHERE command LIKE '%#%'").fetchall()
         fixed = 0
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             for row in rows:
                 clean = translate(row["command"])
@@ -359,7 +362,7 @@ class Store:
             seen.setdefault((row["from_room"], flat, row["to_room"]), []).append(row)
 
         dropped = 0
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             for rows in seen.values():
                 if len(rows) < 2:
@@ -391,7 +394,7 @@ class Store:
             "AND EXISTS (SELECT 1 FROM edge e WHERE e.from_room = f.room_id)"
         ).fetchall()
         fixed = 0
-        self.db.execute("BEGIN")
+        self.db.execute("BEGIN IMMEDIATE")
         try:
             for row in rows:
                 rid = int(row["id"])
@@ -579,7 +582,7 @@ class Store:
         if keep == drop:
             return
         db = self.db
-        db.execute("BEGIN")
+        db.execute("BEGIN IMMEDIATE")
         try:
             for column in ("from_room", "to_room"):
                 for row in db.execute(

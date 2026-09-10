@@ -115,4 +115,25 @@ p = open(); setMe('Player');
 check('dings survive a reload', same(hear(() => pushMessage('tell', { who: 'buddy', message: 'again', from_me: false })), ['tell']));
 
 void El;
+// --- tells, in words ---------------------------------------------------------------
+for (const k of Object.keys(saved)) delete saved[k];
+open();
+pushMessage('tell', { who: 'Buddy', message: 'psst', from_me: false });
+pushMessage('tell', { who: 'Buddy', message: 'on my way', from_me: true });
+const who = body().querySelectorAll('.cm-who').map((w) => w.textContent);
+check('a tell to you says who told you', who[0] === 'Buddy tells you:', who);
+check('a tell you sent says who you told', who[1] === 'You tell Buddy:', who);
+check('no arrows', !who.some((w) => /[\u2190\u2192]/.test(w)), who);
+pushMessage('tell', { who: 'Buddy', message: 'moos at you.', from_me: false, soul: true });
+pushMessage('tell', { who: 'Buddy', message: 'you moo at Buddy.', from_me: true, soul: true });
+const all = rows();
+const soulIn = all[all.length - 2];
+const soulOut = all[all.length - 1];
+check('a soul to you reads as 3K prints it, with no "tells you:"',
+  soulIn.children.length === 1 && soulIn.children[0].textContent === 'Buddy moos at you.'
+  && soulIn.className.includes('soul'), soulIn.children.map((c) => c.textContent));
+check('a soul you sent says who it went to',
+  soulOut.children[0].textContent === 'To Buddy:' && soulOut.children[1].textContent === 'You moo at Buddy.',
+  soulOut.children.map((c) => c.textContent));
+
 finish();

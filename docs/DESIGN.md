@@ -597,6 +597,21 @@ A route walks its own path one step at a time, because it stops in each room
 to fight.  Getting somewhere -- `/go`, a click on the map, a route walking to
 its start or back to where it paused -- sends the whole way at once.
 
+A fight has no time limit once it has begun.  There was one, two minutes,
+and some of 3K's creatures take hundreds of rounds: the route took the limit
+for the end of the fight and walked off, leaving its target at "bleeding".
+Only a kill that never starts a fight gives up, after ten seconds; the health
+floor and Stop are what end a fight that should not go on.  And a room is not
+left on 3K's word that the fight is over: after every fight the route
+glances, and steps on only when that glance shows the creature gone and no
+other target in the room -- what 3kdb's own bot does after every kill.  The
+next target is picked from the glance, not from the room as it was on
+arrival, and a kill is counted only once the glance shows it gone.  If three
+glances go unanswered the route stops where it is rather than walking off.  There is no cap on that either:
+a fight takes as long as it takes.  The one thing left alone is a creature
+the kill command will not start a fight with at all, which would otherwise
+hold the route in that room for good.
+
 That used to be one step at a time too, and it went at one step a round: the
 next step waited for the last room to *settle*, a room settles on the next
 message, and between steps that is 3K's two-second sample.  Forty-three walks
@@ -1173,6 +1188,38 @@ picks up a different one is a build whose bugs cannot be reproduced.  What the
 client needs from it was checked rather than assumed -- `_sqlite3` for the map,
 `_ssl` for the update check, `_socket` for the MUD, and `pythonw.exe` for a
 launch with nothing behind it.
+
+### Getting started
+
+A new player used to get the map and nothing else: the line markers the
+mapper leans on were two clicks under Character setup, and saving their own
+colours only helps if it happens *before* those go on.  So the first time each
+character logs in -- MIP live, the character screen gone -- Getting started
+opens, once per window.  Each step says whether it is done, and works it out
+rather than asking: the world's rows are counted; the markers are "on" once a
+room title arrives wrapped in them and "off" after three rooms without; brief
+is what 3K said at login.  Nothing is sent to the character without a click,
+the same show-then-send as everywhere else.  Done is kept per character.
+
+### Closing a running client
+
+An upgrade over a client that is running would stop to ask about files in
+use: its interpreter holds `python\`, which is exactly what is being
+replaced.  So before Windows checks, the installer closes it -- the way a
+person would.  It closes the client's window, found by the window profile
+only this client uses, and the client saves and disconnects itself as it
+does when you close it: the log and the map to disk, the bots stopped, no
+`quit` sent.  It waits for that only if a window was closed, then stops
+whatever is still running from the client's own folder.  Nothing else on the
+machine is touched.
+
+It is PowerShell, run by a custom action, and shaped by what wixl can build:
+wixl has no `Directory` on a custom action, so one action puts PowerShell's
+path in a property and another runs what the property names; the script
+rides in a property of its own, encoded, because a custom action's command
+is a 255-character column and because encoded it holds no brackets for the
+installer to read as its own.  Failure is ignored -- a machine where it
+cannot run gets the files-in-use question it always got.
 
 ## Client commands
 

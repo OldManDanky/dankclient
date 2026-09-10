@@ -67,6 +67,7 @@
   .cm-who{flex:none;color:var(--accent)}
   .cm-txt{flex:1;min-width:0;word-break:break-word;color:var(--ink)}
   .cm-msg.mine .cm-who{color:var(--gp)}
+  .cm-msg.soul .cm-txt{font-style:italic}
   .cm-empty{color:var(--dim);font-style:italic}
   #font-preview{margin:4px 0 0;padding:8px 10px;background:var(--bg);color:var(--ink);
                 border:1px solid var(--line);border-radius:4px;white-space:pre;
@@ -511,6 +512,24 @@
   .route .go{color:var(--good)}
   /* a mark nobody can walk to: there, but not for going to */
   .route.far{opacity:.55}
+  /* Getting started: each step a box, ticked when done. */
+  .gs-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;
+            counter-reset:gs}
+  /* block: the page-wide li rule (made for the room's contents) is a flex row */
+  .gs{display:block;counter-increment:gs;border:1px solid var(--line);border-radius:4px;
+      background:var(--sunk);padding:11px 14px 12px 42px;position:relative}
+  .gs::before{content:counter(gs);position:absolute;left:12px;top:10px;width:20px;height:20px;
+              border-radius:50%;border:1px solid var(--line);color:var(--dim);font-size:11px;
+              display:flex;align-items:center;justify-content:center}
+  .gs.ok::before{content:"\2713";border-color:var(--good);color:var(--good)}
+  .gs-top{display:flex;align-items:baseline;gap:10px}
+  .gs-top b{font-size:13px;font-weight:600}
+  .gs-state{margin-left:auto;font-size:11.5px;color:var(--dim);text-align:right}
+  .gs.ok .gs-state{color:var(--good)}
+  .gs.warn .gs-state{color:var(--enemy)}
+  .gs p{margin:5px 0 8px;font-size:11.5px;line-height:1.55;color:var(--dim);max-width:64ch}
+  .gs .row button{padding:5px 12px;font-size:11.5px}
+  #gs-who{font-weight:400;color:var(--dim);font-size:13px}
   .gag-list{margin:2px 0 0;max-height:18em;overflow:auto;font-size:11px;
             color:var(--dim);background:var(--panel);border:1px solid var(--line);
             border-radius:3px;padding:6px 8px;white-space:pre-wrap}
@@ -748,6 +767,7 @@
     <nav id="opt-tabs">
       <input id="opt-find" type="search" spellcheck="false" autocomplete="off"
              placeholder="Find a setting" aria-label="Find a setting">
+      <button type="button" data-tab="start">Getting started<span class="n"></span></button>
       <div class="opt-group">Automation</div>
       <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
       <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
@@ -778,6 +798,57 @@
         <!-- Every pane: a title, one line saying what it is for, its actions,
              then its settings in boxes.  Why each thing works the way it does
              is in docs/DESIGN.md, not here. -->
+
+        <!-- getting started ------------------------------------------------ -->
+        <section class="opt-pane" data-pane="start" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Getting started <span id="gs-who"></span></h4>
+              <p>A few things worth doing once for each character. Each ticks
+                 itself when it is done, and nothing is sent without a click.</p>
+            </div>
+            <div class="acts">
+              <button id="gs-done" type="button" class="primary">Done</button>
+            </div>
+          </div>
+          <ol id="gs-steps" class="gs-steps">
+            <li class="gs" id="gs-data">
+              <div class="gs-top"><b>The world</b><span class="gs-state"></span></div>
+              <p>The map, the routes and the gag library come from 3kdb. The first
+                 run fetches them by itself; Options &rarr; Updates takes anything new.</p>
+            </li>
+            <li class="gs" id="gs-colours">
+              <div class="gs-top"><b>Save your own colours</b><span class="gs-state"></span></div>
+              <p>Before the next step, if you might go back to another client: the
+                 markers replace a few of your colour settings, and this keeps them
+                 so they can be put back.</p>
+              <div class="row"><button id="gs-colours-save" type="button">Save my current settings</button></div>
+            </li>
+            <li class="gs" id="gs-markers">
+              <div class="gs-top"><b>Line markers</b><span class="gs-state"></span></div>
+              <p>Markers let the client read 3K's room output reliably, so the map
+                 knows where you are about twice as often. You never see them. The
+                 first click shows what will be sent; the second sends it.</p>
+              <div class="row"><button id="gs-markers-set" type="button">Set line markers</button></div>
+            </li>
+            <li class="gs" id="gs-brief">
+              <div class="gs-top"><b>Brief mode</b><span class="gs-state"></span></div>
+              <p>3K's own setting for short or long room descriptions, and its
+                 minimap. The client maps either way.</p>
+              <div class="row"><button type="button" data-go="settings">Change it</button></div>
+            </li>
+            <li class="gs" id="gs-extras">
+              <div class="gs-top"><b>If you like</b><span class="gs-state"></span></div>
+              <p>Hide spam with 3kdb's gags, walk with the numpad, and choose which
+                 tells and channels ding.</p>
+              <div class="row">
+                <button type="button" data-go="gaglib">Gags</button>
+                <button type="button" data-go="keyboard">Numpad</button>
+                <button type="button" data-go="sounds">Sounds</button>
+              </div>
+            </li>
+          </ol>
+        </section>
 
         <!-- routes ------------------------------------------------------- -->
         <section class="opt-pane" data-pane="routes">
@@ -1510,6 +1581,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="bots.js"></script>
   <script src="marks.js"></script>
   <script src="gaglib.js"></script>
+  <script src="start.js"></script>
   <script src="updates.js"></script>
   <script src="help.js"></script>
   <script src="about.js"></script>

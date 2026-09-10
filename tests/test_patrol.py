@@ -392,3 +392,46 @@ def test_a_stack_that_does_not_arrive_walks_the_rest():
         run(scenario())
     finally:
         patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was
+
+
+
+def test_a_long_fight_is_waited_out():
+    """Some creatures take hundreds of rounds.  A two-minute limit walked off
+    and left them bleeding; there is no limit once the fight has begun."""
+    import mud.patrol as patrol
+
+    s, bots, api = build()
+    s._consume(mip("DDD", "n") + mip("HAA", "npc~Cur~Cur, the dog~kill #N"))
+    s._consume(mip("FFF", "A~100"))
+    mob = s.world.room.mobs()[0]
+    was = patrol.START_TIMEOUT, patrol.FIGHT_POLL
+    patrol.START_TIMEOUT, patrol.FIGHT_POLL = 0.05, 0.01
+
+    async def scenario():
+        fight = asyncio.ensure_future(api["attack"](mob))
+        await asyncio.sleep(0)
+        s._consume(mip("FFF", "K~Cur"))
+        await asyncio.sleep(0.3)                 # many polls, well past starting
+        assert not fight.done(), "still fighting, so still waiting"
+        s._consume(mip("FFF", "K~"))
+        assert await asyncio.wait_for(fight, 1) is True
+
+    try:
+        run(scenario())
+    finally:
+        patrol.START_TIMEOUT, patrol.FIGHT_POLL = was
+
+
+def test_a_kill_that_never_starts_a_fight_is_not_a_kill():
+    import mud.patrol as patrol
+
+    s, bots, api = build()
+    s._consume(mip("DDD", "n") + mip("HAA", "npc~Cur~Cur, the dog~kill #N"))
+    s._consume(mip("FFF", "A~100"))
+    mob = s.world.room.mobs()[0]
+    was = patrol.START_TIMEOUT, patrol.FIGHT_POLL
+    patrol.START_TIMEOUT, patrol.FIGHT_POLL = 0.05, 0.01
+    try:
+        assert run(api["attack"](mob)) is False
+    finally:
+        patrol.START_TIMEOUT, patrol.FIGHT_POLL = was

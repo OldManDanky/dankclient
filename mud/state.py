@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from . import codes, events
@@ -111,6 +111,9 @@ class World:
         #: send them, so these stay empty and the UI falls back to your own.
         self.labels: dict[str, str] = {}
         self.tells: deque[Tell] = deque(maxlen=500)
+        #: The last few lines 3K printed, as the player sees them: how a tell
+        #: is told from a soul (codes.told).
+        self.recent: deque[str] = deque(maxlen=6)
         self.chat: deque[Chat] = deque(maxlen=1000)
         #: tells and channels in arrival order, for the monitor
         self.messages: deque[dict] = deque(maxlen=500)
@@ -233,10 +236,12 @@ class World:
 
         elif code == "BAB":
             tell = codes.parse_bab(data)
+            tell = replace(tell, soul=not codes.told(tell, self.recent))
             self.tells.append(tell)
             self.messages.append({
                 "kind": "tell", "at": time.time(), "who": tell.who,
                 "channel": "tell", "text": tell.message, "mine": tell.from_me,
+                "soul": tell.soul,
             })
             self._emit("tell", tell)
             self.log("tell", tell.message, "tell", tell.who)

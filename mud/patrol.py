@@ -51,8 +51,14 @@ MOVE_TIMEOUT = 3.0
 #: stack back to back (six rooms in 0.07s), so this is generous.
 STACK_STEP = 0.05
 
-#: A fight that has not ended in this many seconds is not going to.
-FIGHT_TIMEOUT = 120.0
+#: A kill command that has not started a fight in this many seconds did not
+#: take.  Once one has started there is no limit: some of 3K's creatures take
+#: hundreds of rounds, and a bot that gave up on a fight at two minutes walked
+#: off and left its target bleeding.  The health floor still stops it.
+START_TIMEOUT = 10.0
+
+#: How often a fight with nothing new to say is checked on.
+FIGHT_POLL = 5.0
 
 #: What to send when a step produced nothing, to find out whether it moved
 #: you.  Filtered from the pending queue like any look, so the room block it
@@ -236,11 +242,13 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         session.queue.put(LOOK, HIGH)
         return await bus.wait(events.ROOM, LOOK_TIMEOUT)
 
-    async def attack(target, timeout: float = FIGHT_TIMEOUT):
+    async def attack(target, timeout: float | None = None):
         """Attack, and wait until the fight is over.
 
         The command comes from the MUD's own list for that creature, so this
-        works for anything HAA describes without knowing 3K's verbs.
+        works for anything HAA describes without knowing 3K's verbs.  True
+        once the fight has ended; False if it never began.  No time limit once
+        it has, unless a script passes one.
         """
         check()
         name = getattr(target, "name", str(target))
@@ -250,15 +258,34 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         await gate()
         session.queue.put(verb.replace("#N", name), HIGH)
 
-        deadline = asyncio.get_running_loop().time() + timeout
-        while asyncio.get_running_loop().time() < deadline:
-            enemy = await bus.wait(events.ENEMY, 5.0)
+        loop = asyncio.get_running_loop()
+        begun = False
+        start_by = loop.time() + START_TIMEOUT
+        give_up = None if timeout is None else loop.time() + timeout
+        while give_up is None or loop.time() < give_up:
+            enemy = await bus.wait(events.ENEMY, FIGHT_POLL)
             check()
             if enemy is not None and not enemy:
                 return True                     # "" means the fight ended
-            if not world.player.enemy:
+            # An enemy seen at all means it began -- even if it had already
+            # ended again by the time this woke to look.
+            begun = begun or bool(enemy) or bool(world.player.enemy)
+            if begun and not world.player.enemy:
                 return True
+            if not begun and loop.time() >= start_by:
+                return False                    # the kill never took
         return False
+
+    async def glance(timeout: float = LOOK_TIMEOUT):
+        """Look at the room again without moving, and wait for it.
+
+        3K's short look: the room's contents come back fresh, so a creature
+        that died is gone from them and one that is still here is still here.
+        """
+        check()
+        await gate()
+        session.queue.put("glance", HIGH)
+        return await bus.wait(events.ROOM, timeout)
 
     async def arrive(timeout: float = MOVE_TIMEOUT):
         """Wait for the next room without sending anything."""
@@ -385,6 +412,6 @@ def make_api(session, bots: Bots, owner: str) -> dict:
 
         return bots.start(name, run, owner)
 
-    return {"walk": walk, "attack": attack, "arrive": arrive,
+    return {"walk": walk, "attack": attack, "arrive": arrive, "glance": glance,
             "follow": follow, "travel": travel, "dash": dash, "bot": bot, "patrol": patrol, "bots": bots,
             "stop_bots": bots.stop_all}

@@ -558,3 +558,148 @@ def test_a_go_walk_rides_along_with_the_routes_and_can_be_stopped():
             assert pushed[-1]["walk"]["running"] is False
 
         asyncio.new_event_loop().run_until_complete(scenario())
+
+
+
+def test_a_target_still_here_after_its_fight_is_fought_again():
+    """3K stopped calling the mob our enemy while it was still at "bleeding",
+    and the route walked on and left it.  3kdb's bot glances after every
+    fight and fights on while a target remains; so does this."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e",
+                                       "targets": ["rat"]})
+        rat = mip("HAA", "npc~rat~A leaping rat~kill #N")
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            s._consume(mip("DDD", "s~e") + rat)
+            s._consume(mip("FFF", "A~100"))              # the room settles
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "kill rat"
+            s._consume(mip("FFF", "K~rat"))              # fighting
+            s._consume(mip("FFF", "K~"))                 # ...no longer our enemy
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "glance", "looks before moving on"
+            s._consume(mip("DDD", "s~e") + rat)          # and it is still there
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "kill rat", "so it fights on"
+            s._consume(mip("FFF", "K~rat"))
+            s._consume(mip("FFF", "K~"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "glance"
+            s._consume(mip("DDD", "s~e"))                # gone now
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.05)
+            assert s.sent[-1] == "e", "and only then steps on"
+            assert s.sent.count("kill rat") == 2
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_target_that_will_not_fight_does_not_hold_the_route():
+    """No cap on fighting -- but a kill that never starts a fight is not a
+    fight, and trying it for ever would leave the route in that room."""
+    import mud.patrol as patrol
+
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e",
+                                       "targets": ["rat"]})
+        rat = mip("HAA", "npc~rat~A leaping rat~kill #N")
+        was = patrol.START_TIMEOUT, patrol.FIGHT_POLL
+        patrol.START_TIMEOUT, patrol.FIGHT_POLL = 0.05, 0.01
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            s._consume(mip("DDD", "s~e") + rat)
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "kill rat"
+            await asyncio.sleep(0.2)                     # no fight ever starts
+            assert s.sent[-1] == "glance"
+            s._consume(mip("DDD", "s~e") + rat)          # still there
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.05)
+            assert s.sent[-1] == "e"
+            assert s.sent.count("kill rat") == 1
+
+        try:
+            asyncio.new_event_loop().run_until_complete(scenario())
+        finally:
+            patrol.START_TIMEOUT, patrol.FIGHT_POLL = was
+
+
+def test_every_kill_is_followed_by_a_glance_before_the_next():
+    """After each killing blow: glance, see it gone, see what else is here.
+    The next target is picked from that glance, not the room as it was."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e",
+                                       "targets": ["rat", "Cur"]})
+        rat = mip("HAA", "npc~rat~A leaping rat~kill #N")
+        cur = mip("HAA", "npc~Cur~Cur, the dog~kill #N")
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            s._consume(mip("DDD", "s~e") + rat + cur)
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "kill rat"
+            s._consume(mip("FFF", "K~rat"))
+            s._consume(mip("FFF", "K~"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "glance", "a glance after the first kill"
+            s._consume(mip("DDD", "s~e") + cur)          # the rat is gone
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "kill Cur"
+            s._consume(mip("FFF", "K~Cur"))
+            s._consume(mip("FFF", "K~"))
+            await asyncio.sleep(0.02)
+            assert s.sent[-1] == "glance", "and after the second"
+            s._consume(mip("DDD", "s~e"))                # clear
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.05)
+            assert s.sent[-1] == "e"
+            assert s.sent.count("glance") == 2
+            assert host.bots.bots["hunt"].kills == 2
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_room_it_cannot_see_after_a_fight_is_not_left():
+    """It moves on only once a glance has shown the room clear; with no
+    answer it stops where it is rather than walking off."""
+    import mud.patrol as patrol
+
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e",
+                                       "targets": ["rat"]})
+        rat = mip("HAA", "npc~rat~A leaping rat~kill #N")
+        was = patrol.LOOK_TIMEOUT
+        patrol.LOOK_TIMEOUT = 0.02
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            s._consume(mip("DDD", "s~e") + rat)
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.02)
+            s._consume(mip("FFF", "K~rat"))
+            s._consume(mip("FFF", "K~"))
+            await asyncio.sleep(0.3)                     # glances go unanswered
+            assert "e" not in s.sent
+            bot = host.bots.bots["hunt"]
+            assert not bot.running
+            assert "did not move on" in bot.note
+
+        try:
+            asyncio.new_event_loop().run_until_complete(scenario())
+        finally:
+            patrol.LOOK_TIMEOUT = was

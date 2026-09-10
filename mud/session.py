@@ -10,6 +10,7 @@ Wires the pieces together::
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import re
 import socket
@@ -252,11 +253,19 @@ class Session:
         #: setting is the truth and it can be changed from anywhere.
         self.brief: dict | None = None
         self._brief_asked = False
+        #: Whether the character's line markers are on, told from what arrives:
+        #: rooms, and room titles wrapped in the markers.  (Getting started.)
+        self.rooms_seen = 0
+        self.marked_titles = 0
+        #: The first run's fetch of the world, for Getting started to show.
+        self.fetching = False
+        self.fetch_said = ""
         #: the character's own colour settings, read off 3K's ansivars page
         #: when asked and kept so they can be put back
         self.ansivars = AnsiVars(self._ansivars_path())
         self._ansi_began = self._ansi_heard = 0.0
         self.bus.on(events.LINE, self._on_line)
+        self.bus.on(events.ROOM, self._count_room)
         # Asked on the game's beat, so the deadman trips when the time is up
         # rather than at the next thing that happens to want to send.
         self.bus.on(events.TICK, lambda *_: self.deadman.tripped)
@@ -510,6 +519,7 @@ class Session:
         self.reload_prefixes()
         self.mip_seen = False
         self.brief, self._brief_asked = None, False   # a new login
+        self.rooms_seen = self.marked_titles = 0
         self.jumpstarted = False
         self._armed = False
         self._last_jumpstart = 0.0
@@ -654,6 +664,33 @@ class Session:
             self.ansivars = AnsiVars(self._ansivars_path())
         # Another character's gag groups come with their markers.
         self.apply_gag_groups()
+        # ...and their own answer to whether their markers are on.
+        self.rooms_seen = self.marked_titles = 0
+
+    # --- getting started ---------------------------------------------------------
+
+    def _count_room(self, _room) -> None:
+        self.rooms_seen += 1
+
+    def markers_state(self) -> str:
+        """'on', 'off', or 'unknown' until a few rooms have been seen."""
+        if self.marked_titles:
+            return "on"
+        return "off" if self.rooms_seen >= 3 else "unknown"
+
+    def _start_path(self) -> Path:
+        return Path(self.prefixes_path).with_name("getting-started.json")
+
+    @property
+    def start_done(self) -> bool:
+        try:
+            return bool(json.loads(self._start_path().read_text()).get("done"))
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def set_start_done(self, done: bool) -> None:
+        from .paths import write_atomically
+        write_atomically(self._start_path(), json.dumps({"done": bool(done)}))
 
     # --- 3kdb's gags -------------------------------------------------------------
 
@@ -733,12 +770,17 @@ class Session:
                 # The pager waits for a key; Enter is the one that goes on.
                 self.send("")
         for raw, plain in self._lines.feed(data):
+            # What was printed, for telling a tell from a soul when its BAB
+            # arrives: 3K prints a tell just before it.
+            self.world.recent.append(plain.strip())
             # Before the markers come out: they are what is being read.
             self.ansivars.line(raw)
             # The markup reader gets the markers; it is the one thing that
             # wants them.  Everything downstream of here sees the line the
             # player sees, so a trigger can be written against that.
             title = self.markup.feed(plain)
+            if title:
+                self.marked_titles += 1
             if title and title.get("closed") and title.get("exits"):
                 self._title_arrived(title["exits"])
             shown, was = self.hidden.line(plain), plain

@@ -119,11 +119,14 @@
   // --- reading a line -------------------------------------------------------
 
   // BAB names the other party either way, so the direction has to be shown or
-  // an incoming tell is indistinguishable from one you sent.  Arrow both:
-  //   ←Someone    they told you
-  //   →Someone    you told them
+  // an incoming tell is indistinguishable from one you sent.  In words, the
+  // way the MUD says it, rather than arrows somebody has to learn:
+  //   Someone tells you:   they told you
+  //   You tell Someone:    you told them
+  // A soul -- an emote sent over tell -- is not something said, so it is not
+  // "tells you:".  The server works out which it was from what 3K printed.
   function speaker(m) {
-    return (m.mine ? '→' : '←') + m.who;
+    return m.mine ? `You tell ${m.who}:` : `${m.who} tells you:`;
   }
 
   // CAA's last field is the line the MUD already printed, and every channel
@@ -227,7 +230,7 @@
     for (const m of shown.slice(-LIMIT)) {
       const row = document.createElement('div');
       row.className = 'cm-msg' + (m.kind === 'tell' ? ' tell' : '') +
-        (m.mine ? ' mine' : '');
+        (m.soul ? ' soul' : '') + (m.mine ? ' mine' : '');
       row.title = new Date((m.at || 0) * 1000).toLocaleTimeString() +
         '  |  ' + (m.channel || '') + '  |  ' + (m.text || '') +
         '\nright-click to colour';
@@ -254,11 +257,19 @@
 
       // BAB is the other way round from CAA: its message often omits the name
       // ("moos at you."), so a tell still needs a speaker beside it.
-      if (m.kind === 'tell') {
+      if (m.kind === 'tell' && m.soul && !m.mine) {
+        // As 3K prints it, less "From afar,": "Someone moos at you."
+        txt.textContent = `${m.who} ${m.text || ''}`;
+        row.append(txt);
+      } else if (m.kind === 'tell') {
         const who = document.createElement('span');
         who.className = 'cm-who';
-        who.textContent = speaker(m);
+        who.textContent = m.soul ? `To ${m.who}:` : speaker(m);
         if (colour) who.style.color = colour;
+        if (m.soul && m.text) {
+          // "you moo at Someone." -- and half of them never name who it went to.
+          txt.textContent = m.text.charAt(0).toUpperCase() + m.text.slice(1);
+        }
         row.append(who, txt);
       } else {
         row.append(txt);
@@ -402,7 +413,7 @@
   window.pushMessage = function (kind, d) {
     messages.push(kind === 'tell'
       ? { kind, at: Date.now() / 1000, who: d.who, channel: 'tell',
-          text: d.message, mine: !!d.from_me }
+          text: d.message, mine: !!d.from_me, soul: !!d.soul }
       : { kind, at: Date.now() / 1000, who: d.who, channel: d.channel,
           command: d.command, text: d.message, mine: false });
     const latest = messages[messages.length - 1];

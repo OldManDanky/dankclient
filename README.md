@@ -31,6 +31,11 @@ can read, and it is never written to the logs.
 
 ## Playing
 
+The first time each character logs in, **Getting started** opens: the world
+data (fetched by itself), saving your own colours, the line markers that let
+the map find you, brief mode, and a few extras.  Each step ticks itself when
+it is done; press **Done** when you are.  It stays at the top of **Options**.
+
 The three buttons above the map are the ones you will use most:
 
 - **Options** -- routes and bots, triggers, aliases and timers; layout, fonts,
@@ -95,6 +100,8 @@ In the messages window, **right-click** a line to colour it: every line on
 that channel, or everything from that person.  Clicking a line still puts a
 reply in the command box.  The **mine** tag at the end of the channel tags
 hides what you said yourself, so only everybody else's lines are left.
+Tells read **Someone tells you:** and **You tell Someone:**; a soul sent over
+tell reads as 3K prints it -- *Someone moos at you.* -- in italics.
 
 **Dings.**  Right-click a line in the messages window and choose **every ...
 line** to hear a ding for that channel (or every tell), or **anything from
@@ -137,8 +144,10 @@ again and typing replaces it.
 ## Updates
 
 **The client**: **Options -> About** says when a newer version is out.
-Download the new MSI and run it over the top.  Your map, characters and
-settings are kept.
+Download the new MSI and run it over the top -- there is no need to close
+the client first: the installer closes it for you, and it saves and
+disconnects as it would if you had closed it yourself.  Your map, characters
+and settings are kept.
 
 **The map and bots**: **Options -> Updates** checks 3kdb and takes what has
 changed.  It only ever adds: rooms you have renamed and routes you have made

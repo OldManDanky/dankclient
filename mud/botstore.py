@@ -21,7 +21,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .paths import set_aside, write_atomically
-from .patrol import wanted
+from .patrol import Stopped, wanted
+
+#: Glances after a fight that may go unanswered before the route stops.  It
+#: stops rather than moving on: it only leaves a room it has seen is clear.
+GLANCE_TRIES = 3
 
 #: How many times one step may be repeated.  A cap, because "999n" in a path
 #: is a typo far more often than it is a plan.
@@ -268,10 +272,35 @@ class RouteStore:
                 while room.players():
                     await asyncio.sleep(2.0)
                 bot.note = ""
-            for mob in room.mobs():
-                if wanted(mob, targets):
-                    if await attack(mob):
-                        bot.kills += 1
+            # As 3kdb's own bot does: after every fight, glance.  The route
+            # moves on only when that glance shows the creature gone and no
+            # other target here.  3K stops calling a creature your enemy when
+            # it stops fighting back -- at "bleeding", say -- and a route that
+            # took that as the end of it walked on and left it.  No limit on
+            # how long: a fight takes as long as it takes.  Only a creature
+            # the kill command will not start a fight with at all is left
+            # alone, or it would hold the route there for good.
+            refused: set[str] = set()
+            while True:
+                mobs = self.host.session.world.room.mobs()
+                here_now = [m for m in mobs
+                            if wanted(m, targets) and m.name not in refused]
+                if not here_now:
+                    break
+                mob = here_now[0]
+                had = sum(1 for m in mobs if m.name == mob.name)
+                if not await attack(mob):
+                    refused.add(mob.name)
+                for _ in range(GLANCE_TRIES):
+                    if await api["glance"]():
+                        break
+                else:
+                    raise Stopped("could not see the room after a fight, "
+                                  "so did not move on")
+                left = sum(1 for m in self.host.session.world.room.mobs()
+                           if m.name == mob.name)
+                if left < had:
+                    bot.kills += 1                  # seen gone, not assumed
             if route.rest:
                 await asyncio.sleep(route.rest)
 

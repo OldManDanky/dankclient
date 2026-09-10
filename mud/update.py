@@ -419,7 +419,8 @@ def on_a_thread(store_path, routes_path, want=None, note=None) -> dict:
     class Bare:
         bots = None
 
-    mine = Store(store_path) if store_path else None
+    # Off the loop, so it can afford to wait for the session's writes.
+    mine = Store(store_path, wait=60.0) if store_path else None
     theirs = None
     if routes_path:
         theirs = RouteStore(Bare(), routes_path)

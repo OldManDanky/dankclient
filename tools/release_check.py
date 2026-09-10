@@ -17,6 +17,7 @@ checks are the ones that caught a release with no Python in it.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import re
 import shutil
@@ -92,12 +93,22 @@ def check_installer(results: list) -> None:
         problems.append("the old version is removed before the new one is in (0.2.0's bug)")
     if "SayWhere" not in actions:
         problems.append("the finish screen will not say where it installed")
+    closing = re.search(r"^CloseClient\t(\d+)\tDANKPS\t[^\n]*\[DANKCLOSE\]", actions, re.M)
+    script = re.search(r"^DANKCLOSE\t(\S+)", props, re.M)
+    if not closing or int(closing.group(1)) & 0x3F != 50:
+        problems.append("it will not close a running client first")
+    elif not (order.get("CostFinalize", 0) < order.get("CloseClient", 0)
+              < order.get("InstallValidate", 0)):
+        problems.append("it closes the client too late -- after the files-in-use check")
+    elif not script or "CloseMainWindow" not in base64.b64decode(
+            script.group(1)).decode("utf-16-le"):
+        problems.append("the script that closes the client is not in the installer whole")
     if problems:
         for p in problems:
             print(f"  PROBLEM  {p}")
     else:
         print(f"version {__version__}, upgrade code unchanged, old version removed after "
-              "the new one is in, finish screen says where")
+              "the new one is in, finish screen says where, closes a running client first")
     results.append(("installer, taken apart", not problems))
 
 

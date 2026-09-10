@@ -429,6 +429,9 @@ class WebServer:
             },
             "who": self._who(),
             "brief": getattr(self.session, "brief", None),
+            "start": ({"done": self.session.start_done,
+                       "live": bool(getattr(self.session, "mip_seen", False))}
+                      if hasattr(self.session, "set_start_done") else None),
             "ansivars": (self.session.ansivars.summary(self.session.markers())
                          if getattr(self.session, "ansivars", None) else None),
             "deadman": (self.session.deadman.state()
@@ -874,6 +877,9 @@ class WebServer:
         if kind == "gaglib":
             self._gaglib_op(msg)
             return
+        if kind == "start":
+            self._start_op(msg)
+            return
         if kind == "help":
             from .commands import HELP
 
@@ -1029,6 +1035,35 @@ class WebServer:
         label = (row["name"] if row and row["name"] else f"room #{dest}")
         self.session.travel(dest, "speedwalk", label)
         self.note(f"walking {len(route)} steps")
+
+    def _start_op(self, msg: dict) -> None:
+        """Options -> Getting started: each step, and whether it is done."""
+        s = self.session
+        if msg.get("op") == "done":
+            s.set_start_done(bool(msg.get("on", True)))
+            self._dirty = True
+        store = getattr(s, "store", None)
+        rooms = 0
+        if store is not None:
+            try:
+                rooms = store.db.execute("SELECT count(*) FROM room").fetchone()[0]
+            except Exception:
+                rooms = 0
+        routes = getattr(self.scripts, "routes", None) if self.scripts else None
+        from .gaglib import load_library
+        groups = load_library(s.gaglib_path).get("groups", [])
+        self.push({"t": "start", "op": "state",
+                   "who": s.who_am_i,
+                   "done": s.start_done,
+                   "live": bool(getattr(s, "mip_seen", False)),
+                   "data": {"rooms": rooms,
+                            "routes": len(routes.routes) if routes is not None else 0,
+                            "gag_groups": len(groups),
+                            "fetching": s.fetching, "said": s.fetch_said},
+                   "colours": s.ansivars.summary(s.markers()),
+                   "markers": s.markers_state(),
+                   "brief": s.brief,
+                   "gags_on": len(s.gag_groups())})
 
     def _gaglib_push(self) -> None:
         """Options -> Gag library: each group, what is in it, and whether it is on."""

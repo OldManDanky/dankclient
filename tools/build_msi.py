@@ -105,6 +105,54 @@ def licence_rtf(plain: Path) -> str:
             r"\fs16 " + body + "}")
 
 
+def close_script() -> str:
+    """PowerShell that closes a running client before any file is replaced.
+
+    The way a person would: close its window, and the client saves and
+    disconnects on its own -- the log and the map go to disk, the bots stop,
+    no `quit` is sent, exactly as Disconnect does.  Only if a window was
+    closed is there anything to wait for, and then no longer than it takes.
+    Whatever is still running after that is stopped: a process whose program
+    is in this client's folder, or an Edge (or Chrome) running the client's
+    own window profile.  Nothing else on the machine is touched.
+    """
+    return f"""$ErrorActionPreference = 'SilentlyContinue'
+$program = Join-Path $env:LOCALAPPDATA '{PROGRAMS}\\{NAME}\\'
+$window = Join-Path $env:LOCALAPPDATA '{SLUG}\\window'
+function Get-Client {{
+  Get-CimInstance Win32_Process | Where-Object {{
+    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($program, [StringComparison]::OrdinalIgnoreCase) }}
+}}
+function Get-ClientWindow {{
+  Get-CimInstance Win32_Process | Where-Object {{
+    $_.CommandLine -and $_.CommandLine.IndexOf($window, [StringComparison]::OrdinalIgnoreCase) -ge 0 }}
+}}
+$closed = $false
+foreach ($w in @(Get-ClientWindow)) {{
+  $p = Get-Process -Id $w.ProcessId
+  if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) {{
+    if ($p.CloseMainWindow()) {{ $closed = $true }}
+  }}
+}}
+if ($closed) {{
+  $until = (Get-Date).AddSeconds(15)
+  while (@(Get-Client).Count -gt 0 -and (Get-Date) -lt $until) {{ Start-Sleep -Milliseconds 250 }}
+}}
+foreach ($c in @(Get-Client) + @(Get-ClientWindow)) {{ Stop-Process -Id $c.ProcessId -Force }}
+exit 0
+"""
+
+
+def close_encoded() -> str:
+    """The script as -EncodedCommand wants it: UTF-16LE, then base64.
+
+    Encoded, it carries no quotes, brackets or braces for the installer to
+    read as its own [PROPERTY] syntax.
+    """
+    import base64
+    return base64.b64encode(close_script().encode("utf-16-le")).decode("ascii")
+
+
 def source(root: Path) -> str:
     body, components = tree(root)
     refs = "\n".join(f'      <ComponentRef Id="{c}"/>' for c in components)
@@ -142,8 +190,30 @@ def source(root: Path) -> str:
          round to fail. (No double hyphens in here: XML comments forbid them,
          and wixl says only "Extra content at the end of the document".) -->
     <InstallExecuteSequence>
+      <Custom Action="FindPowerShell" After="CostFinalize"/>
+      <Custom Action="CloseClient" After="FindPowerShell"/>
       <RemoveExistingProducts After="InstallFinalize"/>
     </InstallExecuteSequence>
+
+    <!-- A running client first.  Its interpreter holds files this is about to
+         replace, and Windows would otherwise stop to ask about files in use,
+         or worse, want a restart.  So close it, before InstallValidate checks:
+         its window first, which makes the client save and disconnect itself,
+         then anything of its still running.  See close_script.
+
+         Two actions because wixl has no Directory attribute on a custom
+         action: one puts PowerShell's path in a property, the other runs
+         whatever that property names (type 50), with the script itself in a
+         property of its own, since a custom action's command is a 255
+         character column and the encoded script is thousands.  Return is
+         ignore: a machine where this cannot run gets the files in use
+         question it always got, and an install that goes on. -->
+    <Property Id="DANKCLOSE" Value="{close_encoded()}"/>
+    <CustomAction Id="FindPowerShell" Property="DANKPS"
+                  Value="[SystemFolder]WindowsPowerShell\\v1.0\\powershell.exe"/>
+    <CustomAction Id="CloseClient" Property="DANKPS" Execute="immediate"
+                  Return="ignore"
+                  ExeCommand="-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand [DANKCLOSE]"/>
 
     <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>
 

@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -91,5 +93,26 @@ def ui_tests() -> tuple[int, int]:
     return passed, failed
 
 
+def in_scratch(fn) -> int:
+    """Run with every temporary folder under one, removed afterwards.
+
+    Tests make folders with mkdtemp, which nothing cleans up: 12,950 of them,
+    37 GB, had filled the disk.  One folder for the whole run, TMPDIR too so
+    anything it starts uses it, and gone when the run is.
+    """
+    scratch = tempfile.mkdtemp(prefix="dankclient-tests-")
+    was, was_dir = os.environ.get("TMPDIR"), tempfile.tempdir
+    os.environ["TMPDIR"] = tempfile.tempdir = scratch
+    try:
+        return fn()
+    finally:
+        tempfile.tempdir = was_dir
+        if was is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = was
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(in_scratch(main))

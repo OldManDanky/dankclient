@@ -13,10 +13,13 @@ what happened in the Temple of Hod, not just when.
 
 from __future__ import annotations
 
+import sqlite3
 import time
 
 MAX_PENDING = 200
 FLUSH_AFTER = 2.0
+#: After a flush the file was too busy for, how long before trying again.
+RETRY_AFTER = 2.0
 
 
 class Logbook:
@@ -27,6 +30,8 @@ class Logbook:
                            else session_id)
         self._pending: list[tuple] = []
         self._last_flush = time.monotonic()
+        #: not before this: the last flush found the file busy
+        self._hold_until = 0.0
 
     def close(self) -> None:
         """Everything on disk, and the session marked finished.
@@ -89,6 +94,8 @@ class Logbook:
              text)
         )
         now = time.monotonic()
+        if now < self._hold_until:
+            return
         if (len(self._pending) >= MAX_PENDING
                 or now - self._last_flush >= FLUSH_AFTER):
             self.flush()
@@ -100,7 +107,15 @@ class Logbook:
         rows, self._pending = self._pending, []
         self._last_flush = time.monotonic()
         db = self.store.db
-        db.execute("BEGIN")
+        try:
+            db.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError:
+            # Somebody else is writing -- Take updates, merging the map.  The
+            # lines are kept and tried again shortly: losing them, or stopping
+            # the session over it, would both be worse than waiting.
+            self._pending = rows + self._pending
+            self._hold_until = time.monotonic() + RETRY_AFTER
+            return
         try:
             for row in rows:
                 cur = db.execute(
@@ -110,6 +125,10 @@ class Logbook:
                 db.execute("INSERT INTO line_fts (rowid, text) VALUES (?,?)",
                            (cur.lastrowid, row[-1]))
             db.execute("COMMIT")
+        except sqlite3.OperationalError:
+            db.execute("ROLLBACK")
+            self._pending = rows + self._pending
+            self._hold_until = time.monotonic() + RETRY_AFTER
         except Exception:
             db.execute("ROLLBACK")
             raise

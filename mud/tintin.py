@@ -87,6 +87,15 @@ DIRECTIVE = re.compile(r"^#(\w+)")
 #: spacers end.
 VOID = 8
 
+#: Rows per transaction when importing.  Take updates runs beside a live
+#: session, and one transaction for the whole merge held the file for as long
+#: as the merge took -- four seconds here, longer on a slower machine with a
+#: virus scanner watching -- so the session's own writes, which wait five,
+#: failed with "database is locked".  In pieces, the session's writes go in
+#: between.  A merge only adds, so stopping halfway leaves nothing wrong, and
+#: it is recorded as taken only once all of it is in.
+CHUNK = 5000
+
 #: No edge is worth more than this many commands.  `#31 climb` is real and
 #: means it, but a mis-read number should not empty the rate limiter.
 MOST_REPEATS = 50
@@ -196,18 +205,23 @@ def import_map(store, path: str | Path, progress=None,
     in_void = False
 
     def flush() -> None:
-        db.executemany(
-            f"{verb} INTO room "
-            "(id, name, region_id, first_seen, last_seen, visits, note) "
-            "VALUES (?,?,?,?,?,0,?)", rooms)
-        db.executemany(
-            f"{verb} INTO fingerprint "
-            "(room_id, exits, scenery, seen, last_seen) VALUES (?,?,'',0,?)",
-            prints)
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            db.executemany(
+                f"{verb} INTO room "
+                "(id, name, region_id, first_seen, last_seen, visits, note) "
+                "VALUES (?,?,?,?,?,0,?)", rooms)
+            db.executemany(
+                f"{verb} INTO fingerprint "
+                "(room_id, exits, scenery, seen, last_seen) VALUES (?,?,'',0,?)",
+                prints)
+            db.execute("COMMIT")
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
         rooms.clear()
         prints.clear()
 
-    db.execute("BEGIN")
     try:
         for kind, got in read_map(path):
             if kind == "R":
@@ -253,7 +267,7 @@ def import_map(store, path: str | Path, progress=None,
                 prints.append((vnum, ",".join(sorted(set(e.lower()
                                                         for e in exits))), now))
                 current = vnum
-                if len(rooms) >= 5000:
+                if len(rooms) >= CHUNK:
                     flush()
                     if progress:
                         progress(current)
@@ -320,13 +334,20 @@ def import_map(store, path: str | Path, progress=None,
         # never defined can be dropped rather than left dangling.
         known = {int(r["id"]) for r in db.execute("SELECT id FROM room")}
         good = [e for e in edges if e[2] in known and e[0] in known]
-        db.executemany(
-            f"{verb} INTO edge "
-            "(from_room, command, to_room, seen, last_seen) VALUES (?,?,?,0,?)",
-            good)
-        db.execute("COMMIT")
+        for at in range(0, len(good), CHUNK):
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.executemany(
+                    f"{verb} INTO edge "
+                    "(from_room, command, to_room, seen, last_seen) "
+                    "VALUES (?,?,?,0,?)", good[at:at + CHUNK])
+                db.execute("COMMIT")
+            except Exception:
+                db.execute("ROLLBACK")
+                raise
     except Exception:
-        db.execute("ROLLBACK")
+        if db.in_transaction:
+            db.execute("ROLLBACK")
         raise
 
     # tt++ leaves the exits out of some room titles -- 5.2% of one real map
@@ -488,7 +509,7 @@ def import_speedruns(store, path: str | Path) -> tuple[int, list[str]]:
     db = store.db
     known = {int(r["id"]) for r in db.execute("SELECT id FROM room")}
     added, missing = 0, []
-    db.execute("BEGIN")
+    db.execute("BEGIN IMMEDIATE")
     try:
         for line in Path(path).read_text(encoding="latin-1").splitlines():
             hit = SPEEDRUN.match(line)

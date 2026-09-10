@@ -327,6 +327,7 @@ async def amain(args: argparse.Namespace) -> int:
         """
         _note("first run -- fetching the map and bot library from 3kdb "
               "(about 10MB, once)")
+        session.fetching, session.fetch_said = True, "fetching the world from 3kdb..."
         try:
             got = await asyncio.to_thread(
                 update.on_a_thread, args.map,
@@ -334,10 +335,12 @@ async def amain(args: argparse.Namespace) -> int:
         except Exception as exc:
             _note(f"could not fetch it: {type(exc).__name__}: {exc}")
             _note("the client works without it; Options -> Updates will retry")
+            session.fetching, session.fetch_said = False, "could not fetch it -- Options -> Updates will retry"
             return
         if got.get("error"):
             _note(f"could not fetch it: {got['error']}")
             _note("the client works without it; Options -> Updates will retry")
+            session.fetching, session.fetch_said = False, "could not fetch it -- Options -> Updates will retry"
             return
         did = got.get("did", {})
         rooms = (did.get("map") or {}).get("rooms", 0)
@@ -345,6 +348,7 @@ async def amain(args: argparse.Namespace) -> int:
         marks = (did.get("speedruns") or {}).get("added", 0)
         _note(f"ready: {rooms} rooms, {marks} named destinations, "
               f"{routes} routes")
+        session.fetching, session.fetch_said = False, ""
         # The store and the route list were written by another thread's
         # connection; this side is holding what it read before.
         if host is not None and getattr(host, "routes", None) is not None:

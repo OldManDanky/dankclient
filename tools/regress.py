@@ -238,4 +238,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Every capture replays on its own copy of the map, in a temporary folder
+    # nothing removed: 20 MB a capture, and they had filled the disk.  The
+    # test runner's helper keeps them in one folder that goes afterwards --
+    # loaded from this checkout by path, since --code puts another first.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run", HERE / "tests" / "run.py")
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    sys.exit(runner.in_scratch(main))

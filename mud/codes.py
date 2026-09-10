@@ -230,6 +230,9 @@ class Tell:
     from_me: bool
     who: str
     message: str
+    #: A soul -- an emote sent over tell, "From afar, Someone moos at you." --
+    #: rather than something said.  BAB does not say which; see told().
+    soul: bool = False
 
 
 @dataclass(frozen=True)
@@ -264,6 +267,23 @@ def parse_bab(data: str) -> Tell:
     # observed outbound: "x~Someone~moo" -- the flag is a literal "x", not a digit
     flag, who, message = fields(data, 3)[:3]
     return Tell(from_me=flag.strip().lower() == "x", who=who, message=message)
+
+
+def told(tell: Tell, recent) -> bool:
+    """Was this said, rather than a soul?  Decided from what 3K printed.
+
+    BAB carries a tell and a soul alike -- who, and the words -- and nothing in
+    the words tells them apart ("thanks, you rock" reads like "moos at you.").
+    What 3K prints does.  Measured over every tell in the captures: a tell is
+    printed *before* its BAB, as "Someone tells you: ..." or "You tell
+    Someone: ...", all 33 of them; a soul is printed as "From afar, Someone
+    moos at you.", after its BAB 52 times out of 61.  So it was a tell exactly
+    when one of the last few lines printed is that tell -- the right person
+    and the start of these words, so an earlier tell from them does not count.
+    """
+    lead = f"You tell {tell.who}:" if tell.from_me else f"{tell.who} tells you:"
+    start = tell.message[:20]
+    return any(line.startswith(lead) and start in line for line in recent)
 
 
 def parse_caa(data: str) -> Chat:
