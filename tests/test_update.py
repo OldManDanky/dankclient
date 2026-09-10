@@ -263,3 +263,33 @@ def test_it_only_tells_you_and_never_installs():
     after = src[src.index("def newer_release"):]
     for danger in ("urlretrieve", "subprocess", "os.system", "startfile"):
         assert danger not in after, danger
+
+
+# --- a fixed importer is new data --------------------------------------------
+
+def test_mending_an_importer_offers_the_data_again():
+    """The route library sat at 67 of 145 because .add_bot lines with six
+    fields were skipped. 3kdb had not changed, so a client that had already
+    pulled would never have taken the fix -- the record saying "we have this"
+    is what would have frozen the bug in."""
+    store = Store()
+    shas = watching()
+    update.remember(store, with_tree(shas, lambda: update.check(store)),
+                    list(update.WANTED))
+    assert with_tree(shas, lambda: update.check(store))["changed"] == []
+
+    was = update.IMPORTERS["bots"]
+    try:
+        update.IMPORTERS["bots"] = was + 1
+        assert with_tree(shas, lambda: update.check(store))["changed"] == ["bots"]
+    finally:
+        update.IMPORTERS["bots"] = was
+
+
+def test_what_is_remembered_says_how_it_was_read():
+    store = Store()
+    shas = watching()
+    got = with_tree(shas, lambda: update.check(store))
+    update.remember(store, got, ["bots"])
+    kept = store.setting("3kdb:bots", "")
+    assert kept.endswith(f"/{update.IMPORTERS['bots']}"), kept

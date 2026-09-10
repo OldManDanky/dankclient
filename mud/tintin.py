@@ -288,8 +288,30 @@ def import_map(store, path: str | Path, progress=None,
 # from one place, and walked from anywhere else it is fifty steps through the
 # wrong part of the world.
 
-ADD_BOT = re.compile(
-    r"^\s*\.?add_bot\s*" + r"\s*".join([r"\{(.*?)\}"] * 7) + r"\s*;?\s*$")
+ADD_BOT = re.compile(r"^\s*\.?add_bot\b(.*)$")
+BRACED = re.compile(r"\{([^{}]*)\}")
+
+#: What the fields mean, in order.  Everything after the fourth is optional.
+BOT_FIELDS = ("file", "alias", "desc", "vnum", "loop", "polite", "tags")
+
+
+def read_add_bot(line: str) -> dict | None:
+    """The fields of one `.add_bot` line, or None if it is not one.
+
+    3kdb writes six of them or seven: the tags on the end are optional, and 78
+    of the 145 definitions leave them off.  Insisting on seven found 67 and
+    silently skipped the rest -- Section Z, the Abyss, the Catacombs, the
+    Portal of Life -- with nothing to say it had, because a line that does not
+    match is not a line that failed.
+    """
+    head = ADD_BOT.match(line)
+    if head is None:
+        return None
+    got = [field.strip() for field in BRACED.findall(head.group(1))]
+    if len(got) < 4:                       # file, alias, desc and a room
+        return None
+    got += [""] * (len(BOT_FIELDS) - len(got))
+    return dict(zip(BOT_FIELDS, got))
 BOT_PATH = re.compile(r"#var\s*\{?bot\[path\]\}?\s*\{")
 BOT_MOB = re.compile(r"\{long\}\s*\{(.*?)\}\s*\{target\}\s*\{(.*?)\}")
 BOT_SETUP = re.compile(r"^\s*(?!#|\.)([a-z][\w ]*)\s*;\s*$")
@@ -343,11 +365,11 @@ def import_bots(routes, root: str | Path, note=None) -> dict:
     known = {r.name for r in routes.routes}
     added = kept = skipped = 0
     for line in listing.read_text(encoding="latin-1").splitlines():
-        hit = ADD_BOT.match(line)
-        if hit is None:
+        got = read_add_bot(line)
+        if got is None:
             continue
-        file, alias, desc, vnum, loop, polite, _tags = (
-            g.strip() for g in hit.groups())
+        file, alias, desc = got["file"], got["alias"], got["desc"]
+        vnum, loop, polite = got["vnum"], got["loop"], got["polite"]
         body = root / "common" / "bot" / "bots" / f"{file}.tin"
         if not body.exists():
             skipped += 1

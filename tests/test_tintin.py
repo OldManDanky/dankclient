@@ -361,3 +361,31 @@ def test_folding_keeps_the_one_you_have_walked():
 
     assert store.fold_spaced_exits() == 1
     assert [e["command"] for e in store.exits_from(1)] == ["punch steps;climb tank"]
+
+
+# --- reading 3kdb's bot list --------------------------------------------------
+
+def test_the_tags_on_a_bot_line_are_optional():
+    """78 of 3kdb's 145 definitions leave them off, and demanding seven fields
+    read 67 of them -- silently, because a line that does not match is not a
+    line that failed. Section Z, the Abyss, the Catacombs and the Portal of
+    Life were all missing."""
+    from mud.tintin import read_add_bot
+
+    six = read_add_bot(".add_bot {sectionz} {sectionz} {Section Z Long Path} "
+                       "{24787} {0} {0};")
+    assert six["file"] == "sectionz" and six["vnum"] == "24787"
+    assert six["tags"] == ""
+
+    seven = read_add_bot(".add_bot {android} {android} {Androids} {5223} {0} "
+                         "{0} {chaos, dungeon};")
+    assert seven["tags"] == "chaos, dungeon"
+    assert seven["alias"] == "android"
+
+
+def test_a_line_that_is_not_a_bot_definition_is_not_read_as_one():
+    from mud.tintin import read_add_bot
+
+    for line in ("#alias .add_bot {", "  #var bot[path] {n;s};",
+                 ".add_bot {only} {three} {fields};", "", "kill orc"):
+        assert read_add_bot(line) is None, line

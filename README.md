@@ -457,6 +457,14 @@ seventy route files.  One API call gets every sha; the tarball is one
 compressed request rather than a hundred and seventy.  Against a map that was
 already current the whole thing takes four seconds.
 
+What is remembered is what was taken **and how it was read**.  The route
+library sat at 67 of 3kdb's 145 for a while because `.add_bot` lines with six
+fields were skipped and only the seven-field ones matched -- silently, because
+a line that does not match is not a line that failed.  3kdb had not changed, so
+without this a client that had already pulled would never have taken the fix:
+the record saying "we have this" is exactly what would have frozen the bug in.
+Each importer carries a version, and bumping it offers the data again.
+
 All three are data.  The map is parsed into SQLite and the bot files are read
 with a regex; nothing pulled here is executed, and that is the reason this is a
 button at all.  `scripts/` is deliberately not on the list -- those are Python

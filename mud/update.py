@@ -43,6 +43,13 @@ TREE = (f"https://api.github.com/repos/{OWNER}/{REPO}"
 TARBALL = (f"https://codeload.github.com/{OWNER}/{REPO}"
            f"/tar.gz/refs/heads/{BRANCH}")
 
+#: Bump one of these when its importer changes what it would make of the same
+#: input.  What we remember is what we took *and how* -- otherwise a parser bug
+#: is frozen in place by the very record that says we already have this, and
+#: the fix reaches nobody who had already pulled.  Reading `.add_bot` lines
+#: with six fields as well as seven took the route library from 67 to 141.
+IMPORTERS = {"map": 1, "speedruns": 1, "bots": 2}
+
 #: What we take, in the order it is worth having.
 WANTED = {
     "map": "common/map/3k_shared.map",
@@ -171,14 +178,17 @@ def check(store, timeout: float = 20.0, have: dict | None = None) -> dict:
             out["items"][key] = {"path": path, "there": False}
             continue
         was = have.get(key, "")
+        # sha and importer together: either moving is a reason to take it.
+        mark = f"{entry['sha']}/{IMPORTERS.get(key, 1)}" if entry else ""
         out["items"][key] = {
             "path": path,
             "there": True,
             "sha": entry["sha"],
             "have": was,
             "size": entry.get("size") or 0,
-            "changed": entry["sha"] != was,
+            "changed": mark != was,
             "new": not was,
+            "mark": mark,
         }
     out["changed"] = [k for k, v in out["items"].items() if v.get("changed")]
     return out
@@ -342,5 +352,5 @@ def remember(store, got: dict, keys) -> None:
         return
     for key in keys:
         item = (got.get("items") or {}).get(key) or {}
-        if item.get("sha"):
-            store.set_setting(f"3kdb:{key}", item["sha"])
+        if item.get("mark"):
+            store.set_setting(f"3kdb:{key}", item["mark"])
