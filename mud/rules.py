@@ -161,6 +161,9 @@ class Rule:
     enabled: bool = True
     priority: int = 0
     stop: bool = False
+    #: kind == "trigger" -- keep the line off the screen.  With no actions it
+    #: is a rule by itself: tt++'s #gag.
+    gag: bool = False
     pace: str = PACED
     #: kind == "event"
     event: str = "tell"
@@ -223,6 +226,9 @@ class Rule:
             except re.error as exc:
                 return f"bad regex: {exc}"
         if not self.actions:
+            # Keeping the line off the screen is an action in its own right.
+            if self.kind == "trigger" and self.gag:
+                return None
             return "no actions"
         for a in self.actions:
             if a.get("type") not in ACTIONS:
@@ -274,6 +280,14 @@ class Rule:
                     f"def {name}():\n"
                     + block.replace("m[", "player_field[") + "\n")
 
+        gagged = ""
+        if self.kind == "trigger" and self.gag:
+            gagged = (f"gag({self.pattern!r}"
+                      + ("" if self.mode == "contains" else f", mode={self.mode!r}")
+                      + ")\n")
+            if not self.actions:
+                return gagged
+
         deco = "alias" if self.kind == "alias" else "trigger"
         args = [repr(self.pattern)]
         if self.mode != "regex":
@@ -282,8 +296,12 @@ class Rule:
             args.append(f"priority={self.priority}")
         if self.stop:
             args.append("stop=True")
-        return (f"@{deco}({', '.join(args)})\n"
-                f"def {name}(m):\n" + block + "\n")
+        return gagged + (f"@{deco}({', '.join(args)})\n"
+                         f"def {name}(m):\n" + block + "\n")
+
+
+def _nothing(_captured=None) -> None:
+    """What a gag does when it matches: nothing -- the gate is the point."""
 
 
 def _rule(raw) -> Rule | None:
@@ -346,6 +364,9 @@ class RuleStore:
 
         self.host.triggers.remove_owner(OWNER)
         self.host.aliases.remove_owner(OWNER)
+        gags = getattr(getattr(self.host, "session", None), "gags", None)
+        if gags is not None:
+            gags.remove_owner(OWNER)
         for kind, fn in self._subs:
             self.host.bus.off(kind, fn)
         self._subs.clear()
@@ -357,10 +378,14 @@ class RuleStore:
                 continue
 
             if rule.kind in ("trigger", "alias"):
-                target = (self.host.aliases if rule.kind == "alias"
-                          else self.host.triggers)
-                target.add(Trigger(rule.pattern, self._runner(rule), rule.mode,
-                                   OWNER, rule.priority, rule.stop))
+                if rule.kind == "trigger" and rule.gag and gags is not None:
+                    gags.add(Trigger(rule.pattern, _nothing, rule.mode, OWNER))
+                if rule.actions:
+                    target = (self.host.aliases if rule.kind == "alias"
+                              else self.host.triggers)
+                    target.add(Trigger(rule.pattern, self._runner(rule),
+                                       rule.mode, OWNER, rule.priority,
+                                       rule.stop))
 
             elif rule.kind == "event":
                 handler = self._event_handler(rule)

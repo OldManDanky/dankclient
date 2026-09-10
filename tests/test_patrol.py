@@ -181,10 +181,11 @@ def test_a_speedwalk_stops_where_the_path_stops_working():
 
 
 def test_a_way_out_that_does_not_work_is_remembered_and_routed_around():
-    """Player's map says you get to Chaos by typing 'home' in the Palisade
-    Pub.  It no longer does anything.  An imported map is a hypothesis, and
-    no inspection separates a stale command from a working one -- walking is
-    what finds out."""
+    """Player's map says you get to Chaos by the portal in the Palisade Pub.
+    It no longer does anything.  An imported map is a hypothesis, and no
+    inspection separates a stale command from a working one -- walking is
+    what finds out.  (This was `home` once, and that one turned out to be
+    worse than stale: it was somebody's own house.  See test_homes.)"""
     from mud.store import Store
     from mud.mapper import Mapper
 
@@ -193,10 +194,10 @@ def test_a_way_out_that_does_not_work_is_remembered_and_routed_around():
     s.store = store
     s.mapper = m = Mapper(store)
 
-    pub, house = store.add_room("Pub"), store.add_room("House")
+    pub, hall = store.add_room("Pub"), store.add_room("Portal Hall")
     chaos = store.add_room("Chaos")
-    store.link(pub, "home", house)        # two steps, and no longer works
-    store.link(house, "chaos", chaos)
+    store.link(pub, "enter portal", hall)  # two steps, and no longer works
+    store.link(hall, "chaos", chaos)
     walk = pub                            # six steps, and does
     for i in range(5):
         step = store.add_room(f"Street {i}")
@@ -205,12 +206,12 @@ def test_a_way_out_that_does_not_work_is_remembered_and_routed_around():
     store.link(walk, "n", chaos)
     m.here = pub
 
-    assert m.route(chaos) == ["home", "chaos"]      # the shortcut looks best
-    store.mark_failed(pub, "home")
-    assert m.route(chaos) == ["n"] * 6              # after failing, walk it
+    assert m.route(chaos) == ["enter portal", "chaos"]   # the shortcut looks best
+    store.mark_failed(pub, "enter portal")
+    assert m.route(chaos) == ["n"] * 6                   # after failing, walk it
 
-    store.mark_worked(pub, "home")
-    assert m.route(chaos) == ["home", "chaos"]      # doors do reopen
+    store.mark_worked(pub, "enter portal")
+    assert m.route(chaos) == ["enter portal", "chaos"]   # doors do reopen
 
 
 def test_travelling_tries_another_way_when_a_step_goes_nowhere():

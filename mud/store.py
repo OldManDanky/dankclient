@@ -128,6 +128,27 @@ CREATE VIRTUAL TABLE line_fts USING fts5(text, content='line', content_rowid='id
 """
 
 
+def personal(command: str) -> bool:
+    """Is this a way out that only works for whoever walked it?
+
+    `home` takes you to your own house -- or nowhere, if you have none -- so an
+    edge saying where it leads is a fact about whoever walked it.  3kdb's map
+    was walked by one player, and its `home` went to his house: seventeen
+    public rooms led there, and a fifth of ordinary routes around Pinnacle went
+    in through his door and out through his portal, which works for nobody
+    else.  `home 726` is one particular house, and a clan hall is one clan's.
+
+    A tt++ alias is the same kind of thing: a command in his client, not in
+    3K.  They start with a dot -- `.goHome`, and `.fly;u` and `.land;n`, which
+    are the only way the map has into Mystic Seal -- and typed at 3K they do
+    nothing, whatever they did for him.
+    """
+    c = " ".join(command.lower().split())
+    if any(part.strip().startswith(".") for part in c.split(";")):
+        return True
+    return c == "home" or (c.startswith("home ") and c[5:].isdigit())
+
+
 #: Applied in order to bring an older file up to date.  A map is months of
 #: walking, so it is upgraded rather than thrown away.
 _UPGRADES = {
@@ -167,6 +188,29 @@ class Store:
             # writing to the log mid-fight.
             self.db.execute("PRAGMA journal_mode = WAL")
         self._migrate()
+        # Once per map, not as a schema version: a data fix needs no new
+        # columns, and a bumped version makes an older client refuse the file
+        # outright if somebody reinstalls one.
+        if self.setting("forgot:personal") != "1":
+            self.forget_personal()
+            self.set_setting("forgot:personal", "1")
+
+    def forget_personal(self) -> int:
+        """Drop every edge that only worked for whoever walked it.  Returns how many.
+
+        A merge only ever adds, so a map that already has them keeps them
+        unless they are taken out; the importer stops them coming back.  The
+        rooms behind them stay, unreachable -- a room is not wrong, only the
+        claim that anybody can walk into it.
+        """
+        doomed = [row["command"] for row in
+                  self.db.execute("SELECT DISTINCT command FROM edge")
+                  if personal(row["command"])]
+        gone = 0
+        for command in doomed:
+            gone += self.db.execute("DELETE FROM edge WHERE command = ?",
+                                    (command,)).rowcount
+        return gone
 
     def _migrate(self) -> None:
         have = self.db.execute("PRAGMA user_version").fetchone()[0]
@@ -723,6 +767,8 @@ class Store:
 
     def link(self, from_room: int, command: str, to_room: int,
              at: float | None = None) -> None:
+        if personal(command):
+            return          # where yours goes is no guide to where anybody's does
         now = time.time() if at is None else at
         self.db.execute(
             "INSERT INTO edge (from_room, command, to_room, seen, last_seen) "

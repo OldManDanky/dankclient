@@ -40,6 +40,11 @@ HELP = [
         ('/delay <secs> <command>', 'send it once, later'),
         ('/flush', 'drop everything the scripts have queued'),
     ]),
+    ('Gags', 'Lines kept off the screen. Your triggers and the log still see them.', [
+        ('/gag <text>', 'hide every line containing it'),
+        ('/gags', 'the ones in force'),
+        ('/ungag <text>', 'show it again; /ungag all for every one'),
+    ]),
     ('Scripting', 'Rules written as Python, reloaded as you save them.', [
         ('/scripts', 'loaded scripts, hook counts and errors'),
         ('/reload', 'rescan the scripts directory now'),
@@ -244,6 +249,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb in ("tick", "ticks", "untick"):
         _tick(session, verb, rest, scripts, note)
+
+    elif verb in ("gag", "gags", "ungag"):
+        _gag(verb, rest, scripts, note)
 
     elif verb == "delay":
         _delay(session, rest, note)
@@ -500,6 +508,63 @@ def _delay(session, rest: str, note) -> None:
     from .events import spawn
     spawn(later(), f"/delay {command}")
     note(f"in {wait:g}s: {command}")
+
+
+def _gag(verb: str, rest: str, scripts, note) -> None:
+    """Lines kept off the screen, the way tt++'s #gag does it.
+
+    A gag is a trigger with its gag box ticked and nothing else to do, so it
+    is stored with the character and shows up in the triggers panel -- "/gag"
+    is a way of writing one, like "/tick" for a timer.  Contains, and case
+    matters, which is what #gag means.
+    """
+    store = getattr(scripts, "rules", None)
+    if store is None:
+        note("scripting is disabled (--no-scripts)")
+        return
+    from .rules import Rule
+
+    gags = [r for r in store.rules if r.kind == "trigger" and r.gag]
+    text = rest.strip()
+
+    if verb == "gags" or (verb == "gag" and not text):
+        if not gags:
+            note("no gags.  /gag <text> hides every line containing it.")
+            return
+        note("\n".join(
+            f"  {'on ' if g.enabled else 'off'} {g.mode:<8} {g.pattern}"
+            + (f"   (also: {' ; '.join(a['text'] for a in g.actions)})"
+               if g.actions else "")
+            for g in gags))
+        return
+
+    if verb == "ungag":
+        if not text:
+            note("usage: /ungag <text>   or   /ungag all")
+            return
+        doomed = gags if text.lower() == "all" else [
+            g for g in gags if g.pattern == text or (g.name and g.name == text)]
+        if not doomed:
+            note(f"no gag on {text!r} -- /gags lists them")
+            return
+        for g in doomed:
+            if g.actions:
+                g.gag = False             # still a trigger; only stop hiding
+            else:
+                store.rules.remove(g)
+        store.save()
+        store.register()
+        note(f"showing {len(doomed)} again")
+        return
+
+    if any(g.pattern == text and g.mode == "contains" for g in gags):
+        note(f"already hiding lines containing {text!r}")
+        return
+    store.rules.append(Rule(kind="trigger", pattern=text, mode="contains",
+                            gag=True, actions=[]))
+    store.save()
+    store.register()
+    note(f"hiding lines containing {text!r} -- /ungag {text} to show them")
 
 
 def _go(session, text: str, note) -> None:

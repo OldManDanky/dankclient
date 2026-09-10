@@ -99,6 +99,26 @@ window.setTerminalWidth = function (cols) {
 
 window.terminalWidth = () => wantCols;
 
+/* The terminal's font: the one chosen, then a stack of fixed-width fonts
+   behind it, so a font that has since been uninstalled still leaves one that
+   keeps 3K's columns in line. */
+function fontStack(name) {
+  const safe = String(name || '').replace(/["\\;{}]/g, '').trim();
+  return (safe ? `"${safe}", ` : '') + 'Consolas, "DejaVu Sans Mono", monospace';
+}
+window.fontStack = fontStack;
+
+/* Change it while it is running.  The width of a column is a property of the
+   font -- refit() measures it once and keeps it -- so it is measured again. */
+window.setTerminalFont = function (family, size, line) {
+  if (!term) return;
+  term.options.fontFamily = fontStack(family);
+  term.options.fontSize = size;
+  term.options.lineHeight = line;
+  perCol = 0;
+  refit();
+};
+
 /* What it actually came out at, which is not always what was asked for: a
    narrow window gives you fewer columns than any cap. */
 window.terminalCols = () => (term ? term.cols : 0);
@@ -108,8 +128,11 @@ let fit = null;
 try {
   if (typeof Terminal === 'undefined') throw new Error('xterm.js did not load');
   term = new Terminal({
-    fontFamily: 'Consolas, "DejaVu Sans Mono", monospace',
-    fontSize: 14,
+    // What was chosen under Options -> Fonts, from the start, rather than the
+    // default for a moment and then the choice.
+    fontFamily: fontStack(window.prefs.get('font:family', '')),
+    fontSize: parseInt(window.prefs.get('font:size', '14'), 10) || 14,
+    lineHeight: parseFloat(window.prefs.get('font:line', '1')) || 1,
     scrollback: 50000,
     cursorBlink: false,
     // Output only -- the input bar owns the keyboard.  Without this xterm
@@ -235,15 +258,33 @@ const cmd = $('cmd');
 const history = [];
 let histPos = 0;
 
+/* Keep the last command: it stays in the box, selected, so Enter sends it
+   again and typing anything replaces it.  Portal did this, and it is what
+   sending the same thing over and over wants.  A preference of the screen,
+   not the character, like the rest of Panels. */
+const keepCmd = $('keep-cmd');
+if (keepCmd) {
+  keepCmd.checked = window.prefs.get('keep-cmd', '0') === '1';
+  keepCmd.onchange = () => {
+    window.prefs.set('keep-cmd', keepCmd.checked ? '1' : '0');
+    cmd.focus();
+  };
+}
+
 $('bar').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = cmd.value;
-  if (text) {
+  // One entry for a command sent ten times running, not ten.
+  if (text && history[history.length - 1] !== text) {
     history.push(text);
     if (history.length > 500) history.shift();
   }
   histPos = history.length;
-  cmd.value = '';
+  if (keepCmd && keepCmd.checked && text) {
+    cmd.select();
+  } else {
+    cmd.value = '';
+  }
   send(text, true);
 });
 

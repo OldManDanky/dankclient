@@ -139,6 +139,9 @@ class ScriptHost:
             self.bus.off(kind, fn)
         self.triggers.remove_owner(name)
         self.aliases.remove_owner(name)
+        gags = getattr(self.session, "gags", None)
+        if gags is not None:
+            gags.remove_owner(name)
         # A bot outlives the call that started it, so unloading its script
         # must stop it.  Otherwise editing a route leaves the old one still
         # walking, and the two take turns steering.
@@ -287,6 +290,11 @@ class ScriptHost:
                 return fn
             return deco
 
+        def gag(pattern: str, mode: str = "contains"):
+            """Keep lines matching this off the screen, as tt++'s #gag does.
+            Triggers and the log still see them."""
+            session.gags.add(Trigger(pattern, lambda _m=None: None, mode, owner))
+
         async def tick():
             await session.clock.wait()
 
@@ -302,6 +310,7 @@ class ScriptHost:
             "__name__": f"script.{owner}",
             "on": on, "when": when, "trigger": trigger, "alias": alias,
             "every": every, "tick": tick, "round_tick": round_tick,
+            "gag": gag,
             # send() is paced by a token bucket: a single command goes out at
             # once, a burst falls back to the game tick.
             "send": (lambda text, priority=NORMAL, pace=PACED:

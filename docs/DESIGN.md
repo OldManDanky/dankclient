@@ -74,6 +74,33 @@ tt++ identifies rooms by matching descriptions; this client identifies them by
 where you walked.  Fingerprints are learned by visiting, so the map grows more
 certain as it is used rather than starting out sure and being wrong.
 
+### Nobody else's house
+
+3kdb's map was walked by one player, and every `home` in it goes to his
+house.  Seventeen public rooms led there -- by `home`, by `home 726`, and by
+`.goHome`, his own tt++ alias -- and the house's portal room has shortcuts to
+the shop, the bank, the guild and the realms.  So going home looked like the
+fastest way anywhere: 57 of 259 routes between rooms around Pinnacle went in
+through his door, and every one of them fails for anybody else, whose `home`
+goes to their own house or nowhere.  It also placed anyone who typed `home` in
+his house, and then wrote their next steps into the map from there.
+
+His tt++ aliases are the same kind of thing.  They start with a dot, they are
+commands in his client rather than in 3K, and `.fly;u` and `.land;n` were the
+only way the map had into Mystic Seal.  Flying takes something not every
+character has, so they are treated exactly like houses.
+
+A way out that only works for whoever walked it is never an edge now.  The
+importer leaves them out, a map that already has them is cleaned once when it
+is opened, walking never records one, and the router ignores any that come
+back.  Measured on a real map: 44 edges went, and none of 259 sampled routes
+around Pinnacle was lost or goes through a house any more.  The 1,558 rooms
+only reachable that way -- Mystic Seal and the Ruins of the Mad Titan Lord
+behind a flight, his house, eight other houses and one clan's hall -- are
+still in the map, unreachable: a room is not wrong, only the claim that
+anybody can walk into it.  A route that starts in one of them still runs for
+somebody who has got there themselves.
+
 `tools/repair_map.py` brings an older import up to date;
 `tools/import_bots.py` reads 3kdb's route library.
 
@@ -256,6 +283,13 @@ gets a tag under the title bar, `tell` among them, and switching one off hides
 it; the count says how many are showing out of how many there are.  Clicking a
 line puts the reply in the input box.
 
+Right-clicking one colours it -- or rather colours every line like it.  The
+colour sticks to the channel or to the person, because a single coloured line
+scrolls away and what somebody means is "clan in green" or "this friend in
+gold".  A person's colour wins over their channel's, being the more particular
+choice, and a channel's shows under its tag so the key is on screen.  Eight
+colours, each light enough to read on the dark ground.
+
 The map is docked there rather than floating over the terminal.  It is the
 panel you glance at most, and one you have to place somewhere is one that is
 in the way of the text underneath it.  Click its header to roll it up.
@@ -289,6 +323,17 @@ amount and the two stay lined up.
 Everything shares one gutter, `--gut`, so the terminal's first line, the
 vitals strip, the input box and the top of the map all start on the same
 lines rather than within a couple of pixels of each other.
+
+**Fonts** has its own tab: the terminal's font, size and line spacing, which
+the command box follows, and the messages window's size.  A page cannot ask
+the computer for its fonts without a permission prompt, but it can ask about
+one font at a time -- text drawn in it comes out a different width from the
+fallbacks -- so the list is the fixed-width fonts people actually have,
+trimmed to the installed ones, with Other for any name.  Fixed-width because
+the terminal is a grid: 3K's maps and tables line up only when every letter
+is the same width, and Other says so when a font is not.  A preview draws a
+little of a map in the chosen font.  The size of everything else is the
+browser's own zoom, Ctrl + and Ctrl -, rather than a second zoom of ours.
 
 Which panels are shown is kept in the browser rather than on the character:
 it is about the screen in front of you, and a second window on a second
@@ -424,6 +469,27 @@ the login prompt, where sending `xp` every 290 seconds types it into the
 password box.
 
 A delay is not stored.  It happens and it is gone.
+
+## Gags
+
+    /gag <text>           hide every line containing it
+    /gags                 the ones in force
+    /ungag <text>         show it again; /ungag all
+
+tt++'s `#gag`, and a gag is a trigger with its gag box ticked and nothing
+else to do -- so it is stored with the character, listed in the triggers
+panel, and a trigger that does something can also gag the line it fired on.
+Scripts have `gag(pattern, mode="contains")`.  Only the screen loses the line:
+the triggers and the log still see it, as in tt++, and a refresh does not put
+it back.
+
+The screen is fed in network chunks rather than lines, and a gag needs the
+whole line to decide, so while there are gags a line is held until its newline
+arrives.  3K marks nothing as a prompt -- there is not one telnet GA or EOR in
+59 captures -- and a prompt has no newline, so an unfinished line is shown
+after a tenth of a second rather than waiting for an ending that is not
+coming.  If the rest of a line already drawn arrives later and is gagged, the
+row is wiped.  With no gags nothing is held at all.
 
 ## Updates
 
@@ -625,6 +691,20 @@ refused as names first -- `..`, backslashes and colons, the last two meaning
 something else again on Windows -- and then as places with `is_relative_to`.
 Each file and the whole archive have a ceiling once unpacked, not only on the
 wire.
+
+**A machine that had never been to GitHub.**  Python checks HTTPS against
+the machine's certificate store, and on Windows that store is filled in on
+demand: a root arrives the first time a Windows program asks for it, and
+Python reading the store is not asking.  A tester's client came up with no
+map, no bots and "unable to get local issuer certificate" on the Updates page,
+because their machine had never opened GitHub in a browser.  The client now
+carries Mozilla's roots, as curl publishes them, in `mud/cacert.pem`, and
+trusts them alongside the machine's store rather than instead of it -- a work
+proxy or an antivirus that re-signs HTTPS adds its own root to the store, and
+that has to keep working.  Checked by running the real update code with the
+machine's store emptied: it failed exactly as the tester's did, and with the
+bundle it fetched the whole of 3kdb.  `tools/refresh_certs.py` updates it,
+against curl's published SHA-256.
 
 **A file half written.**  Rules, routes, characters and the line markers were
 written with `write_text`, which truncates first.  A crash between the two left

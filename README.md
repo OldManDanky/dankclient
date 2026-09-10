@@ -54,6 +54,24 @@ In the output, drag to select, double-click for a word or triple-click for a
 whole line, then **Ctrl+C** to copy it.  Web addresses underline when you
 point at them; **shift-click** opens one in your own browser.
 
+`/gag <text>` hides every line containing that text, as tt++'s `#gag` does;
+`/gags` lists them and `/ungag <text>` shows it again.  Your triggers and the
+log still see gagged lines.  A trigger can gag too: tick **gag** on it in
+**Options -> Triggers**.
+
+In the messages window, **right-click** a line to colour it: every line on
+that channel, or everything from that person.  Clicking a line still puts a
+reply in the command box.
+
+**Options -> Fonts** sets the terminal's font, size and line spacing, and
+the messages window's size.  It offers the fixed-width fonts installed on
+your computer, or any other by name.  **Ctrl +** and **Ctrl -** make
+everything else bigger or smaller.
+
+To send the same command over and over, tick **keep the last command in the
+box** under **Options -> Panels**: it stays there selected, so Enter sends it
+again and typing replaces it.
+
 ## Updates
 
 **The client**: **Options -> About** says when a newer version is out.
@@ -140,6 +158,8 @@ mapping with no room ids, reconnecting, the installer -- is in
 ## Credits and licence
 
 The map and the bots come from
-[jmitchell33/3kdb](https://github.com/jmitchell33/3kdb).
+[jmitchell33/3kdb](https://github.com/jmitchell33/3kdb).  The root
+certificates in `mud/cacert.pem` are Mozilla's, under the MPL 2.0, as
+[extracted by curl](https://curl.se/docs/caextract.html).
 
 GPL-3.0 -- see [LICENSE](LICENSE).

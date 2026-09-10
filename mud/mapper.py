@@ -34,7 +34,7 @@ import time
 from collections import deque
 from typing import Iterable
 
-from .store import Store
+from .store import Store, personal
 
 #: How long a command may wait for its room block.  Ten times the observed
 #: median, comfortably past the observed maximum, and well under the 2s tick.
@@ -622,6 +622,8 @@ class Mapper:
                 if nxt in seen:
                     continue
                 command = str(edge["command"])
+                if personal(command):
+                    continue            # yours goes somewhere else, or nowhere
                 step = self.cost(command, int(edge["failed"] or 0))
                 heapq.heappush(queue, (spent + step,
                                        next(counter), nxt, path + [command]))

@@ -11,6 +11,8 @@
   :root{
     --bg:#111318; --panel:#181b22; --sunk:#0d0f13; --line:#262b35;
     --ink:#d8dde6; --dim:#7d8698; --accent:#6f9beb;
+    /* set from Options -> Fonts by fonts.js */
+    --term-font:Consolas,"DejaVu Sans Mono",monospace; --term-size:14px; --cm-size:11px;
     --hp:#c8553d; --sp:#4a90d9; --gp:#5aa66f; --enemy:#b8863b;
     --good:#5aa66f; --bad:#c8553d;
     /* One gutter for every outer edge, so the first line of the terminal,
@@ -53,7 +55,7 @@
   .cm-count{letter-spacing:0;text-transform:none;color:var(--accent)}
   .cm-body{flex:1;min-height:0;overflow-y:scroll;padding:6px 0 6px 8px;
            display:flex;flex-direction:column;gap:3px;
-           font:11px/1.45 Consolas,"DejaVu Sans Mono",monospace}
+           font:var(--cm-size)/1.45 var(--term-font)}
   .cm-filters{display:flex;flex-wrap:wrap;gap:3px;padding:5px 8px;flex:none;
               border-bottom:1px solid var(--line)}
   .cm-filters:empty{display:none}
@@ -65,6 +67,19 @@
   .cm-txt{flex:1;min-width:0;word-break:break-word;color:var(--ink)}
   .cm-msg.mine .cm-who{color:var(--gp)}
   .cm-empty{color:var(--dim);font-style:italic}
+  #font-preview{margin:4px 0 0;padding:8px 10px;background:var(--bg);color:var(--ink);
+                border:1px solid var(--line);border-radius:4px;white-space:pre;
+                overflow-x:auto;font-family:var(--term-font)}
+  #font-other-hint.warn{color:#f2cc60}
+  .cm-menu{position:fixed;z-index:60;min-width:200px;padding:6px 9px 2px;
+           background:var(--panel);border:1px solid var(--line);border-radius:4px;
+           box-shadow:0 8px 22px rgba(0,0,0,.55);font-size:12px}
+  .cm-menu h6{margin:4px 0 5px;font-size:10px;letter-spacing:.06em;
+              text-transform:uppercase;color:var(--dim);font-weight:600}
+  .cm-swatches{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px}
+  .cm-swatch{width:20px;height:20px;padding:0;border-radius:3px;border:1px solid var(--line)}
+  .cm-swatch.on{outline:2px solid var(--ink);outline-offset:1px}
+  .cm-swatch.none{width:auto;padding:0 7px;font-size:11px}
   /* The map is docked at the top of the sidebar rather than floating over
      the terminal: it is the thing you glance at most, and a panel you have to
      put somewhere is a panel that is in the way of the text underneath it. */
@@ -119,9 +134,9 @@
   }
   #bar{border-top:1px solid var(--line);background:var(--panel);
        padding:8px var(--gut);display:flex;align-items:center;gap:8px}
-  #bar::before{content:'>';color:var(--accent);font:14px/1 Consolas,monospace;flex:none}
+  #bar::before{content:'>';color:var(--accent);font:var(--term-size)/1 var(--term-font);flex:none}
   #cmd{flex:1;min-width:0;background:var(--sunk);border:1px solid var(--line);
-       color:var(--ink);font:14px/1.4 Consolas,"DejaVu Sans Mono",monospace;
+       color:var(--ink);font:var(--term-size)/1.4 var(--term-font);
        padding:7px 9px;border-radius:3px}
   #cmd:focus{outline:none;border-color:var(--accent)}
   #cmd::placeholder{color:#4b525f}
@@ -630,6 +645,7 @@
       <button type="button" data-tab="timer">Timers<span class="n"></span></button>
       <div class="opt-group">Client</div>
       <button type="button" data-tab="panels">Panels<span class="n"></span></button>
+      <button type="button" data-tab="fonts">Fonts</button>
       <button type="button" data-tab="settings">Character setup</button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
       <button type="button" data-tab="updates">Updates<span class="n"></span></button>
@@ -834,10 +850,75 @@
                   where the floating panels sit, rather than spreading it
                   across every line. It never bites on a narrow window.</p>
               </div>
+              <div class="frow">
+                <label>Input</label>
+                <div class="stack">
+                  <label class="check"><input type="checkbox" id="keep-cmd">
+                    keep the last command in the box</label>
+                </div>
+                <p class="fhint">It stays there selected: Enter sends it
+                  again, and typing anything replaces it.</p>
+              </div>
             </div>
           </div>
           <p class="say">Kept in this browser, not on your character, so a
             second window can be laid out differently.</p>
+        </section>
+
+        <!-- fonts ------------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="fonts" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Fonts</h4>
+              <p>How the text looks. Changes show at once.</p>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Terminal</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="font-family">Font</label>
+                <div class="ctl"><select id="font-family"></select></div>
+                <p class="fhint">Only fonts installed on this computer are
+                  listed, and only fixed-width ones: 3K draws maps and tables
+                  in columns, and they line up only when every letter is the
+                  same width. The command box uses it too.</p>
+              </div>
+              <div class="frow" id="font-other-row" hidden>
+                <label for="font-other">Other</label>
+                <div class="ctl"><input id="font-other" type="text" spellcheck="false"
+                     autocomplete="off" placeholder="a font installed on this computer"></div>
+                <p class="fhint" id="font-other-hint">Type its name and press Enter.</p>
+              </div>
+              <div class="frow">
+                <label for="font-size">Size</label>
+                <div class="ctl"><select id="font-size"></select></div>
+              </div>
+              <div class="frow">
+                <label for="font-line">Line spacing</label>
+                <div class="ctl"><select id="font-line"></select></div>
+              </div>
+              <pre id="font-preview" aria-label="preview">A quiet cul de sac (n)              O-O-O
+  The street ends in a circle of    |   |
+  tidy houses. One exit: north.     O-@-O
+HP: 31207/31207  SP: 3971/3971  0123456789</pre>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Messages window</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="font-msg">Size</label>
+                <div class="ctl"><select id="font-msg"></select></div>
+                <p class="fhint">In the terminal's font. Smaller by default,
+                  so a conversation fits.</p>
+              </div>
+            </div>
+          </div>
+          <p class="say">Kept in this browser, not on your character. Everything
+            else on screen grows and shrinks with <b>Ctrl +</b> and
+            <b>Ctrl &minus;</b>; <b>Ctrl 0</b> puts it back.</p>
+          <button type="button" id="font-reset">Back to the defaults</button>
         </section>
 
         <!-- character setup ---------------------------------------------- -->
@@ -1106,6 +1187,9 @@
                     enabled</label>
                   <label class="check"><input type="checkbox" id="f-stop">
                     stop after this &mdash; no later rule sees the line</label>
+                  <label class="check" id="f-gag-row"><input type="checkbox" id="f-gag">
+                    gag &mdash; keep the line off the screen (other rules and
+                    the log still see it)</label>
                 </div>
               </div>
             </div>
@@ -1139,5 +1223,6 @@
   <script src="help.js"></script>
   <script src="about.js"></script>
   <script src="panels.js"></script>
+  <script src="fonts.js"></script>
 </body>
 </html>

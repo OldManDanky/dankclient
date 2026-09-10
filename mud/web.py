@@ -475,6 +475,12 @@ class WebServer:
         if book is None:
             return None
         lines = book.tail(SCROLLBACK)
+        # The log keeps gagged lines -- they are history, and /find should
+        # find them -- but a refresh should not put them back on the screen.
+        gagged = getattr(self.session, "is_gagged", None)
+        if gagged is not None and len(getattr(self.session, "gags", ())):
+            lines = [line for line in lines if line.get("kind") != "recv"
+                     or not gagged(str(line.get("text", "")))]
         return {"t": "back", "lines": lines} if lines else None
 
     def _link(self) -> dict:

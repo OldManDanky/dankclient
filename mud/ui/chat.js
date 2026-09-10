@@ -32,6 +32,36 @@
     muted = new Set(JSON.parse(store.get(`cm:${ID}:muted`, '[]')));
   } catch (err) { /* a bad preference is no preference */ }
 
+  /* Colours, chosen by right-clicking a line.
+
+     They stick to a channel or to a person rather than to the one line: a
+     single coloured line scrolls away, and what somebody wants is every clan
+     line green, or everything one friend says in gold.  A person's colour
+     wins over their channel's, being the more particular choice.  Light
+     enough to read on the window's dark ground, all of them. */
+  const PALETTE = [
+    ['red', '#ff7b72'], ['orange', '#ffa657'], ['yellow', '#f2cc60'],
+    ['green', '#7ee787'], ['teal', '#56d4dd'], ['blue', '#79c0ff'],
+    ['violet', '#d2a8ff'], ['pink', '#ff9bce'],
+  ];
+  let colours = { channel: {}, who: {} };
+  try {
+    const got = JSON.parse(store.get(`cm:${ID}:colours`, '{}'));
+    colours = { channel: got.channel || {}, who: got.who || {} };
+  } catch (err) { /* a bad preference is no preference */ }
+
+  function saveColours() {
+    store.set(`cm:${ID}:colours`, JSON.stringify(colours));
+  }
+
+  // People by name whatever the case the MUD used; channels exactly as named.
+  const personKey = (who) => String(who || '').trim().toLowerCase();
+
+  function colourOf(m) {
+    return (m.who && colours.who[personKey(m.who)])
+      || colours.channel[m.channel || 'other'] || '';
+  }
+
   // --- the frame ------------------------------------------------------------
 
   function collapsed() {
@@ -99,6 +129,10 @@
       b.textContent = tag;
       if (!muted.has(tag)) b.className = 'on';
       b.title = muted.has(tag) ? `show ${tag}` : `hide ${tag}`;
+      // The channel's colour under its tag, so the key is on screen.
+      if (colours.channel[tag]) {
+        b.style.boxShadow = `inset 0 -2px 0 ${colours.channel[tag]}`;
+      }
       b.onclick = (e) => {
         // The header collapses on a click and the tags sit under it.
         e.stopPropagation();
@@ -139,11 +173,20 @@
       row.className = 'cm-msg' + (m.kind === 'tell' ? ' tell' : '') +
         (m.mine ? ' mine' : '');
       row.title = new Date((m.at || 0) * 1000).toLocaleTimeString() +
-        '  |  ' + (m.channel || '') + '  |  ' + (m.text || '');
+        '  |  ' + (m.channel || '') + '  |  ' + (m.text || '') +
+        '\nright-click to colour';
 
       const txt = document.createElement('span');
       txt.className = 'cm-txt';
       txt.textContent = m.text || '';
+      const colour = colourOf(m);
+      if (colour) txt.style.color = colour;
+
+      row.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMenu(e.clientX, e.clientY, m);
+      };
 
       row.onclick = () => {
         const prefix = replyFor(m);
@@ -159,6 +202,7 @@
         const who = document.createElement('span');
         who.className = 'cm-who';
         who.textContent = speaker(m);
+        if (colour) who.style.color = colour;
         row.append(who, txt);
       } else {
         row.append(txt);
@@ -172,6 +216,91 @@
     renderTags();
     render();
   }
+
+  // --- the colour menu -------------------------------------------------------
+
+  let menu = null;
+
+  function closeMenu() {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    document.removeEventListener('mousedown', outside, true);
+    document.removeEventListener('keydown', onKey, true);
+  }
+
+  function outside(e) {
+    if (menu && !menu.contains(e.target)) closeMenu();
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();          // Escape closes this, not the panels too
+      closeMenu();
+    }
+  }
+
+  /* One row of swatches, for a channel or for a person.  Picking the colour
+     already chosen takes it off again, as does "none". */
+  function swatches(title, table, key) {
+    const part = document.createElement('div');
+    const head = document.createElement('h6');
+    head.textContent = title;
+    const row = document.createElement('div');
+    row.className = 'cm-swatches';
+    const pick = (value) => {
+      if (value && table[key] !== value) table[key] = value;
+      else delete table[key];
+      saveColours();
+      closeMenu();
+      refresh();
+    };
+    for (const [name, value] of PALETTE) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cm-swatch' + (table[key] === value ? ' on' : '');
+      b.style.background = value;
+      b.title = name;
+      b.setAttribute('aria-label', name);
+      b.onclick = () => pick(value);
+      row.append(b);
+    }
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.className = 'cm-swatch none';
+    none.textContent = 'none';
+    none.onclick = () => pick('');
+    row.append(none);
+    part.append(head, row);
+    return part;
+  }
+
+  function openMenu(x, y, m) {
+    closeMenu();
+    menu = document.createElement('div');
+    menu.className = 'cm-menu';
+    menu.setAttribute('role', 'menu');
+    const channel = m.channel || 'other';
+    menu.append(swatches(channel === 'tell' ? 'All tells' : `The ${channel} channel`,
+                         colours.channel, channel));
+    if (m.who) {
+      menu.append(swatches(`Everything from ${m.who}`,
+                           colours.who, personKey(m.who)));
+    }
+    document.body.append(menu);
+    // Beside the pointer, but never off the edge of the window.
+    const box = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, Math.min(x, innerWidth - box.width - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(y, innerHeight - box.height - 4))}px`;
+    document.addEventListener('mousedown', outside, true);
+    document.addEventListener('keydown', onKey, true);
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+  }
+
+  addEventListener('resize', closeMenu);
+  bodyEl.addEventListener('scroll', closeMenu);
 
   // --- from the server ------------------------------------------------------
 

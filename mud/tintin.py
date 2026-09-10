@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .codes import parse_bad
+from .store import personal
 
 #: .add_speedrun {name} {type} {vnum} {description}
 SPEEDRUN = re.compile(
@@ -237,7 +238,9 @@ def import_map(store, path: str | Path, progress=None,
                 if len(got) < 3 or not got[0].isdigit():
                     continue
                 command = walkable((got[2] or got[1]).strip().lower())
-                if command:
+                # Somebody's own house, or somebody's own alias, is not a way
+                # out of a public room.
+                if command and not personal(command):
                     edges.append((current, command, int(got[0]), now))
         flush()
 
@@ -262,6 +265,8 @@ def import_map(store, path: str | Path, progress=None,
     scrubbed = store.clean_edge_commands(walkable)
     # ...and exits that are the same way out spelled two ways.
     folded = store.fold_spaced_exits()
+    # A merge into a map from before the importer knew better.
+    store.forget_personal()
 
     # An imported map is finished: it should be corrected, not grown.
     store.locked = True

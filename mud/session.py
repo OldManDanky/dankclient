@@ -35,6 +35,8 @@ from .prefixes import Hidden, Prefixes
 from .scanner import Message, Scanner, Text
 from .state import World
 from .telnet import TelnetFilter
+from .gags import HOLD, LineGate
+from .triggers import TriggerSet
 
 DEFAULT_HOST = "3k.org"
 DEFAULT_PORT = 3000
@@ -208,6 +210,12 @@ class Session:
         self._writer: asyncio.StreamWriter | None = None
         self._tail = ""
         self._lines = LineAssembler(encoding)
+        #: Lines kept off the screen.  Filled by the rules and scripts that
+        #: ask for it; the triggers and the log still see every line.
+        self.gags = TriggerSet()
+        self.gate = LineGate(self.is_gagged, encoding,
+                             active=lambda: len(self.gags) > 0)
+        self._release: asyncio.TimerHandle | None = None
 
         # The two signals that expose the 2s server beat: N while fighting,
         # E while guild points regenerate.  Neither is always present.
@@ -430,6 +438,10 @@ class Session:
         self._telnet = TelnetFilter()
         self._lines = LineAssembler(self.encoding)
         self._tail = ""
+        self.gate.reset()               # half a line is the socket's too
+        if self._release is not None:
+            self._release.cancel()
+            self._release = None
         # Rebuilds the markup reader and the marker filter, both of which hold
         # a fragment across reads, and picks up an edit to the file while it is
         # there.
@@ -479,10 +491,38 @@ class Session:
                 # into a marker is just text.  Show it.
                 held = self.hidden.flush()
                 if held:
-                    self.bus.emit(events.TEXT, held)
+                    self._show(held)
+                self._let_go()
                 self.bus.emit(events.PROMPT)
                 for fn in self.on_prompt:
                     fn()
+
+    # --- the screen ---------------------------------------------------------
+
+    def is_gagged(self, plain: str) -> bool:
+        """Is this line one the player has asked not to see?"""
+        return bool(self.gags.fire(plain))
+
+    def _show(self, data: bytes) -> None:
+        """Send text to the screen, through the gags."""
+        out = self.gate.feed(data)
+        if out:
+            self.bus.emit(events.TEXT, out)
+        if self.gate.pending and self._release is None:
+            # An unfinished line: the rest of it, or a prompt with no end.
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._let_go()            # nothing to wait with; show it now
+                return
+            self._release = loop.call_later(HOLD, self._let_go)
+
+    def _let_go(self) -> None:
+        """Show an unfinished line that has waited long enough for its end."""
+        self._release = None
+        out = self.gate.release()
+        if out:
+            self.bus.emit(events.TEXT, out)
 
     def reload_prefixes(self, path=None) -> None:
         """Pick up an edit to the settings file, or another character's."""
@@ -496,7 +536,7 @@ class Session:
 
     def _on_text(self, data: bytes) -> None:
         self.login.feed(data.decode(self.encoding, "replace"))
-        self.bus.emit(events.TEXT, self.hidden.feed(data))
+        self._show(self.hidden.feed(data))
         for raw, plain in self._lines.feed(data):
             # The markup reader gets the markers; it is the one thing that
             # wants them.  Everything downstream of here sees the line the

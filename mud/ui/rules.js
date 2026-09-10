@@ -171,6 +171,7 @@
     $('f-pattern').value = (rule && rule.pattern) || '';
     $('f-enabled').checked = rule ? !!rule.enabled : true;
     $('f-stop').checked = rule ? !!rule.stop : false;
+    $('f-gag').checked = rule ? !!rule.gag : false;
     $('f-actions').replaceChildren();
     const actions = (rule && rule.actions && rule.actions.length)
       ? rule.actions : [{ type: 'send', text: '' }];
@@ -234,6 +235,7 @@
     $('grp-event').hidden = kind !== 'event';
     $('grp-watch').hidden = kind !== 'watch';
     $('grp-timer').hidden = kind !== 'timer';
+    $('f-gag-row').hidden = kind !== 'trigger';
     $('f-pattern').placeholder = kind === 'alias'
       ? 'the word you type, e.g.  gk'
       : 'text the MUD sends, e.g.  dealt the killing blow to';
@@ -290,6 +292,7 @@
       pattern: $('f-pattern').value,
       enabled: $('f-enabled').checked,
       stop: $('f-stop').checked,
+      gag: $('f-kind').value === 'trigger' && $('f-gag').checked,
       priority: editing ? editing.priority : 0,
       pace: $('f-pace').value,
       event: $('f-event').value,
@@ -367,8 +370,8 @@
 
     const tag = document.createElement('span');
     tag.className = 'tag' + (r.kind === 'alias' ? ' alias' : '');
-    tag.textContent = r.mode && (r.kind === 'trigger' || r.kind === 'alias')
-      ? r.mode : r.kind;
+    tag.textContent = r.kind === 'trigger' && r.gag ? `gag · ${r.mode}`
+      : r.mode && (r.kind === 'trigger' || r.kind === 'alias') ? r.mode : r.kind;
 
     const pat = document.createElement('span');
     pat.className = 'pat';
@@ -399,6 +402,7 @@
       : '';
     meta.textContent = [
       how,
+      r.kind === 'trigger' && r.gag ? 'kept off the screen' : '',
       r.pace && r.pace !== 'paced' ? paceLabel || r.pace : '',
       r.actions.map((a) => (a.type === 'log' ? 'show' : 'send') + ` "${a.text}"`)
         .join(' · '),

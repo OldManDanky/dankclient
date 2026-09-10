@@ -24,12 +24,16 @@ have edited is left alone.  Both were measured before they were trusted.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
+import re
+import ssl
 import tarfile
 import urllib.error
 import urllib.request
 import zlib
+from importlib import resources
 from pathlib import Path, PurePosixPath
 
 from . import SLUG, __version__
@@ -68,15 +72,56 @@ MOST = 200 * 1024 * 1024
 MOST_UNPACKED = 400 * 1024 * 1024
 
 
+@functools.lru_cache(maxsize=1)
+def _trust() -> ssl.SSLContext:
+    """What HTTPS is checked against: this machine's store, and Mozilla's list.
+
+    The machine's store alone was not enough.  On Windows it is filled in on
+    demand -- a root arrives the first time a Windows program asks for it,
+    and Python reading the store is not asking -- so a machine that had never
+    opened GitHub in a browser failed every request with "unable to get local
+    issuer certificate".  A tester's client came up with no map, no bots and
+    that error on the Updates page.
+
+    Mozilla's list, as curl publishes it, is carried in the package and
+    trusted *alongside* the store rather than instead of it: a work proxy or
+    an antivirus that re-signs HTTPS puts its own root in the store, and that
+    has to go on working.  Nothing is loosened -- certificates and host names
+    are checked exactly as before, against more roots.
+    """
+    context = ssl.create_default_context()
+    try:
+        text = (resources.files(__package__ or "mud")
+                / "cacert.pem").read_text(encoding="ascii")
+        blocks = re.findall(r"-----BEGIN CERTIFICATE-----\s.*?"
+                            r"-----END CERTIFICATE-----", text, re.S)
+        if blocks:
+            context.load_verify_locations(cadata="\n".join(blocks) + "\n")
+    except (OSError, ValueError, ssl.SSLError):
+        pass                        # the machine's own store still stands
+    return context
+
+
+def _say(exc: BaseException) -> str:
+    """A failure as somebody could act on it, with the detail kept."""
+    text = f"{type(exc).__name__}: {exc}"
+    if "CERTIFICATE_VERIFY_FAILED" in text:
+        return ("could not verify GitHub's certificate. If this computer's "
+                "clock is wrong, set it right; a work proxy or antivirus that "
+                "scans HTTPS can also cause this. (" + text + ")")
+    return text
+
+
 def _get(url: str, timeout: float) -> bytes:
     request = urllib.request.Request(url, headers={
         "User-Agent": AGENT,
         "Accept-Encoding": "gzip",
     })
-    # HTTPS with the default context, which verifies certificates.  Worth
-    # saying out loud: this is somebody else's repository over the open
-    # internet, and it ends up in the map.
-    with urllib.request.urlopen(request, timeout=timeout) as reply:
+    # HTTPS, verified -- see _trust() for against what.  Worth saying out
+    # loud: this is somebody else's repository over the open internet, and
+    # it ends up in the map.
+    with urllib.request.urlopen(request, timeout=timeout,
+                                context=_trust()) as reply:
         body = reply.read(MOST + 1)
         if len(body) > MOST:
             raise ValueError(f"{url}: refusing a reply over {MOST} bytes")
@@ -145,7 +190,7 @@ def newer_release(timeout: float = 15.0, have: str = "") -> dict:
         found = json.loads(_get(RELEASES, timeout))
     except (urllib.error.URLError, ValueError, OSError,
             json.JSONDecodeError) as exc:
-        return {"error": f"{type(exc).__name__}: {exc}", "have": mine}
+        return {"error": _say(exc), "have": mine}
     if found.get("draft") or not found.get("tag_name"):
         return {"error": "", "have": mine, "latest": "", "newer": False}
 
@@ -188,7 +233,7 @@ def check(store, timeout: float = 20.0, have: dict | None = None) -> dict:
     try:
         tree = json.loads(_get(TREE, timeout))
     except (urllib.error.URLError, ValueError, OSError, json.JSONDecodeError) as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"}
+        return {"error": _say(exc)}
 
     by_path = {e["path"]: e for e in tree.get("tree", ())}
     out: dict = {"error": "", "items": {}}
@@ -280,7 +325,7 @@ def pull(store, routes, want=None, into: Path | None = None,
         _unpack(_get(TARBALL, timeout), root)
     except (urllib.error.URLError, tarfile.TarError, ValueError, OSError) as exc:
         holding.cleanup()
-        return {"error": f"{type(exc).__name__}: {exc}", "did": {}}
+        return {"error": _say(exc), "did": {}}
 
     try:
         if "map" in want and store is not None:
