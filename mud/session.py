@@ -95,7 +95,12 @@ class Session:
         # Movement is exempt, and DDD tells us what counts as movement *here*,
         # so named exits like "omp" or "vortex" are free too.
         self.queue = SendQueue(self.send, self.clock, apm=self.apm,
-                               exits=lambda: self.world.room.exits)
+                               exits=lambda: self.world.room.exits,
+                               # Exactly what `send` can do: anything queued
+                               # while there is nothing to write to waits for
+                               # a socket rather than raising at whoever put
+                               # it there.
+                               ready=lambda: self._writer is not None)
         self.codes_seen: Counter[str] = Counter()
         self.mismatched = 0
         self.jumpstarted = False
@@ -302,6 +307,10 @@ class Session:
             self.store.db.commit()
         if self._writer is not None:
             self._writer.close()
+            # Forgotten, not just closed: sending down a hung-up connection
+            # should be refused rather than written into a socket on its way
+            # out, and the queue reads this to know to hold.
+            self._writer = None
         self._asked.set()
 
     def resume(self) -> None:

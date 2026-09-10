@@ -40,6 +40,11 @@ def payload_fields(event: str, payload) -> dict[str, object]:
         return {"round": payload}
     if event == "enemy":
         return {"enemy": payload}
+    if event == "retrying":
+        return {"seconds": payload}
+    if event in ("connected", "disconnected"):
+        # Neither carries anything; the interesting thing is that it happened.
+        return {}
     if event == "mip":
         return {"code": getattr(payload, "code", ""),
                 "data": getattr(payload, "data", "")}
@@ -101,7 +106,17 @@ EVENT_FIELDS = {
     "enemy": ("enemy",),
     "room": ("short", "exits", "mobs", "players", "items"),
     "mip": ("code", "data"),
+    # The connection itself.  A route that was walking when the line dropped
+    # otherwise just stops, with no way to say so or to start again -- and
+    # coming back is the moment to re-arm whatever was running.
+    "connected": ("attempts",),
+    "disconnected": (),
+    "retrying": ("seconds",),
 }
+
+#: Events that happen while there is no socket.  An action on one of these
+#: cannot reach the MUD, and saying so beats a rule that silently never works.
+OFFLINE_EVENTS = ("disconnected", "retrying")
 
 #: Numbers a watch can compare against.  All come from MIP, so none are scraped.
 WATCH_FIELDS = ("hp", "max_hp", "hp_pct", "sp", "max_sp", "sp_pct",

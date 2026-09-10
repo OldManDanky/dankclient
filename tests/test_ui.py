@@ -656,3 +656,32 @@ def test_the_page_offers_the_icon_as_well_as_the_inline_one():
     page = html()
     assert 'href="icon.ico"' in page
     assert 'href="data:image/svg+xml,' in page
+
+
+def test_the_commands_are_findable_without_already_knowing_about_help():
+    """They lived only in the terminal, which meant the only way to learn what
+    the client does was to already know that /help existed."""
+    page, js = html(), scripts()["help.js"]
+    assert 'data-tab="help"' in page and 'data-pane="help"' in page
+    assert 'id="help-groups"' in page
+    assert "t: 'help'" in js
+    # clicking one loads it into the input rather than running it: they take
+    # arguments, and "/go " with the cursor after it is the useful thing
+    assert "getElementById('cmd')" in js
+
+
+def test_every_command_is_in_a_group():
+    """A flat list of thirty-five is a list nobody reads, and a command that
+    falls out of the grouping is one nobody finds."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from mud.commands import HELP
+
+    seen = [verb for _t, _b, rows in HELP for verb, _d in rows]
+    assert len(seen) == len(set(seen)), "a command listed twice"
+    assert len(seen) > 30
+    for title, _blurb, rows in HELP:
+        assert rows, f"{title} is empty"
+        assert title[0].isupper()

@@ -208,3 +208,60 @@ def test_the_window_rolls():
     import time as _t
     _t.sleep(0.06)
     assert m.rate() == 0
+
+
+# --- nothing goes out while there is nothing to send it down ------------------
+
+def test_a_command_with_no_socket_waits_rather_than_raising():
+    """A rule that fires on a disconnect reaches the queue, and the queue used
+    to hand it straight to send(), which raises when there is no writer. The
+    rule looked broken rather than pending -- and coming back is exactly when
+    "send this" should happen."""
+    from mud.outbound import NOW
+
+    sent, up = [], {"yes": False}
+    queue = q(sent)
+    queue.ready = lambda: up["yes"]
+
+    queue.put("say I fell over")
+    queue.put("flee", pace=NOW)          # not even an immediate one goes
+    assert sent == []
+    assert len(queue) == 2
+
+
+def test_what_waited_goes_out_in_order_once_there_is_a_socket():
+    async def scenario():
+        sent, up = [], {"yes": False}
+        queue = q(sent, period=0.01)
+        queue.ready = lambda: up["yes"]
+        queue.put("first")
+        queue.put("second")
+
+        up["yes"] = True
+        queue.start()
+        await asyncio.sleep(0.2)
+        queue.stop()
+        return sent
+
+    assert asyncio.run(scenario())[:2] == ["first", "second"]
+
+
+def test_the_drain_will_not_empty_the_queue_into_a_dead_socket():
+    """The beat keeps coming while the connection is down, and a drain that
+    only checked the clock would hand every held command to a writer that is
+    not there."""
+    async def scenario():
+        sent, up = [], {"yes": False}
+        queue = q(sent, period=0.01)
+        queue.ready = lambda: up["yes"]
+        for n in range(6):
+            queue.put(f"cmd{n}")
+        queue.start()
+        await asyncio.sleep(0.1)          # several beats, all with no socket
+        held = len(queue)
+        queue.stop()
+        return sent, held
+
+    sent, held = asyncio.run(scenario())
+    assert sent == [], "it sent into a dead socket"
+    assert held == 6, "and it must still have them for when one turns up"

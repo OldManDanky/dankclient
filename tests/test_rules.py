@@ -28,6 +28,10 @@ def make():
     session.sent_lines = []
     session.send = session.sent_lines.append
     session.queue._send = session.sent_lines.append
+    # Standing in for the socket.  The queue holds anything put while there is
+    # nothing to write to, so a fixture that fakes only the send function is
+    # one where nothing ever goes out.
+    session._writer = object()
     host = ScriptHost(session, TMP)
     store = RuleStore(host, TMP / "rules.json")
     host.rules = store

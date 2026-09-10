@@ -83,8 +83,12 @@ class SendQueue:
     def __init__(self, send: Callable[[str], None], clock, *,
                  apm: APMMeter | None = None,
                  exits: Callable[[], Iterable[str]] = tuple,
-                 per_tick: int = 3, panic_immediate: bool = True):
+                 per_tick: int = 3, panic_immediate: bool = True,
+                 ready=None):
         self._send = send
+        #: Is there a socket to send down?  Anything put while there is not
+        #: waits in the heap for one, rather than raising at the caller.
+        self.ready = ready or (lambda: True)
         self._clock = clock
         self.apm = apm or APMMeter()
         self.exits = exits
@@ -113,6 +117,13 @@ class SendQueue:
         self.sent += 1
 
     def put(self, line: str, priority: int = NORMAL, pace: str = PACED) -> None:
+        # Nothing goes out while there is no socket -- it waits.  A rule that
+        # fires on a disconnect would otherwise reach `now`, which raises, and
+        # the rule would look broken rather than pending.  Coming back is
+        # exactly when "send this" should happen.
+        if not self.ready():
+            heapq.heappush(self._heap, (priority, next(self._seq), line))
+            return
         if pace == NOW or (self.panic_immediate and priority <= PANIC):
             self.now(line)
             return
@@ -134,6 +145,8 @@ class SendQueue:
             await self._clock.wait()
             for _ in range(self.per_tick):
                 if not self._heap or self.apm.headroom() <= 0:
+                    break
+                if not self.ready():
                     break
                 _, _, line = heapq.heappop(self._heap)
                 self.now(line)

@@ -480,6 +480,30 @@ The tarball is untrusted input, so only plain files under a path we asked for
 are taken out of it -- a name with `..` in it, an absolute path, or a symlink
 pointing at your keys is dropped before anything is written.
 
+## Reacting to the connection
+
+A rule or a script can hook the connection itself, not just the game:
+
+```python
+@on("disconnected")
+def _(_): log("the line went")
+
+@on("connected")
+def _(_): send("look")            # held until there is a socket, then sent
+```
+
+`connected`, `disconnected` and `retrying` are events like any other, so the
+Events tab offers them too.  A route that was walking when the line dropped
+otherwise just stops, with no way to say so or to start again -- and coming
+back is the moment to re-arm whatever was running.
+
+Anything sent while there is no socket waits for one rather than failing.  The
+queue used to hand it straight to `send`, which raises with nothing to write
+to, so a rule that fired on a disconnect looked broken rather than pending.
+The drain checks too: the game's beat keeps coming while the connection is
+down, and a drain that only watched the clock would empty the whole queue into
+a socket that is not there.
+
 ## Scripting
 
 Rules can be built in the UI (Triggers & Aliases panel) or written as Python in
@@ -690,7 +714,10 @@ launch with nothing behind it.
 
 ## Client commands
 
-Typed in the browser or the console; they never reach the MUD.
+Typed in the browser or the console; they never reach the MUD.  **Options ->
+Commands** lists them grouped by what you are trying to do, which is where
+somebody who does not already know that `/help` exists will find them; clicking
+one loads it into the input box, because most of them take an argument.
 
     /help  /state  /clock  /find <text>            what happened, and where
     /here  /bind <where>  /lost  /go <name>        where you are, and getting

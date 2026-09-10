@@ -707,6 +707,14 @@ class WebServer:
                 self._map_centre = None       # the drawn view is now stale
                 self._dirty = True
             return
+        if kind == "help":
+            from .commands import HELP
+
+            self.push({"t": "help", "groups": [
+                {"title": t, "blurb": b,
+                 "rows": [{"verb": v, "what": d} for v, d in rows]}
+                for t, b, rows in HELP]})
+            return
         if kind == "update":
             # Network and a 25MB import: off the loop, or the browser and the
             # MUD both stop being served for four seconds.

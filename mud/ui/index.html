@@ -229,6 +229,15 @@
               background:var(--sunk);border:1px solid var(--line);
               border-radius:3px;padding:4px 6px;margin:3px 0;
               overflow-wrap:anywhere;cursor:text}
+  .help-group{margin:0 0 14px}
+  .help-group h5{margin:0 0 2px;font-size:11px;letter-spacing:.04em;
+                 text-transform:uppercase;color:var(--dim)}
+  .help-group p{margin:0 0 6px;font-size:11px;color:var(--dim)}
+  .help-row{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr);
+            gap:8px;padding:3px 0;align-items:baseline}
+  .help-row button{font-family:inherit;font-size:11px;text-align:left;
+                   color:var(--accent);padding:2px 5px}
+  .help-row span{font-size:11px;color:var(--ink)}
   #about-release{margin:0 0 10px}
   #about-release.new{padding:8px;border-radius:3px;color:var(--ink);
     background:color-mix(in srgb,var(--accent) 16%,transparent);
@@ -624,6 +633,7 @@
       <button type="button" data-tab="settings">Character setup</button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
       <button type="button" data-tab="updates">Updates<span class="n"></span></button>
+      <button type="button" data-tab="help">Commands</button>
       <button type="button" data-tab="about">About<span class="n"></span></button>
     </nav>
 
@@ -645,6 +655,18 @@
           </div>
           <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
                data-none="No routes yet. Paste a path into a new one."></div>
+        </section>
+
+        <!-- commands ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="help" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Commands</h4>
+              <p>Typed into the input box like anything else, but these never
+                 reach the MUD. Click one to put it in the box.</p>
+            </div>
+          </div>
+          <div id="help-groups"></div>
         </section>
 
         <!-- about -------------------------------------------------------- -->
@@ -1114,6 +1136,7 @@
   <script src="map.js"></script>
   <script src="routes.js"></script>
   <script src="updates.js"></script>
+  <script src="help.js"></script>
   <script src="about.js"></script>
   <script src="panels.js"></script>
 </body>

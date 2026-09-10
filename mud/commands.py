@@ -10,42 +10,58 @@ from datetime import datetime
 
 from . import events
 
+#: The "/" verbs, grouped by what you are trying to do.  Grouped
+#: because a flat list of thirty-odd commands is a list nobody reads,
+#: and the browser renders these as a panel rather than a wall of
+#: text in the terminal.
 HELP = [
-    ("/help", "this list"),
-    ("/js", "re-send the 3klient handshake"),
-    ("/state", "parsed player state and code tally"),
-    ("/clock", "tick source, period and queue depth"),
-    ("/flush", "drop everything the scripts have queued"),
-    ("/scripts", "loaded scripts, hook counts and errors"),
-    ("/reload", "rescan the scripts directory now"),
-    ("/test <line>", "feed a line through the triggers as if the MUD sent it"),
-    ("/triggers", "every registered trigger and its prefilter literal"),
-    ("/find <text>", "search everything this client has ever logged"),
-    ("/here", "where the map thinks you are, and what leads out"),
-    ("/name <text>", "rename the room you are in (blank clears it)"),
-    ("/lost", "tell the map it has you in the wrong place"),
-    ("/merge <id>", "fold room <id> into the one you are standing in"),
-    ("/go <name>", "walk to the nearest mapped room with that name"),
-    ("/region <name>", "label the area you are standing in"),
-    ("/region under <name>", "nest this area inside another"),
-    ("/region only <name>", "label just this room"),
-    ("/regions", "the areas known, as a tree"),
-    ("/bind <where>", "say which room you are in, by landmark or number"),
-    ("/marks [text]", "named destinations imported from tt++"),
-    ("/prefixes", "show the character settings that mark up 3K's output"),
-    ("/prefixes set", "send them"),
-    ("/lock", "stop the map growing (an imported map is finished)"),
-    ("/unlock", "let it add rooms again"),
-    ("/new", "rooms found that the imported map did not have"),
-    ("/forget <id>", "remove a room the map should not have"),
-    ("/dupes", "rooms that look like the same place twice"),
-    ("/repair", "drop one-off readings that contradict a room"),
-    ("/bots", "routes and hunts that are running"),
-    ("/stop", "stop every bot at once"),
-    ("/tick <secs> <command>", "send it every so often, and keep doing it"),
-    ("/ticks", "the ones that are running"),
-    ("/untick <name|all>", "stop one, or all of them"),
-    ("/delay <secs> <command>", "send it once, later"),
+    ('Getting about', 'The map is 49,494 rooms somebody else walked, so most places already have a name you can go to.', [
+        ('/go <name>', 'walk to the nearest mapped room with that name'),
+        ('/here', 'where the map thinks you are, and what leads out'),
+        ('/marks [text]', 'named destinations imported from tt++'),
+        ('/bind <where>', 'say which room you are in, by landmark or number'),
+        ('/lost', 'tell the map it has you in the wrong place'),
+        ('/regions', 'the areas known, as a tree'),
+        ('/region <name>', 'label the area you are standing in'),
+        ('/region under <name>', 'nest this area inside another'),
+        ('/region only <name>', 'label just this room'),
+    ]),
+    ('Looking things up', 'Every session is logged and filed by the room it happened in.', [
+        ('/find <text>', 'search everything this client has ever logged'),
+        ('/state', 'parsed player state and code tally'),
+        ('/clock', 'tick source, period and queue depth'),
+    ]),
+    ('Running things', 'Routes, and anything the scripts have started.', [
+        ('/bots', 'routes and hunts that are running'),
+        ('/stop', 'stop every bot at once'),
+        ('/tick <secs> <command>', 'send it every so often, and keep doing it'),
+        ('/ticks', 'the ones that are running'),
+        ('/untick <name|all>', 'stop one, or all of them'),
+        ('/delay <secs> <command>', 'send it once, later'),
+        ('/flush', 'drop everything the scripts have queued'),
+    ]),
+    ('Scripting', 'Rules written as Python, reloaded as you save them.', [
+        ('/scripts', 'loaded scripts, hook counts and errors'),
+        ('/reload', 'rescan the scripts directory now'),
+        ('/test <line>', 'feed a line through the triggers as if the MUD sent it'),
+        ('/triggers', 'every registered trigger and its prefilter literal'),
+    ]),
+    ('Correcting the map', "It is yours to fix; nothing here touches anybody else's copy.", [
+        ('/name <text>', 'rename the room you are in (blank clears it)'),
+        ('/merge <id>', 'fold room <id> into the one you are standing in'),
+        ('/forget <id>', 'remove a room the map should not have'),
+        ('/new', 'rooms found that the imported map did not have'),
+        ('/dupes', 'rooms that look like the same place twice'),
+        ('/repair', 'drop one-off readings that contradict a room'),
+        ('/lock', 'stop the map growing (an imported map is finished)'),
+        ('/unlock', 'let it add rooms again'),
+    ]),
+    ('The connection', '', [
+        ('/js', 're-send the 3klient handshake'),
+        ('/prefixes', "show the character settings that mark up 3K's output"),
+        ('/prefixes set', 'send them'),
+        ('/help', 'this list'),
+    ]),
 ]
 
 
@@ -58,7 +74,12 @@ def handle(text: str, session, scripts, note) -> bool:
     verb, rest = verb.lower(), rest.strip()
 
     if verb in ("help", "?"):
-        note("\n".join(f"  {v:<14} {d}" for v, d in HELP))
+        wide = max(len(v) for _t, _b, rows in HELP for v, _d in rows)
+        out = []
+        for title, _blurb, rows in HELP:
+            out.append(f"\n  {title}")
+            out += [f"    {v:<{wide}}  {d}" for v, d in rows]
+        note("\n".join(out).lstrip("\n"))
 
     elif verb in ("js", "jumpstart"):
         session.jumpstart()
