@@ -19,6 +19,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .paths import set_aside, write_atomically
 from .patrol import wanted
 
 #: How many times one step may be repeated.  A cap, because "999n" in a path
@@ -132,6 +133,24 @@ class Route:
         return None
 
 
+def _route(raw) -> Route | None:
+    """One saved route, or None if it cannot be one.
+
+    As with rules: a key from a newer version is dropped, not a reason to
+    refuse to start, and one broken route does not take the others with it.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        route = Route(**{k: v for k, v in raw.items()
+                         if k in Route.__dataclass_fields__})
+        route.steps()
+        route.setup_steps()
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return route
+
+
 class RouteStore:
     def __init__(self, host, path: str | Path = "scripts/routes.json") -> None:
         self.host = host                      # ScriptHost, for its Bots
@@ -146,15 +165,17 @@ class RouteStore:
             return
         try:
             raw = json.loads(self.path.read_text())
+            if not isinstance(raw, list):
+                raise ValueError("not a list of routes")
         except (ValueError, OSError):
+            set_aside(self.path)         # kept, not overwritten by the next save
             self.routes = []
             return
-        self.routes = [Route(**r) for r in raw if isinstance(r, dict)]
+        self.routes = [r for r in map(_route, raw) if r is not None]
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps([asdict(r) for r in self.routes], indent=2))
+        write_atomically(self.path,
+                         json.dumps([asdict(r) for r in self.routes], indent=2))
 
     # --- editing ------------------------------------------------------------
 

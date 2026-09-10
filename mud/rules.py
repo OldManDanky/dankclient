@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .outbound import NOW, PACED, PACES, ROUND
+from .paths import set_aside, write_atomically
 from .triggers import Trigger
 
 
@@ -285,6 +286,25 @@ class Rule:
                 f"def {name}(m):\n" + block + "\n")
 
 
+def _rule(raw) -> Rule | None:
+    """One saved rule, or None if it cannot be one.
+
+    Keys this version has never heard of are dropped rather than refused: a
+    rules.json written by a newer client used to stop this one starting at
+    all, on a TypeError about an argument nobody here knew.  A rule so broken
+    that checking it raises is left out, rather than taking the rest with it.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        rule = Rule(**{k: v for k, v in raw.items()
+                       if k in Rule.__dataclass_fields__})
+        rule.validate()
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return None
+    return rule
+
+
 class RuleStore:
     def __init__(self, host, path: str | Path = "scripts/rules.json") -> None:
         self.host = host                      # ScriptHost
@@ -304,14 +324,19 @@ class RuleStore:
             return
         try:
             raw = json.loads(self.path.read_text())
+            if not isinstance(raw, list):
+                raise ValueError("not a list of rules")
         except (ValueError, OSError):
+            # Not "no rules": the next save would write that over whatever is
+            # still recoverable in the file.
+            set_aside(self.path)
             self.rules = []
             return
-        self.rules = [Rule(**r) for r in raw if isinstance(r, dict)]
+        self.rules = [r for r in map(_rule, raw) if r is not None]
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps([asdict(r) for r in self.rules], indent=2))
+        write_atomically(self.path,
+                         json.dumps([asdict(r) for r in self.rules], indent=2))
 
     # --- registration -------------------------------------------------------
 

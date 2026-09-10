@@ -16,6 +16,7 @@ import os
 import queue
 import sys
 import threading
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -151,6 +152,10 @@ async def amain(args: argparse.Namespace) -> int:
         jumpstart=not args.no_jumpstart,
         raw_log=raw_log,
         store=store,
+        # Where the scripts are, not wherever the program was started from:
+        # installed, that was the program folder, which the player cannot
+        # write to.  A character's own copy replaces it once one is chosen.
+        prefixes_path=str(Path(args.scripts) / "prefixes.json"),
     )
 
     session.apm.limit = args.apm
@@ -177,16 +182,25 @@ async def amain(args: argparse.Namespace) -> int:
 
     session.reconnect = not args.no_reconnect
 
+    where = f"  logging to {raw_log.bin_path}" if raw_log else "  (not logging)"
     try:
         await session.connect()
     except OSError as exc:
-        print(f"{RED}cannot connect to {args.host}:{args.port}: {exc}{RESET}",
+        if not session.reconnect:
+            print(f"{RED}cannot connect to {args.host}:{args.port}: "
+                  f"{exc}{RESET}", file=sys.stderr)
+            return 1
+        # Started while 3K is rebooting, or before the network is up.  This
+        # used to be the end: the installed client exited before its window
+        # had opened, so it looked as though it had never started.  Now the
+        # window comes up and it keeps knocking, exactly as after a link death.
+        print(f"{YELLOW}{args.host}:{args.port} is not answering "
+              f"({type(exc).__name__}: {exc}) -- will keep trying{RESET}",
               file=sys.stderr)
-        return 1
-
-    where = f"  logging to {raw_log.bin_path}" if raw_log else "  (not logging)"
-    print(f"{DIM}connected {args.host}:{args.port}  sec_code={session.sec_code}"
-          f"{where}  (/js forces the handshake){RESET}", file=sys.stderr)
+    else:
+        print(f"{DIM}connected {args.host}:{args.port}  "
+              f"sec_code={session.sec_code}{where}  "
+              f"(/js forces the handshake){RESET}", file=sys.stderr)
 
     def _note(text: str) -> None:
         print(f"{YELLOW}{text}{RESET}", file=sys.stderr)
@@ -254,7 +268,8 @@ async def amain(args: argparse.Namespace) -> int:
                   f"{RESET}", file=sys.stderr)
             return 1
         activate(char, chars, session, host)
-        session.login.begin(char.name, char.password)
+        # Now if there is a connection, and on the first one if there is not.
+        session.login_as(char.name, char.password)
         print(f"{DIM}  playing {char.name} "
               f"({chars.dir(char.name)}/){RESET}", file=sys.stderr)
 
@@ -334,7 +349,7 @@ async def amain(args: argparse.Namespace) -> int:
             web.refresh()
 
     if store is not None and not args.no_bootstrap and update.never_run(store):
-        asyncio.ensure_future(first_run())
+        events.spawn(first_run(), "fetching the world")
 
     kb = asyncio.create_task(keyboard())
     try:
@@ -360,7 +375,14 @@ async def amain(args: argparse.Namespace) -> int:
                 session.hangup()
             for task in (playing, shut):
                 task.cancel()
-            await asyncio.gather(playing, shut, return_exceptions=True)
+            for got in await asyncio.gather(playing, shut,
+                                            return_exceptions=True):
+                if isinstance(got, Exception):
+                    # Gathered up and dropped, this was a window that closed
+                    # itself with nothing in the log to say why.
+                    print(f"{RED}the session stopped on an error:{RESET}\n"
+                          + "".join(traceback.format_exception(got)),
+                          file=sys.stderr)
             if window.returncode is None:
                 window.terminate()
     except asyncio.CancelledError:

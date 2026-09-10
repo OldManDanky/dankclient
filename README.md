@@ -50,6 +50,10 @@ Commands that start with `/` are for the client and never reach the MUD --
 `/help` lists them, and so does **Options -> Commands**.  Clicking a room on
 the map walks there.
 
+In the output, drag to select, double-click for a word or triple-click for a
+whole line, then **Ctrl+C** to copy it.  Web addresses underline when you
+point at them; **shift-click** opens one in your own browser.
+
 ## Updates
 
 **The client**: **Options -> About** says when a newer version is out.

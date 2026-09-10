@@ -130,7 +130,7 @@ def source(root: Path) -> str:
          Component ids here are a hash of the file path, so a new version
          shares them with the old one. File costing runs at sequence 1000, five
          hundred before the old product would have been removed at 1501, and it
-         saw python\pythonw.exe already on disk under the same component, byte
+         saw python\\pythonw.exe already on disk under the same component, byte
          for byte the same file, and decided there was no work to do. The
          removal then deleted it and InstallFiles never put it back: 0.2.0
          upgraded over 0.1.0 into an install with no interpreter in it.
@@ -157,8 +157,17 @@ def source(root: Path) -> str:
          somewhere without saying where, which leaves you with a Start Menu
          entry and no idea what it did. -->
     <UIRef Id="WixUI_Minimal"/>
-    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
-              Value="Installed to [INSTALLDIR] -- your map, characters, triggers and session logs live separately in %LOCALAPPDATA%\\{SLUG}, so updating this program never touches them. That folder also holds client.log, which is where it writes down anything that goes wrong."/>
+    <!-- Set by an action, not as a Property.  The dialog shows
+         [WIXUI_EXITDIALOGOPTIONALTEXT], and Windows Installer fills in a
+         reference once: references inside the value it found are not filled
+         in again, so a Property here put the words [INSTALLDIR] on screen.
+         An action that sets a property does format its value, and after
+         CostFinalize the folders have their real paths. -->
+    <CustomAction Id="SayWhere" Property="WIXUI_EXITDIALOGOPTIONALTEXT"
+                  Value="Installed to [INSTALLDIR]. Your map, characters, triggers and session logs live separately in [LocalAppDataFolder]{SLUG}, so updating this program never touches them. That folder also holds client.log, which is where it writes down anything that goes wrong."/>
+    <InstallUISequence>
+      <Custom Action="SayWhere" After="CostFinalize"/>
+    </InstallUISequence>
 
     <!-- What Apps &amp; Features shows.  Without these it is a name and
          nothing else. -->

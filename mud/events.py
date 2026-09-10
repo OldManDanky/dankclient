@@ -98,26 +98,44 @@ class Bus:
             try:
                 result = fn(*args)
                 if inspect.isawaitable(result):
-                    _spawn(result, kind)
+                    spawn(result, f"{kind} handler")
             except Exception:
                 _blame(kind, fn)
 
 
-def _spawn(coro: Any, kind: str) -> None:
+#: Tasks started by spawn() and not yet finished.  The event loop keeps only
+#: weak references to tasks, so one that nothing else holds can be collected
+#: halfway through -- this is what holds them.
+_running: set = set()
+
+
+def spawn(coro: Any, what: str = "task") -> asyncio.Task | None:
+    """Run a coroutine in the background, and say so if it fails.
+
+    Instead of asyncio.create_task, everywhere.  An exception inside a task
+    nobody awaits goes nowhere: it has happened three times here that a panel
+    simply sat on "working" because the code behind it had raised, and
+    nothing anywhere said so.  This writes it down -- to the console, or to
+    client.log when there is no console.
+    """
     try:
         task = asyncio.ensure_future(coro)
     except RuntimeError:
-        return                      # no running loop (tests, teardown)
+        if inspect.iscoroutine(coro):
+            coro.close()            # never started; don't warn that it wasn't
+        return None                 # no running loop (tests, teardown)
+    _running.add(task)
 
     def done(t: asyncio.Task) -> None:
-        if t.cancelled():
+        _running.discard(t)
+        if t.cancelled() or t.exception() is None:
             return
-        if t.exception() is not None:
-            print(f"\x1b[31m[bus] {kind} handler failed:\x1b[0m",
-                  file=sys.stderr)
-            t.print_stack()
+        exc = t.exception()
+        print(f"\x1b[31m[client] {what} failed:\x1b[0m\n"
+              + "".join(traceback.format_exception(exc)), file=sys.stderr)
 
     task.add_done_callback(done)
+    return task
 
 
 def _blame(kind: str, fn: Handler) -> None:

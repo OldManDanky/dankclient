@@ -202,7 +202,9 @@ def release(tag="v0.2.0", **extra):
             "html_url": f"https://github.com/{update.CLIENT}/releases/{tag}",
             "published_at": "2026-10-01T00:00:00Z",
             "assets": [{"name": "dankclient-0.2.0.msi",
-                        "browser_download_url": "https://example/x.msi"}]}
+                        "browser_download_url":
+                            f"https://github.com/{update.CLIENT}/releases/"
+                            f"download/{tag}/dankclient-0.2.0.msi"}]}
     body.update(extra)
     return lambda url, timeout: json.dumps(body).encode()
 

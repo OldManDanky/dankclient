@@ -84,7 +84,12 @@ class Prefixes:
             return
         try:
             raw = json.loads(self.path.read_text())
+            if not isinstance(raw, dict):
+                raise ValueError("not a settings object")
         except (ValueError, OSError):
+            # The defaults stand, and the file is kept rather than saved over.
+            from .paths import set_aside
+            set_aside(self.path)
             return
         self.verb = str(raw.get("verb", VERB))
         pairs = raw.get("set")
@@ -96,8 +101,8 @@ class Prefixes:
             self.after = [str(c) for c in after]
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(
+        from .paths import write_atomically
+        write_atomically(self.path, json.dumps(
             {"verb": self.verb, "set": [list(p) for p in self.pairs],
              "after": self.after}, indent=2))
 

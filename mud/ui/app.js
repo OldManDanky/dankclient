@@ -119,7 +119,10 @@ try {
     // cursor matches the ground: the terminal takes no input, so the marker
     // would only suggest otherwise
     theme: { background: '#111318', foreground: '#d8dde6',
-             cursor: '#111318', cursorAccent: '#111318' },
+             cursor: '#111318', cursorAccent: '#111318',
+             // Visible against the ground: a selection you cannot see is one
+             // you do not know you have made before pressing Ctrl+C.
+             selectionBackground: 'rgba(111, 155, 235, 0.45)' },
   });
   if (typeof FitAddon !== 'undefined') {
     fit = new FitAddon.FitAddon();
@@ -277,9 +280,92 @@ addEventListener('keydown', (e) => {
 });
 
 // Clicking the terminal is for selecting text; it should not capture typing.
+// The selection survives the input taking focus back -- it is xterm's own,
+// not the page's -- and Ctrl+C below is what copies it.
 $('term').addEventListener('mouseup', () => {
   if (!getSelection || String(getSelection()) === '') cmd.focus();
 });
+
+/* Ctrl+C copies what is selected in the terminal.  Drag to select, double-
+   click for a word, triple-click for the whole line.
+
+   It did nothing before: the keyboard is always pointed at the command bar,
+   and xterm's selection is its own rather than the page's, so the browser's
+   copy found nothing to copy.  A selection in the command bar itself still
+   wins -- that is the text somebody is working on -- and so does one made
+   anywhere else on the page. */
+function copyText(text) {
+  const fallback = () => {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.append(box);
+    box.select();
+    try { document.execCommand('copy'); } catch (err) { /* nothing to do */ }
+    box.remove();
+    cmd.focus();
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'c') return;
+  if (!term || !term.hasSelection()) return;
+  const t = e.target;
+  if (t && typeof t.selectionStart === 'number' && t.selectionStart !== t.selectionEnd) return;
+  if (getSelection && String(getSelection()) !== '') return;
+  e.preventDefault();
+  copyText(term.getSelection());
+  // Cleared, the way a terminal does it: the selection going is how you can
+  // tell the copy happened.
+  term.clearSelection();
+});
+
+/* Addresses in the output open with shift-click.
+
+   Shift, because a plain click in the terminal is for selecting text, and a
+   link that fires on the click that was meant to start a selection is a link
+   that opens by accident.  The address goes to the server rather than to
+   window.open: in app mode window.open opens inside the client's own private
+   browser, with none of the player's bookmarks or logins, and the server hands
+   it to the browser they actually use -- after checking it is http or https,
+   because anybody on 3K can put text on this screen. */
+const ADDRESS = /\bhttps?:\/\/[^\s"'<>`]+/g;
+
+function openLink(url) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'open', url }));
+}
+
+if (term && term.registerLinkProvider) {
+  term.registerLinkProvider({
+    provideLinks(y, callback) {
+      const row = term.buffer.active.getLine(y - 1);
+      if (!row) { callback(undefined); return; }
+      const text = row.translateToString(true);
+      const links = [];
+      for (const m of text.matchAll(ADDRESS)) {
+        // A sentence ends after the address, not inside it.
+        const url = m[0].replace(/[.,;:!?'")\]}]+$/, '');
+        if (!url) continue;
+        links.push({
+          range: { start: { x: m.index + 1, y }, end: { x: m.index + url.length, y } },
+          text: url,
+          decorations: { underline: true, pointerCursor: false },
+          activate(event, address) { if (event.shiftKey) openLink(address); },
+          hover() { $('term').title = 'Shift-click to open'; },
+          leave() { $('term').title = ''; },
+        });
+      }
+      callback(links.length ? links : undefined);
+    },
+  });
+}
 
 // These are commands going to somebody's character, so the first press shows
 // what they are and the second sends them.  A button that fires thirteen

@@ -228,8 +228,10 @@ class ScriptHost:
                       + traceback.format_exc())
             return
         if asyncio.iscoroutine(result):
-            task = asyncio.ensure_future(result)
-            task.add_done_callback(self._report)
+            # Held until it finishes, or the loop may collect it halfway.
+            task = events.spawn(result, f"script {getattr(fn, '__name__', fn)}")
+            if task is not None:
+                task.add_done_callback(self._report)
 
     def _report(self, task: asyncio.Task) -> None:
         if task.cancelled() or task.exception() is None:

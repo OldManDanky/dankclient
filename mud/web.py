@@ -24,6 +24,7 @@ import mimetypes
 import struct
 import time
 import urllib.parse
+import webbrowser
 from importlib import resources
 from pathlib import Path
 
@@ -65,7 +66,64 @@ def ui_file(name: str) -> bytes:
 #: second drawing history nobody is going to scroll back through.
 SCROLLBACK = 400
 
-OP_TEXT, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG = 0x1, 0x2, 0x8, 0x9, 0xA
+#: Most one message from the page may be.  The largest thing it sends is a
+#: route or a rule being saved -- a few kilobytes -- so this is generous.
+#: Without it, a frame header claiming eight exabytes was simply believed.
+MESSAGE_MOST = 1 << 20
+#: Most that may wait to go out to one page before it is given up on.  A page
+#: that has stopped reading -- a frozen tab, a machine asleep with the window
+#: open -- used to have everything the MUD said queued for it without limit.
+#: It reconnects by itself and is sent the scrollback, so nothing is lost.
+BACKLOG_MOST = 8 << 20
+#: How long a connection has to say what it wants.  One that says nothing
+#: used to be held open for as long as it cared to wait.
+HEADERS_WITHIN = 10.0
+
+OP_CONT, OP_TEXT, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG = 0x0, 0x1, 0x2, 0x8, 0x9, 0xA
+
+#: The names this machine answers to, and the only ones the UI is served on.
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def loopback_host(host: str) -> bool:
+    """Is this Host header naming this machine?
+
+    DNS rebinding: a page on somebody's domain has that domain re-pointed at
+    127.0.0.1, and is then same-origin with itself while talking to us.  Its
+    requests still carry its own name in Host, which is how they are told
+    apart.  No Host at all is not a browser, and is let through like Origin.
+    """
+    if not host:
+        return True
+    try:
+        name = urllib.parse.urlsplit("//" + host).hostname
+    except ValueError:
+        return False
+    return name in LOOPBACK
+
+
+def web_address(url) -> str | None:
+    """The address, if it is one to hand a browser; None otherwise.
+
+    It came out of the MUD, which means anybody on 3K could have typed it, and
+    it is about to be given to the operating system to open.  So: http or
+    https, with a host, and nothing that is not part of an address -- no
+    spaces, quotes or control characters, which is where a string handed to
+    the system stops being a URL and starts being something else.
+    """
+    if not isinstance(url, str) or len(url) > 2048:
+        return None
+    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F
+           or ch in '"<>\\^`{|}' for ch in url):
+        return None
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in ("http", "https") or not host:
+        return None
+    return url
 
 
 def ours(origin: str) -> bool:
@@ -86,8 +144,11 @@ def ours(origin: str) -> bool:
     """
     if not origin:
         return True
-    host = urllib.parse.urlsplit(origin).hostname
-    return host in ("127.0.0.1", "localhost", "::1")
+    try:
+        host = urllib.parse.urlsplit(origin).hostname
+    except ValueError:
+        return False
+    return host in LOOPBACK
 
 
 def _accept_key(key: str) -> str:
@@ -107,21 +168,52 @@ def _frame(payload: bytes, opcode: int = OP_TEXT) -> bytes:
     return head + payload
 
 
-async def _read_frame(reader: asyncio.StreamReader) -> tuple[int, bytes] | None:
+class _Refused(Exception):
+    """The page broke the protocol.  Closed with this code, and this reason."""
+
+    def __init__(self, code: int, why: str) -> None:
+        super().__init__(why)
+        self.code, self.why = code, why
+
+
+def _unmask(payload: bytes, mask: bytes) -> bytes:
+    """XOR with the four-byte mask, as one big integer rather than per byte."""
+    n = len(payload)
+    key = (mask * (n // 4 + 1))[:n]
+    return (int.from_bytes(payload, "big")
+            ^ int.from_bytes(key, "big")).to_bytes(n, "big")
+
+
+async def _read_raw(reader: asyncio.StreamReader, most: int | None = None
+                    ) -> tuple[bool, int, bool, bytes]:
+    """One frame: (final, opcode, masked, payload).
+
+    The length is checked before anything is read, so a header claiming more
+    than `most` is refused rather than waited for.
+    """
     header = await reader.readexactly(2)
+    final = bool(header[0] & 0x80)
     opcode = header[0] & 0x0F
-    masked = header[1] & 0x80
+    masked = bool(header[1] & 0x80)
     length = header[1] & 0x7F
 
     if length == 126:
         length = struct.unpack(">H", await reader.readexactly(2))[0]
     elif length == 127:
         length = struct.unpack(">Q", await reader.readexactly(8))[0]
+    if most is not None and length > most:
+        raise _Refused(1009, f"a {length}-byte message")
 
     mask = await reader.readexactly(4) if masked else b""
     payload = await reader.readexactly(length)
-    if masked:
-        payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    if masked and payload:
+        payload = _unmask(payload, mask)
+    return final, opcode, masked, payload
+
+
+async def _read_frame(reader: asyncio.StreamReader) -> tuple[int, bytes] | None:
+    """One frame as (opcode, payload).  What the tests read our frames with."""
+    _final, opcode, _masked, payload = await _read_raw(reader)
     return opcode, payload
 
 
@@ -178,8 +270,8 @@ class WebServer:
                         self._handle, self.host, 0)
         self.port = self._server.sockets[0].getsockname()[1]
         self._wire_session()
-        asyncio.create_task(self._pump())
-        asyncio.create_task(self._ask_about_releases())
+        events.spawn(self._pump(), "the UI pump")
+        events.spawn(self._ask_about_releases(), "the release check")
         return self.port
 
     async def _ask_about_releases(self) -> None:
@@ -276,9 +368,20 @@ class WebServer:
             return
         data = _frame(json.dumps(obj).encode())
         for w in list(self._clients):
+            transport = getattr(w, "transport", None)
+            if transport is not None and (
+                    transport.is_closing()
+                    or transport.get_write_buffer_size() > BACKLOG_MOST):
+                # Stopped reading.  Aborted rather than closed: close() would
+                # wait to send the backlog to somebody who is not reading it.
+                self._clients.discard(w)
+                if not transport.is_closing():
+                    log("a page stopped reading; dropped it until it comes back")
+                    transport.abort()
+                continue
             try:
                 w.write(data)
-            except (ConnectionError, OSError):
+            except (ConnectionError, OSError, RuntimeError):
                 self._clients.discard(w)
 
     def snapshot(self) -> dict:
@@ -572,9 +675,13 @@ class WebServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         try:
-            request = await reader.readuntil(b"\r\n\r\n")
-        except (asyncio.IncompleteReadError, ConnectionError):
-            writer.close()
+            request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),
+                                             HEADERS_WITHIN)
+        except (asyncio.IncompleteReadError, asyncio.LimitOverrunError,
+                ConnectionError, TimeoutError):
+            # Nothing said in time, or more header than any browser sends.
+            # The second used to escape as an unhandled exception.
+            _shut(writer)
             return
 
         lines = request.decode("latin-1").split("\r\n")
@@ -591,6 +698,13 @@ class WebServer:
 
         upgrade = headers.get("upgrade", "").lower() == "websocket"
         log(f"{method} {path}" + ("  [websocket]" if upgrade else ""))
+        if not loopback_host(headers.get("host", "")):
+            # Somebody else's domain, pointed at this machine.
+            log(f"refused a request for {headers.get('host', '')!r}")
+            writer.write(b"HTTP/1.1 403 Forbidden\r\n"
+                         b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            _shut(writer)
+            return
         if upgrade and not ours(headers.get("origin", "")):
             # Somebody else's page, in this player's browser, opening a socket
             # to this client.  Refuse before the handshake.
@@ -654,18 +768,49 @@ class WebServer:
 
         log(f"websocket open ({len(self._clients)} client(s))")
         why = "client closed"
+        parts: list[bytes] = []          # a message arriving in pieces
+        kind = OP_TEXT
         try:
             while True:
-                frame = await _read_frame(reader)
-                if frame is None:
-                    break
-                opcode, payload = frame
+                final, opcode, masked, payload = await _read_raw(
+                    reader, MESSAGE_MOST)
+                if not masked:
+                    # RFC 6455 s5.1: a browser always masks what it sends.
+                    raise _Refused(1002, "an unmasked frame")
                 if opcode == OP_CLOSE:
                     break
                 if opcode == OP_PING:
-                    writer.write(_frame(payload, OP_PONG))
-                elif opcode == OP_TEXT:
-                    self._on_client_message(payload)
+                    writer.write(_frame(payload[:125], OP_PONG))
+                    continue
+                if opcode == OP_PONG:
+                    continue
+                if opcode in (OP_TEXT, OP_BINARY):
+                    parts, kind = [payload], opcode
+                elif opcode == OP_CONT and parts:
+                    parts.append(payload)
+                else:
+                    raise _Refused(1002, f"an unexpected opcode {opcode}")
+                if sum(map(len, parts)) > MESSAGE_MOST:
+                    raise _Refused(1009, "a message in too many pieces")
+                if not final:
+                    continue
+                message, parts = b"".join(parts), []
+                if kind != OP_TEXT:
+                    continue
+                try:
+                    self._on_client_message(message)
+                except Exception:
+                    # One message that could not be handled is one message.
+                    # It used to close the socket, and every panel with it.
+                    log("a message from the page failed:\n"
+                        + traceback.format_exc())
+        except _Refused as exc:
+            why = f"refused {exc.why}"
+            try:
+                writer.write(_frame(struct.pack(">H", exc.code)
+                                    + exc.why.encode()[:120], OP_CLOSE))
+            except (ConnectionError, OSError, RuntimeError):
+                pass
         except (asyncio.IncompleteReadError, ConnectionError, OSError) as exc:
             why = f"{type(exc).__name__}: {exc}"
         except (asyncio.CancelledError, GeneratorExit):
@@ -684,6 +829,8 @@ class WebServer:
         try:
             msg = json.loads(payload)
         except ValueError:
+            return
+        if not isinstance(msg, dict):
             return
         kind = msg.get("t")
         if kind == "rules":
@@ -718,7 +865,10 @@ class WebServer:
         if kind == "update":
             # Network and a 25MB import: off the loop, or the browser and the
             # MUD both stop being served for four seconds.
-            asyncio.create_task(self._update_op(msg))
+            events.spawn(self._update_op(msg), "an update")
+            return
+        if kind == "open":
+            self._open_link(msg.get("url"))
             return
         if kind == "link":
             # Disconnect, and coming back from it.  Not a game command: the
@@ -742,6 +892,17 @@ class WebServer:
             return
 
         text = msg.get("d", "")
+        if not isinstance(text, str):
+            return
+        # One command per line.  The input box is a single line, but anything
+        # else talking to this socket need not be, and each line should meet
+        # the aliases and the rate governor on its own rather than go out as
+        # one write with line breaks inside it.
+        for line in text.splitlines() or [""]:
+            self._command(line)
+
+    def _command(self, text: str) -> None:
+        """One line from the input box: the client's, an alias's, or the MUD's."""
         # "/" commands are for the client, not the MUD.  Without this, typing
         # /js in the browser sends it to 3K as a game command.
         if text.startswith("/"):
@@ -751,6 +912,22 @@ class WebServer:
         elif not (self.scripts and self.scripts.input(text)):
             # A human is waiting on this one, so it bypasses the pacing queue.
             self.session.queue.now(text)
+
+    def _open_link(self, url) -> None:
+        """Open an address from the output in the player's own browser.
+
+        Not window.open in the page: in app mode that opens inside the client's
+        private profile, a browser with none of their bookmarks or logins.
+        Handed to the operating system instead, which gives it to whatever
+        they have chosen -- and which is why it is checked again here rather
+        than trusted because the page already checked it.
+        """
+        safe = web_address(url)
+        if safe is None:
+            self.note("not opening that -- only http and https addresses")
+            return
+        # webbrowser can take a moment finding a browser; not on the loop.
+        events.spawn(asyncio.to_thread(webbrowser.open, safe), "opening a link")
 
     def _is_up(self) -> bool:
         """Is there a socket to send down?  Says so when there is not.

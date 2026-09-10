@@ -29,9 +29,10 @@ import json
 import tarfile
 import urllib.error
 import urllib.request
-from pathlib import Path
+import zlib
+from pathlib import Path, PurePosixPath
 
-from . import __version__
+from . import SLUG, __version__
 from .tintin import import_bots, import_map, import_speedruns
 
 OWNER, REPO, BRANCH = "jmitchell33", "3kdb", "master"
@@ -57,11 +58,14 @@ WANTED = {
     "bots": "common/bot",
 }
 
-AGENT = f"3k-client/{__version__} (+https://github.com/{OWNER}/{REPO})"
+AGENT = f"{SLUG}/{__version__} (+https://github.com/OldManDanky/dankclient)"
 
 #: Refuse a download that is not the size of a repository.  A redirect to a
 #: login page is small; something has gone wrong if it is enormous.
 MOST = 200 * 1024 * 1024
+#: ...and the same once it is opened.  A tarball is compressed, and a small
+#: download that unpacks into gigabytes is the whole trick of an archive bomb.
+MOST_UNPACKED = 400 * 1024 * 1024
 
 
 def _get(url: str, timeout: float) -> bytes:
@@ -77,8 +81,12 @@ def _get(url: str, timeout: float) -> bytes:
         if len(body) > MOST:
             raise ValueError(f"{url}: refusing a reply over {MOST} bytes")
         if reply.headers.get("Content-Encoding") == "gzip":
-            import gzip
-            body = gzip.decompress(body)
+            # Opened with a ceiling, for the same reason as the download.
+            opener = zlib.decompressobj(wbits=31)
+            body = opener.decompress(body, MOST + 1)
+            if len(body) > MOST or opener.unconsumed_tail:
+                raise ValueError(f"{url}: refusing a reply over {MOST} "
+                                 f"bytes unpacked")
         return body
 
 
@@ -91,6 +99,18 @@ def _get(url: str, timeout: float) -> bytes:
 
 CLIENT = "OldManDanky/dankclient"
 RELEASES = f"https://api.github.com/repos/{CLIENT}/releases/latest"
+
+
+def _on_github(url) -> str:
+    """The address if it is a page on GitHub, and nothing otherwise.
+
+    It becomes a link somebody is invited to click, so it is not taken on
+    trust from a reply: a `javascript:` address there would be a script
+    running inside the client's own page, which is the one place that can
+    drive the character.
+    """
+    url = str(url or "")
+    return url if url.startswith("https://github.com/") else ""
 
 
 def numbers(tag: str) -> tuple:
@@ -131,15 +151,15 @@ def newer_release(timeout: float = 15.0, have: str = "") -> dict:
 
     tag = str(found["tag_name"])
     installer = next(
-        (a["browser_download_url"] for a in found.get("assets", ())
+        (a.get("browser_download_url") for a in found.get("assets", ())
          if str(a.get("name", "")).endswith(".msi")), found.get("html_url", ""))
     return {
         "error": "",
         "have": mine,
         "latest": tag.lstrip("vV"),
         "newer": numbers(tag) > numbers(mine),
-        "url": installer,
-        "page": found.get("html_url", ""),
+        "url": _on_github(installer),
+        "page": _on_github(found.get("html_url")),
         "name": found.get("name") or tag,
         "when": (found.get("published_at") or "")[:10],
     }
@@ -201,23 +221,37 @@ def _unpack(blob: bytes, into: Path) -> Path:
     be a plain file living under a path we asked for before anything is
     written, so a name with a `..` in it or an absolute path or a symlink
     cannot put a file where it likes.
+
+    Checked as a name first and as a place second.  The place alone was
+    checked with startswith(), and `common/bot/../../../out2/f` passed it:
+    unpacking into `.../out`, the path `.../out2/f` starts with `.../out`.
+    Names are read as tar writes them, with forward slashes -- a backslash
+    or a colon means something else again on Windows, so neither is allowed.
     """
     into.mkdir(parents=True, exist_ok=True)
+    root = into.resolve()
+    total = 0
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
         for member in tar:
             if not member.isfile():
                 continue                    # no directories, links or devices
+            name = PurePosixPath(member.name)
+            parts = name.parts
+            if (name.is_absolute() or len(parts) < 2
+                    or any(p == ".." or "\\" in p or ":" in p for p in parts)):
+                continue                    # a name that climbs, or means more
             # GitHub wraps everything in <repo>-<branch>/.
-            parts = Path(member.name).parts
-            if len(parts) < 2:
-                continue
             inside = "/".join(parts[1:])
             if not any(inside == p or inside.startswith(p + "/")
                        for p in WANTED.values()):
                 continue
-            target = (into / inside).resolve()
-            if not str(target).startswith(str(into.resolve())):
-                continue                    # a name that climbs out
+            total += member.size
+            if member.size > MOST or total > MOST_UNPACKED:
+                raise ValueError(f"refusing to unpack more than "
+                                 f"{MOST_UNPACKED} bytes ({member.name})")
+            target = (root / inside).resolve()
+            if not target.is_relative_to(root):
+                continue                    # a name that climbs out anyway
             target.parent.mkdir(parents=True, exist_ok=True)
             source = tar.extractfile(member)
             if source is None:

@@ -37,6 +37,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .paths import set_aside, write_atomically
 from .session import DEFAULT_HOST, DEFAULT_PORT
 
 #: Where the characters live, unless you say otherwise.
@@ -95,25 +96,25 @@ class Characters:
             return
         try:
             raw = json.loads(self.path.read_text())
+            if not isinstance(raw, list):
+                raise ValueError("not a list of characters")
         except (ValueError, OSError):
+            set_aside(self.path)         # kept, not overwritten by the next save
             self.all = []
             return
         fields = {f for f in Character.__dataclass_fields__}
         self.all = [Character(**{k: v for k, v in c.items() if k in fields})
-                    for c in raw if isinstance(c, dict) and c.get("name")]
+                    for c in raw
+                    if isinstance(c, dict) and isinstance(c.get("name"), str)
+                    and c["name"].strip()]
 
     def save(self) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        # Written before the mode is set, so create it closed rather than
-        # writing a password into a world-readable file and narrowing it after.
-        # Windows ignores the mode; there the parent directory is the guard.
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            json.dump([asdict(c) for c in self.all], fh, indent=2)
-        try:
-            os.chmod(self.path, 0o600)        # in case it already existed
-        except OSError:                        # a filesystem without modes
-            pass
+        # Created closed rather than written open and narrowed afterwards, and
+        # written whole or not at all.  Windows ignores the mode; there the
+        # parent directory is the guard.
+        write_atomically(self.path,
+                         json.dumps([asdict(c) for c in self.all], indent=2),
+                         private=True)
 
     def public(self) -> list[dict]:
         return [c.public() for c in self.all]

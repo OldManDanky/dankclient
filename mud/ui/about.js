@@ -56,7 +56,10 @@
     box.append(document.createTextNode(
       `Version ${release.latest} is out — you have ${release.have}. `));
     const link = document.createElement('a');
-    link.href = release.page || release.url;
+    // Only ever a GitHub page.  The server checks too; a javascript: address
+    // here would be a script running in the page that drives the character.
+    const href = String(release.page || release.url || '');
+    if (href.startsWith('https://github.com/')) link.href = href;
     link.target = '_blank';
     link.rel = 'noreferrer';
     link.textContent = 'Download the installer';

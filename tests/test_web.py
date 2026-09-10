@@ -81,7 +81,7 @@ async def scenario() -> dict:
     r, w = await asyncio.open_connection("127.0.0.1", port)
     key = base64.b64encode(os.urandom(16)).decode()
     w.write(
-        f"GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+        f"GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
         f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
         f"Sec-WebSocket-Version: 13\r\n\r\n".encode()
     )
@@ -490,7 +490,7 @@ def test_a_refused_handshake_gets_a_refusal_not_a_socket():
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
         key = base64.b64encode(os.urandom(16)).decode()
         writer.write(
-            f"GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+            f"GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
             f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
             f"Sec-WebSocket-Version: 13\r\n"
             f"Origin: https://evil.example\r\n\r\n".encode())

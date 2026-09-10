@@ -26,6 +26,11 @@ OPT_NAWS = 31
 #: Options we are willing to turn on.  Empty for now, by design.
 ACCEPT: set[int] = set()
 
+#: Most of a subnegotiation worth keeping.  We refuse every option, so none
+#: should arrive at all; one that starts and never ends would otherwise grow
+#: this buffer for as long as the connection lasts.
+SB_MOST = 4096
+
 
 class _S(enum.Enum):
     DATA = 0
@@ -80,7 +85,7 @@ class TelnetFilter:
             elif st is _S.SB:
                 if b == IAC:
                     self._state = _S.SB_IAC
-                else:
+                elif len(self._sub) < SB_MOST:
                     self._sub.append(b)
 
             else:  # _S.SB_IAC
@@ -89,7 +94,8 @@ class TelnetFilter:
                     self._sub.clear()
                     self._state = _S.DATA
                 elif b == IAC:
-                    self._sub.append(IAC)
+                    if len(self._sub) < SB_MOST:
+                        self._sub.append(IAC)
                     self._state = _S.SB
                 else:
                     self._state = _S.SB

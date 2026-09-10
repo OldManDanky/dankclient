@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
+import socket
+import sys
 import time
+import traceback
 from collections import Counter
 from pathlib import Path
 from typing import Callable
@@ -34,6 +38,43 @@ from .telnet import TelnetFilter
 
 DEFAULT_HOST = "3k.org"
 DEFAULT_PORT = 3000
+
+#: How long a quiet connection is trusted, then how often and how many times
+#: the other end is asked whether it is still there.  Dead in about a minute.
+KEEPALIVE = (30, 10, 3)
+
+
+def keep_alive(sock) -> bool:
+    """Have the operating system notice a connection that died silently.
+
+    A MUD can go quiet for minutes, so silence proves nothing -- and a link
+    that dies without a word (a router rebooting, wifi changing, a laptop
+    lid) leaves the read waiting for ever.  The client sits there saying
+    "connected" while 3K has long since made you link-dead, and the reconnect
+    that exists for exactly this never starts.  TCP keepalive asks the far end
+    when the line has been quiet, and turns no answer into an error the read
+    loop already treats as a drop.
+
+    The system default is two hours, which is why it is tuned rather than just
+    switched on.  Windows 10 and 11 take the same three options Linux does.
+    """
+    if sock is None:
+        return False
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except (OSError, AttributeError):
+        return False
+    idle, every, tries = KEEPALIVE
+    for name, value in (("TCP_KEEPIDLE", idle), ("TCP_KEEPINTVL", every),
+                        ("TCP_KEEPCNT", tries)):
+        option = getattr(socket, name, None)
+        if option is None:
+            continue
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, option, value)
+        except OSError:
+            pass                        # an older Windows; on is still better
+    return True
 
 
 class Session:
@@ -133,6 +174,10 @@ class Session:
         self.connections = 0
         self.backoff_first = 2.0
         self.backoff_longest = 60.0
+        #: A connect with no answer at all -- packets dropped rather than
+        #: refused -- otherwise waits on the operating system, which is two
+        #: minutes on Linux, and Disconnect cannot interrupt it meanwhile.
+        self.connect_timeout = 20.0
         self._stopping = False
         #: Set to wake the loop out of a parked state -- somebody has asked
         #: for the connection back.
@@ -188,9 +233,12 @@ class Session:
 
     async def connect(self) -> None:
         self._forget_the_connection()
-        self._reader, self._writer = await asyncio.open_connection(
-            self.host, self.port
-        )
+        # A timeout is a TimeoutError, which is an OSError: to everything
+        # above this, a connect that never answered is one that failed.
+        self._reader, self._writer = await asyncio.wait_for(
+            asyncio.open_connection(self.host, self.port),
+            self.connect_timeout)
+        keep_alive(self._writer.get_extra_info("socket"))
         self.connected = True
         self.connections += 1
         self.attempts = 0
@@ -207,7 +255,16 @@ class Session:
                 chunk = await self._reader.read(4096)
                 if not chunk:
                     break
-                self._consume(chunk)
+                try:
+                    self._consume(chunk)
+                except Exception:
+                    # Nothing the MUD sends should stop the client reading,
+                    # because everything else hangs off this loop.  Ten
+                    # thousand mutated chunks of real captures found nothing
+                    # that does -- this is so that the next thing costs one
+                    # chunk rather than the session.
+                    print("[client] could not handle what the MUD sent:\n"
+                          + traceback.format_exc(), file=sys.stderr)
         except (ConnectionError, OSError):
             # A connection reset is a disconnection.  It used to come out of
             # here as an exception and take the whole client with it, browser
@@ -541,6 +598,10 @@ class Session:
     def send(self, line: str, secret: bool = False) -> None:
         if self._writer is None:
             raise RuntimeError("not connected")
+        # One command is one line.  A line break inside it would be a second
+        # command nobody typed -- a rule that puts a tell into what it sends
+        # could carry one in from another player -- so it goes as a space.
+        line = re.sub(r"[\r\n]+", " ", line)
         # Every outbound line funnels through here -- the queue, scripts, the
         # browser, the jumpstart -- so this is the one place the log has to
         # know about.  A password is the one string that must reach the socket
@@ -553,7 +614,10 @@ class Session:
             self.mapper.sent(line)
         if self.logbook is not None:
             self.logbook.add("sent", noted)
-        self._writer.write(line.encode(self.encoding, "replace") + b"\r\n")
+        # 0xFF is telnet's IAC, and "ÿ" encodes to it: sent bare, the MUD
+        # reads whatever follows as a telnet command.  Doubled, it is a letter.
+        wire = line.encode(self.encoding, "replace").replace(b"\xff", b"\xff\xff")
+        self._writer.write(wire + b"\r\n")
 
     def jumpstart(self) -> None:
         """Announce ourselves so the MUD starts sending MIP.

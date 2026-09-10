@@ -497,7 +497,8 @@ def _delay(session, rest: str, note) -> None:
     except RuntimeError:
         note("not running yet")
         return
-    asyncio.ensure_future(later())
+    from .events import spawn
+    spawn(later(), f"/delay {command}")
     note(f"in {wait:g}s: {command}")
 
 

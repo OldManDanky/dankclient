@@ -565,6 +565,87 @@ What the socket accepts is worth knowing, because it is the reason any of this
 matters: commands as the character, playing a saved character with a saved
 password, writing triggers and routes, and the whole log through `/find`.
 
+## The edges
+
+A pass over everything that touches a network or a disk, in 0.2.3.  Each of
+these was reproduced against the client before it was changed, and each fix is
+pinned by a test in `tests/test_hardening.py` that failed first.
+
+**A link that dies without a word.**  A MUD can be quiet for minutes, so
+silence proves nothing, and a router rebooting or a laptop lid closing leaves
+the read waiting for ever: the client says "connected" while 3K has long since
+made you link-dead, and the reconnect that exists for exactly this never
+starts.  The socket now has TCP keepalive at 30 seconds idle, 10 between
+probes, 3 probes -- the system default is two hours -- so no answer becomes an
+error the read loop already treats as a drop.  A connect nobody answers gives
+up at twenty seconds instead of the operating system's two minutes, during
+which Disconnect could not interrupt it.
+
+**Started while 3K is down.**  The first connection failing used to be the
+end: the installed client exited before its window opened, so it looked as
+though it had never started.  The window comes up now and the client keeps
+knocking, as after any link death.
+
+**Another player's text in a command.**  A rule that puts a tell into what it
+sends could carry a line break from somebody else, and a line break is a second
+command.  `send` turns them into spaces, and doubles `0xFF`, which telnet
+reads as the start of a command of its own.  A pasted block from the page goes
+out a line at a time, each through the aliases and the rate governor.
+
+**The page's socket.**  Three malformed messages each closed it, taking every
+panel with it; a message that cannot be handled is now logged and the socket
+carries on.  A frame header's length is checked before anything is read, so
+one claiming eight exabytes is refused rather than waited for.  Frames must be
+masked, as browsers always do, and a message in pieces is put back together.
+A page that stops reading -- a frozen tab, a machine asleep with the window
+open -- used to have everything the MUD said queued for it without limit; past
+eight megabytes it is dropped, and it reconnects and gets the scrollback.  A
+connection has ten seconds to say what it wants, and a header longer than any
+browser sends is closed rather than escaping as an unhandled exception.
+
+**DNS rebinding.**  The Origin check stops somebody else's page opening a
+socket to us.  A page on somebody's domain that has the domain re-pointed at
+127.0.0.1 is same-origin with itself, though, and its requests carry its own
+name in `Host` -- so a `Host` that is not this machine is refused too.
+
+**Links.**  Addresses in the output underline on hover and open with
+shift-click -- shift, because a plain click is for selecting text.  They go to
+the server rather than to `window.open`, which in app mode opens inside the
+client's private profile; the server hands them to the player's own browser,
+after checking they are http or https with nothing in them that is not part of
+an address, because anybody on 3K can put text on this screen.  The release
+link in About is held to `https://github.com/` for the same reason: a
+`javascript:` address there would run inside the one page that can drive the
+character.
+
+**Somebody else's tarball.**  The escape check compared resolved paths with
+`startswith`, and `common/bot/../../../out2/f` passed it when unpacking into
+`out`, because `out2` starts with `out`.  It wrote a real file.  Names are now
+refused as names first -- `..`, backslashes and colons, the last two meaning
+something else again on Windows -- and then as places with `is_relative_to`.
+Each file and the whole archive have a ceiling once unpacked, not only on the
+wire.
+
+**A file half written.**  Rules, routes, characters and the line markers were
+written with `write_text`, which truncates first.  A crash between the two left
+half a file; half a file loaded as nothing; and the next save wrote the nothing
+back.  Fifty triggers became two bytes that way in a test.  They are written
+beside the original, flushed, and renamed over it now -- and a file that will
+not load is moved aside as `name.unreadable-<time>` rather than treated as
+empty.  A key from a newer version is dropped rather than a reason to refuse to
+start, which is what a `TypeError` in the loader had made it.
+
+**Background work.**  `asyncio.create_task` keeps only a weak reference, and
+an exception in a task nobody awaits goes nowhere.  Everything started in the
+background goes through `events.spawn` now, which holds it until it finishes
+and writes any failure to the console or `client.log`.
+
+What was measured and left alone: every MIP code with 78,000 random payloads,
+and ten thousand mutated chunks of real captures through the whole inbound
+path, raised nothing.  The read loop is guarded anyway, because everything
+hangs off it and the next surprise should cost one chunk rather than the
+session.
+
 ## Scrollback
 
 A refresh used to empty the terminal, and a refresh is what you do after every
