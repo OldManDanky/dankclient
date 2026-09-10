@@ -47,6 +47,10 @@ HEALTH_FLOOR = 40.0
 #: next to the 0.67s worst case measured across a town walk.
 MOVE_TIMEOUT = 3.0
 
+#: A stacked walk: allowance per step on top of MOVE_TIMEOUT.  3K runs a
+#: stack back to back (six rooms in 0.07s), so this is generous.
+STACK_STEP = 0.05
+
 #: A fight that has not ended in this many seconds is not going to.
 FIGHT_TIMEOUT = 120.0
 
@@ -103,10 +107,17 @@ class Bot:
     #: room that left it in.  What Pause keeps, so Resume can go back there.
     at: int = 0
     room: int | None = None
+    #: A walk to somewhere: where to, and how many steps -- for the Bot panel.
+    goal: str = ""
+    length: int = 0
 
     @property
     def running(self) -> bool:
-        return self.task is not None and not self.task.done()
+        # Not once it has been told to stop: a cancel lands on the loop's
+        # next turn, and the list sent straight back from Stop said it was
+        # still walking until the next push.
+        return (self.task is not None and not self.task.done()
+                and not self.task.cancelling())
 
 
 class Bots:
@@ -253,6 +264,41 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         """Wait for the next room without sending anything."""
         return await bus.wait(events.ROOM, timeout)
 
+    async def dash(route, dest: int, name: str = "speedwalk") -> bool:
+        """Send the whole way at once, then wait to arrive.
+
+        A walk that waits for each room to settle before the next step goes
+        at one step a round: a room settles on the next message, and between
+        steps that is 3K's two-second sample -- 43 walks in the captures went
+        out a median 1.99s apart.  3K runs a stack of moves back to back, so
+        the stack is the speedwalk, and the map is told the commands queue
+        behind each other so it follows every room.  Nothing sent can be
+        taken back; a stack that does not arrive falls back to walking.
+        """
+        mapper = getattr(session, "mapper", None)
+        if mapper is None:
+            return False
+        check()
+        await gate()
+        # The bot is left alone: this may be a route walking to its start or
+        # back to a pause, and those steps are not the route's own.
+        commands = [p.strip() for step in route for p in step.split(";")
+                    if p.strip()]
+        mapper.stacking = True
+        try:
+            for command in commands:
+                session.queue.auto_now(command)
+        finally:
+            mapper.stacking = False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + MOVE_TIMEOUT + STACK_STEP * len(commands)
+        while mapper.here != dest:
+            left = deadline - loop.time()
+            if left <= 0:
+                return False
+            await bus.wait(events.ROOM, min(left, 0.5))
+        return True
+
     async def travel(dest: int, name: str = "speedwalk", tries: int = 4):
         """Walk to a room, working around ways out that turn out not to work.
 
@@ -267,6 +313,12 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         mapper = getattr(session, "mapper", None)
         if mapper is None:
             return False
+        # The whole way at once first; walking it room by room is for when
+        # that did not get there, and is what finds and marks a bad way out.
+        if mapper.here != dest:
+            first = mapper.route(dest)
+            if first and await dash(first, dest, name):
+                return True
         for _ in range(tries):
             if mapper.here == dest:
                 return True
@@ -334,5 +386,5 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         return bots.start(name, run, owner)
 
     return {"walk": walk, "attack": attack, "arrive": arrive,
-            "follow": follow, "travel": travel, "bot": bot, "patrol": patrol, "bots": bots,
+            "follow": follow, "travel": travel, "dash": dash, "bot": bot, "patrol": patrol, "bots": bots,
             "stop_bots": bots.stop_all}

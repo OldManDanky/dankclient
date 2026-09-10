@@ -273,3 +273,122 @@ def test_silence_is_not_taken_to_mean_you_did_not_move():
         run(scenario())
     finally:
         patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was
+
+
+# --- getting somewhere: the whole way at once ----------------------------------
+
+
+def corridor(s, names):
+    """Rooms in a row, each joined to the next by the given command."""
+    from mud.store import Store
+    from mud.mapper import Mapper
+    store = Store()
+    s.store = store
+    s.mapper = m = Mapper(store)
+    # What a Session made with a map does itself: rooms go to the map.
+    s.bus.on(events.ROOM, s._on_room)
+    rooms = [store.add_room(n) for n, _ in names]
+    for i, (_, exits) in enumerate(names):
+        store.observe(rooms[i], exits, ["sky"])
+    return store, m, rooms
+
+
+def test_travel_sends_the_whole_way_at_once_and_the_map_follows():
+    """Walking room by room went at one step a round: each waited for the
+    last room to settle, and a room settles on 3K's two-second sample.  3K
+    runs a stack back to back, so the stack is the speedwalk."""
+    s, bots, api = build()
+    store, m, (a, b, c, d) = corridor(s, [("A", ["n"]), ("B", ["s", "n"]),
+                                         ("C", ["s", "e"]), ("D", ["w"])])
+    store.link(a, "n", b)
+    store.link(b, "n", c)
+    store.link(c, "e", d)
+    m.here = a
+    # The real send tells the map what went out; this harness's does not.
+    s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+    async def scenario():
+        trip = asyncio.ensure_future(api["travel"](d))
+        await asyncio.sleep(0)
+        assert s.sent == ["n", "n", "e"], "all of it, before any room came back"
+        for exits in ("s~n", "s~e", "w"):
+            s._consume(mip("DDD", exits) + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))           # settles the last one
+        assert await asyncio.wait_for(trip, 2) is True
+        assert m.here == d
+        assert s.sent == ["n", "n", "e"], "and nothing sent after it"
+
+    run(scenario())
+
+
+def test_a_long_stack_is_followed_to_the_end():
+    """Every command in a stack was sent at the same moment, but each one's
+    room is due when the one before it has arrived.  Thirty rooms coming back
+    over a second and a half would otherwise age out the tail of the queue
+    and leave the map lost partway down a corridor."""
+    from mud.store import Store
+    from mud.mapper import Mapper
+
+    def walk(stacking):
+        store = Store()
+        m = Mapper(store)
+        rooms = [store.add_room(f"Corridor {i}") for i in range(31)]
+        for i, r in enumerate(rooms):
+            store.observe(r, ["e", "w"], ["sky"])
+            if i:
+                store.link(rooms[i - 1], "e", r)
+        m.here = rooms[0]
+        m.stacking = stacking
+        for _ in range(30):
+            m.sent("e", at=0.0)
+        m.stacking = False
+        for i in range(30):
+            m.arrived(["e", "w"], ["sky"], at=0.05 * (i + 1))
+        return m.here, rooms[-1]
+
+    here, end = walk(stacking=True)
+    assert here == end
+    here, end = walk(stacking=False)
+    assert here != end, "the control: without it the tail ages out"
+
+
+def test_a_stray_look_still_ages_out_among_stacked_steps():
+    """Only stacked commands wait their turn.  A command that never answers
+    must still go, or every arrival after it is blamed on the wrong line."""
+    from mud.store import Store
+    from mud.mapper import Mapper
+
+    store = Store()
+    m = Mapper(store)
+    m.sent("jump", at=0.0)                       # never produces a room
+    m.stacking = True
+    m.sent("e", at=5.0)
+    m.stacking = False
+    m._queue_behind(6.0)
+    assert list(m._pending)[0] == (0.0, "jump"), "not restamped: not stacked"
+
+
+def test_a_stack_that_does_not_arrive_walks_the_rest():
+    """Nothing sent can be taken back.  If the stack does not get there, the
+    client walks from wherever the map says it is -- which is what finds and
+    marks the way out that did not work."""
+    import mud.patrol as patrol
+
+    was = (patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT)
+    patrol.MOVE_TIMEOUT = patrol.LOOK_TIMEOUT = 0.05
+    try:
+        s, bots, api = build()
+        store, m, (a, b) = corridor(s, [("A", ["n"]), ("B", ["s"])])
+        store.link(a, "n", b)
+        m.here = a
+
+        async def scenario():
+            ok = await asyncio.wait_for(api["travel"](b, tries=1), 4)
+            assert ok is False
+            assert s.sent[0] == "n", "the stack went first"
+            assert s.sent[1:] == ["n", "l"], "then a step, looked at"
+            assert store.exits_from(a)[0]["failed"], "and the bad way marked"
+
+        run(scenario())
+    finally:
+        patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was

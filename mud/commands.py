@@ -18,7 +18,7 @@ HELP = [
     ('Getting about', 'The map is 49,494 rooms somebody else walked, so most places already have a name you can go to.', [
         ('/go <name>', 'walk to the nearest mapped room with that name'),
         ('/here', 'where the map thinks you are, and what leads out'),
-        ('/marks [text]', 'named destinations imported from tt++'),
+        ('/speedruns [word]', 'named places you can /go to, and how far'),
         ('/bind <where>', 'say which room you are in, by landmark or number'),
         ('/lost', 'tell the map it has you in the wrong place'),
         ('/regions', 'the areas known, as a tree'),
@@ -186,15 +186,8 @@ def handle(text: str, session, scripts, note) -> bool:
     elif verb == "ansivars":
         _ansivars(session, rest, note)
 
-    elif verb == "marks":
-        store = getattr(session, "store", None)
-        if store is None:
-            note("mapping is off (--no-map)")
-        else:
-            found = store.landmarks(rest, limit=40)
-            note("\n".join(f"  {m['name']:<18} {(m['kind'] or ''):<9} "
-                            f"{(m['note'] or '')[:48]}" for m in found)
-                 or f"no landmarks matching {rest!r}")
+    elif verb in ("speedruns", "runs", "marks"):
+        _speedruns(session, rest, note)
 
     elif verb in ("lock", "unlock"):
         store = getattr(session, "store", None)
@@ -602,9 +595,8 @@ def _go(session, text: str, note) -> None:
         if route is None:
             note(f"no route from here to {mark['name']}")
             return
-        session.travel(room, "speedwalk")
-        note(f"walking {len(route)} steps to {mark['name']} -- {mark['note']}"
-             "\n  /bots to watch it, /stop to stop it")
+        session.travel(room, "speedwalk", mark["name"])
+        note(f"walking {len(route)} steps to {mark['name']} -- {mark['note']}")
         return
 
     matches = mapper.find_rooms(text)
@@ -615,7 +607,7 @@ def _go(session, text: str, note) -> None:
 
     room, name, _ = matches[0]
     route = mapper.route(room)
-    session.travel(room, "speedwalk")
+    session.travel(room, "speedwalk", name)
     others = "".join(f"\n  also #{i} {n} ({d} steps)" for i, n, d in matches[1:4])
     note(f"walking {len(route)} steps to #{room} {name}{others}")
 
@@ -803,3 +795,92 @@ def _ansivars(session, rest: str, note) -> None:
     for command in commands:
         session.queue.put(command)
     note(f"sent {len(commands)} settings; watch for the confirmations")
+
+
+#: The speedruns' kinds, in the order they are listed, and what each is called.
+SPEEDRUN_KINDS = [("area", "Areas"), ("mob", "Mobs"), ("crafting", "Crafting"),
+                  ("shop", "Shops"), ("eq", "Equipment"), ("clan", "Clan halls"),
+                  ("item", "Items"), ("misc", "Other")]
+#: What somebody might type for a kind.
+SPEEDRUN_WORDS = {"area": "area", "areas": "area", "mob": "mob", "mobs": "mob",
+                  "crafting": "crafting", "craft": "crafting", "shop": "shop",
+                  "shops": "shop", "eq": "eq", "equipment": "eq", "gear": "eq",
+                  "clan": "clan", "clans": "clan", "hall": "clan", "halls": "clan",
+                  "item": "item", "items": "item", "misc": "misc", "other": "misc"}
+
+
+def _speedruns(session, rest: str, note) -> None:
+    """Where you can go by name, and how far each is from here.
+
+    The speedruns imported from 3kdb are the names /go knows.  Listing them
+    was /marks, which stopped at forty and said nothing about distance or
+    whether a place could be reached at all.  A few cannot; walking in once
+    teaches the map the way.  (A quarter used to, until the importer stopped
+    throwing away tt++'s unnamed rooms and walking through its void spacers --
+    see tintin.import_map.)
+    """
+    store = getattr(session, "store", None)
+    mapper = getattr(session, "mapper", None)
+    if store is None:
+        note("mapping is off (--no-map)")
+        return
+    marks = store.landmarks("", limit=100000)
+    if not marks:
+        note("no speedruns in the map -- Options -> Updates takes them from 3kdb")
+        return
+    lost = mapper is None or mapper.here is None
+    steps = {} if lost else mapper.reach({int(m["room_id"]) for m in marks})
+    label = dict(SPEEDRUN_KINDS)
+
+    def row(m) -> str:
+        n = steps.get(int(m["room_id"]))
+        far = "" if lost else ("can't reach" if n is None
+                               else "here" if n == 0 else f"{n} steps")
+        return f"  {m['name']:<16} {far:>11}  {(m['note'] or '')[:52]}"
+
+    def order(ms):
+        return sorted(ms, key=lambda m: (steps.get(int(m["room_id"])) is None,
+                                         steps.get(int(m["room_id"]), 0),
+                                         m["name"]))
+
+    head = ("the map does not know where you are, so no distances -- walk a "
+            "room first.\n" if lost else "")
+    q = rest.strip().lower()
+    if not q:
+        out = [head + f"{len(marks)} places /go knows by name, nearest first:"]
+        for kind, title in SPEEDRUN_KINDS:
+            some = [m for m in marks if (m["kind"] or "misc") == kind]
+            if not some:
+                continue
+            can = sum(1 for m in some if int(m["room_id"]) in steps)
+            out.append(f"\n  {title} -- {len(some)}"
+                       + ("" if lost else f", {can} you can reach"))
+            out += [row(m) for m in order(some)[:5]]
+        out.append("\n/speedruns <word> for the rest: a kind (areas, mobs, "
+                   "shops, crafting...) or part of a name.  /go <name> walks there.")
+        note("\n".join(out))
+        return
+
+    kind = SPEEDRUN_WORDS.get(q)
+    if kind:
+        hits = [m for m in marks if (m["kind"] or "misc") == kind]
+        title = label[kind]
+    else:
+        words = q.split()
+        hits = [m for m in marks if all(
+            w in f"{m['name']} {m['note'] or ''} {m['kind'] or ''}".lower()
+            for w in words)]
+        title = f"matching {rest.strip()!r}"
+    if not hits:
+        note(f"no speedruns {title} -- /speedruns on its own lists them all")
+        return
+    hits = order(hits)
+    shown = hits[:60]
+    out = [head + f"{title}: {len(hits)}"] + [row(m) for m in shown]
+    if len(hits) > len(shown):
+        out.append(f"  ...and {len(hits) - len(shown)} more -- add a word to narrow it")
+    if not lost and any(int(m["room_id"]) not in steps for m in shown):
+        out.append("\ncan't reach: the map has no way in from here yet.  Walk in once "
+                   "and it learns the way.")
+    out.append("/go <name> walks there.")
+    note("\n".join(out))

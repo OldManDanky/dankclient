@@ -512,3 +512,18 @@ def test_the_ui_is_loopback_only():
     source = (Path(__file__).resolve().parents[1] / "mud" / "__main__.py").read_text()
     assert 'host="127.0.0.1"' in source
     assert "--web-host" not in source, "there is no remote mode to misconfigure"
+
+
+def test_brief_is_asked_once_per_login_with_the_handshake():
+    """Options -> Character setup shows 3K's brief setting, and "not asked
+    yet" is no answer.  Asked with the handshake -- once, though the
+    handshake is repeated until MIP flows."""
+    s, outgoing = _armed_session()
+    s._on_text(b"<Entering 3Kingdoms.  Enter your character name>\r\nPassword: ")
+    s._on_text(b"\r\nYou have 3 new mails.\r\n")
+    s._on_text(b"Somebody waves.\r\n")               # the handshake goes again
+    assert sum(1 for line in outgoing if line.startswith("3klient ")) >= 2
+    queued = [line for *_, line in s.queue._heap] + [l for l in outgoing if l == "brief"]
+    assert queued.count("brief") == 1, queued
+    src = (Path(__file__).resolve().parents[1] / "mud" / "session.py").read_text()
+    assert "self.brief, self._brief_asked = None, False" in src, "asked again per login"

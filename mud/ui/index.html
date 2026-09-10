@@ -132,7 +132,13 @@
      strip or the input line -- those are the two things you always want in
      front of you. */
   #out{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
-  #term{flex:1;min-height:0;padding:var(--gut) var(--gut) 0}
+  #term{flex:1;min-height:0;padding:var(--gut) var(--gut) 0;position:relative}
+  /* Scrolled up while text keeps arriving: say so, and offer the way back.
+     A tester's "the screen froze" was output landing out of sight. */
+  #term-new{position:absolute;right:calc(var(--gut) + 22px);bottom:10px;z-index:5;
+            padding:5px 12px;font-size:11.5px;border-radius:14px;
+            background:var(--panel);border:1px solid var(--accent);color:var(--accent);
+            box-shadow:0 4px 14px rgba(0,0,0,.45)}
   /* The terminal is output-only, so a cursor there just implies you can type
      into it.  xterm 5.3 has no cursorInactiveStyle:"none", so hide the marker
      the DOM renderer draws -- restoring the cell's own colours, since the
@@ -399,6 +405,23 @@
   #opt-tabs .n{margin-left:auto;font-size:10px;color:var(--dim);
                font-variant-numeric:tabular-nums}
   #opt-tabs .n:empty{display:none}
+  #opt-find{width:100%;box-sizing:border-box;margin:0 0 4px;font-size:12px;padding:5px 8px}
+  /* Find a setting: results in the pane area, each one a way to it. */
+  #opt-results{flex:1;min-height:0;overflow-y:auto;padding:18px 22px 24px;
+               display:flex;flex-direction:column;gap:2px}
+  #opt-results h4{margin:0 0 10px;font-size:16px;font-weight:600}
+  #opt-results .none{font-size:12px;color:var(--dim)}
+  .opt-hit{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+           width:100%;max-width:760px;text-align:left;padding:8px 10px;
+           border:1px solid transparent;border-radius:4px;background:none}
+  .opt-hit:hover,.opt-hit:focus-visible{border-color:var(--line);background:var(--sunk)}
+  .opt-hit b{font-weight:600;font-size:12.5px;color:var(--ink)}
+  .opt-hit span{font-size:11px;color:var(--dim)}
+  .opt-flash{animation:optflash 1.6s ease-out;border-radius:4px}
+  @keyframes optflash{0%{box-shadow:0 0 0 2px var(--accent)}
+                      100%{box-shadow:0 0 0 2px transparent}}
+  @media (prefers-reduced-motion:reduce){
+    .opt-flash{animation:none;outline:2px solid var(--accent)}}
   #opt-tabs button.on .n{color:var(--accent)}
 
   /* the pane area, and the editors that cover it */
@@ -486,6 +509,10 @@
   .rule .acts,.route .acts,.route .top>button{flex:none}
   .rule .acts{display:flex;gap:4px;flex:none}
   .route .go{color:var(--good)}
+  /* a mark nobody can walk to: there, but not for going to */
+  .route.far{opacity:.55}
+  .route .dist{flex:none;font-size:11px;color:var(--dim);
+               font-variant-numeric:tabular-nums}
   .route.running .go{color:var(--enemy)}
   .tag{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
        border:1px solid var(--line);border-radius:2px;padding:0 4px;flex:none}
@@ -541,7 +568,8 @@
         <div class="cm-body"></div>
       </aside>
 
-      <div id="term"></div>
+      <div id="term"><button id="term-new" type="button" hidden
+        title="Back to the latest output">&darr; new output</button></div>
 
     </div>
     <div id="vitals">
@@ -715,6 +743,8 @@
 
   <div class="opt-frame">
     <nav id="opt-tabs">
+      <input id="opt-find" type="search" spellcheck="false" autocomplete="off"
+             placeholder="Find a setting" aria-label="Find a setting">
       <div class="opt-group">Automation</div>
       <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
       <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
@@ -729,6 +759,7 @@
       <button type="button" data-tab="keyboard">Keyboard</button>
       <button type="button" data-tab="sounds">Sounds</button>
       <div class="opt-group">Game</div>
+      <button type="button" data-tab="marks">Marks<span class="n"></span></button>
       <button type="button" data-tab="settings">Character setup</button>
       <div class="opt-group">Client</div>
       <button type="button" data-tab="help">Commands</button>
@@ -737,6 +768,7 @@
     </nav>
 
     <div class="opt-main">
+      <div id="opt-results" hidden></div>
       <div id="opt-panes">
 
         <!-- Every pane: a title, one line saying what it is for, its actions,
@@ -1036,6 +1068,23 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           </div>
           <p class="fhint"><b>Ctrl +</b> and <b>Ctrl &minus;</b> make everything
             else bigger or smaller; <b>Ctrl 0</b> puts it back.</p>
+        </section>
+
+        <!-- marks -------------------------------------------------------- -->
+        <section class="opt-pane" data-pane="marks" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Marks</h4>
+              <p>Places <code>/go</code> knows by name &mdash; areas, mobs, shops,
+                 crafting spots &mdash; nearest first. Search with the box above.</p>
+            </div>
+            <div class="acts">
+              <button id="marks-refresh" type="button">Update distances</button>
+            </div>
+          </div>
+          <p class="fhint" id="marks-now"></p>
+          <div id="marks-list" class="card-list" data-empty="No marks yet."
+               data-none="No marks in the map. Options &rarr; Updates takes them from 3kdb."></div>
         </section>
 
         <!-- character setup ---------------------------------------------- -->
@@ -1422,6 +1471,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="map.js"></script>
   <script src="routes.js"></script>
   <script src="bots.js"></script>
+  <script src="marks.js"></script>
   <script src="updates.js"></script>
   <script src="help.js"></script>
   <script src="about.js"></script>
@@ -1429,5 +1479,6 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="fonts.js"></script>
   <script src="numpad.js"></script>
   <script src="sound.js"></script>
+  <script src="optfind.js"></script>
 </body>
 </html>

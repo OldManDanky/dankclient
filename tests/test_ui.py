@@ -253,6 +253,33 @@ def test_every_pane_says_what_it_is_for_in_a_line_or_two():
         assert words <= 40, f"{words} words: {intro[:60]!r}"
 
 
+def test_the_title_says_the_version_and_counts_tells_while_away():
+    js = scripts()["app.js"]
+    assert "${s.where.name} ${s.where.version}" in js
+    assert "noteTell(m.d)" in js and "d.from_me" in js
+    assert "addEventListener('focus', seen)" in js
+
+
+def test_new_output_below_is_offered_and_cleared():
+    """A tester's "the screen froze" was output landing out of sight."""
+    page, js = html(), scripts()["app.js"]
+    assert 'id="term-new"' in page
+    assert "term.onLineFeed" in js and "below.hidden = false" in js
+    send = js[js.index("function send(text, echo)"):]
+    assert "$('term-new').hidden = true" in send[:send.index("\n}")]
+
+
+def test_options_has_a_search_for_every_setting():
+    page, js = html(), scripts()["optfind.js"]
+    assert 'id="opt-find"' in page and 'id="opt-results"' in page
+    assert '<script src="optfind.js">' in page
+    rail = page[page.index('<nav id="opt-tabs">'):page.index("</nav>")]
+    assert rail.index('id="opt-find"') < rail.index("opt-group"), "top of the rail"
+    for part in ("querySelectorAll('.opt-pane')", "'.frow'", "'.fhint'",
+                 "e.stopPropagation()"):
+        assert part in js, part
+
+
 def test_every_tab_has_a_pane_and_every_pane_a_tab():
     """A tab with no pane shows an empty panel and no error anywhere."""
     page = html()
@@ -469,7 +496,7 @@ def test_a_running_route_says_which_step_of_how_many():
         assert f"'{element}'" in js, f"{element} is never filled in"
     assert "step_count" in js and "steps_taken" in js
     assert '<script src="bots.js">' in page
-    assert "renderBotPanel(routes)" in scripts()["routes.js"]
+    assert "renderBotPanel(routes, walk)" in scripts()["routes.js"]
     assert "id: 'botpanel'" in scripts()["panels.js"]
 
 

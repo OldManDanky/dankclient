@@ -352,8 +352,7 @@ class WebServer:
             if not getattr(s, "connected", True) and getattr(s, "wanted", True):
                 self._dirty = True
             if self._clients and self._routes_changed():
-                self.push({"t": "routes", "op": "list",
-                           "routes": self.scripts.routes.status()})
+                self.push(self._routes_msg(self.scripts.routes))
             if self._dirty and self._clients:
                 self._dirty = False
                 try:
@@ -670,8 +669,7 @@ class WebServer:
             # The worker wrote the file; this side is holding the old list.
             if routes is not None and not got.get("error"):
                 routes.load()
-                self.push({"t": "routes", "op": "list",
-                           "routes": routes.status()})
+                self.push(self._routes_msg(routes))
             self._map_centre = None        # the drawn view may be stale now
             self._dirty = True
             for line in said:
@@ -868,6 +866,9 @@ class WebServer:
                 self._map_centre = None       # the drawn view is now stale
                 self._dirty = True
             return
+        if kind == "marks":
+            self._marks_op(msg)
+            return
         if kind == "help":
             from .commands import HELP
 
@@ -1006,10 +1007,9 @@ class WebServer:
     def _walk(self, dest) -> None:
         """Walk to a room the map already knows a way to.
 
-        One step at a time, each waiting for the room block the last one
-        produced.  Sending them together looks like a speedwalk and is not:
-        after the first step you are somewhere else, and the rest go out from
-        a room they were never meant for.
+        The whole path goes at once, as a stack 3K runs back to back, and the
+        map follows each room; only if that does not arrive does it fall back
+        to walking room by room.  See patrol's `dash`.
         """
         mapper = getattr(self.session, "mapper", None)
         if mapper is None or not isinstance(dest, int):
@@ -1020,8 +1020,45 @@ class WebServer:
             self.note("no route from here" if mapper.here is not None
                       else "lost -- walk a room or two first")
             return
-        self.session.travel(dest, "speedwalk")
+        row = self.session.store.room(dest) if self.session.store else None
+        label = (row["name"] if row and row["name"] else f"room #{dest}")
+        self.session.travel(dest, "speedwalk", label)
         self.note(f"walking {len(route)} steps")
+
+    def _marks_op(self, msg: dict) -> None:
+        """Options -> Marks: every named place, and how far each is from here.
+
+        On the loop, not a thread: the store's connection belongs to it, and
+        the search is under half a second across the whole map.
+        """
+        if msg.get("op") != "list":
+            return
+        store = getattr(self.session, "store", None)
+        mapper = getattr(self.session, "mapper", None)
+        if store is None:
+            self.push({"t": "marks", "op": "list", "marks": [], "lost": True,
+                       "error": "Mapping is off, so there are no marks."})
+            return
+        marks = store.landmarks("", limit=100000)
+        lost = mapper is None or mapper.here is None
+        steps = {} if lost else mapper.reach({int(m["room_id"]) for m in marks})
+        self.push({"t": "marks", "op": "list", "lost": lost, "marks": [
+            {"name": m["name"], "kind": m["kind"] or "misc",
+             "note": m["note"] or "", "room": int(m["room_id"]),
+             "steps": steps.get(int(m["room_id"]))} for m in marks]})
+
+    def _walk_state(self) -> dict | None:
+        """A /go or map-click walk, for the Bot panel: where to, and how far."""
+        bots = getattr(self.session, "bots", None)
+        bot = bots.bots.get("speedwalk") if bots is not None else None
+        if bot is None:
+            return None
+        return {"running": bot.running, "goal": bot.goal, "steps": bot.length,
+                "note": bot.note}
+
+    def _routes_msg(self, store) -> dict:
+        return {"t": "routes", "op": "list", "routes": store.status(),
+                "walk": self._walk_state()}
 
     def _routes_op(self, msg: dict) -> None:
         store = getattr(self.scripts, "routes", None) if self.scripts else None
@@ -1057,11 +1094,14 @@ class WebServer:
             if problem:
                 self.push({"t": "routes", "op": "error", "error": problem})
                 return
+        elif op == "stop_walk":
+            # Only what is still to come: a stack already sent has gone.
+            self.session.bots.stop("speedwalk")
         elif op == "stop_all":
             self.scripts.bots.stop_all()
             self.session.queue.flush()
 
-        self.push({"t": "routes", "op": "list", "routes": store.status()})
+        self.push(self._routes_msg(store))
 
     def _rules_op(self, msg: dict) -> None:
         store = getattr(self.scripts, "rules", None) if self.scripts else None
@@ -1121,8 +1161,7 @@ class WebServer:
         routes = getattr(self.scripts, "routes", None)
         if routes is not None:
             try:
-                self.push({"t": "routes", "op": "list",
-                           "routes": routes.status()})
+                self.push(self._routes_msg(routes))
             except Exception:
                 log("refreshing the routes:\n" + traceback.format_exc())
 

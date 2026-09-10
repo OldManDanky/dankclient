@@ -246,6 +246,7 @@ class Session:
         #: rather than remembered from what we sent, because the character's
         #: setting is the truth and it can be changed from anywhere.
         self.brief: dict | None = None
+        self._brief_asked = False
         #: the character's own colour settings, read off 3K's ansivars page
         #: when asked and kept so they can be put back
         self.ansivars = AnsiVars(self._ansivars_path())
@@ -503,6 +504,7 @@ class Session:
         # there.
         self.reload_prefixes()
         self.mip_seen = False
+        self.brief, self._brief_asked = None, False   # a new login
         self.jumpstarted = False
         self._armed = False
         self._last_jumpstart = 0.0
@@ -742,6 +744,13 @@ class Session:
         # until MIP actually starts flowing.
         if self._armed and time.monotonic() - self._last_jumpstart >= self.jumpstart_retry:
             self.jumpstart()
+            if not self._brief_asked:
+                # Options -> Character setup shows 3K's brief setting, and
+                # "not asked yet" is no answer.  Once per login, with the
+                # handshake: the login is behind us, and it may be another
+                # character's setting.
+                self._brief_asked = True
+                self.queue.put("brief")
 
     def _on_message(self, msg: Message) -> None:
         self.codes_seen[msg.code] += 1
@@ -766,12 +775,14 @@ class Session:
         self.bots.start(name, lambda: api["follow"](route, name), "client")
         return True
 
-    def travel(self, dest: int, name: str = "speedwalk") -> bool:
+    def travel(self, dest: int, name: str = "speedwalk", label: str = "") -> bool:
         """Get to a room, routing around ways out that do not work."""
         if self.mapper is None:
             return False
+        steps = len(self.mapper.route(dest) or [])
         api = patrol.make_api(self, self.bots, "client")
-        self.bots.start(name, lambda: api["travel"](dest, name), "client")
+        bot = self.bots.start(name, lambda: api["travel"](dest, name), "client")
+        bot.goal, bot.length = label, steps
         return True
 
     def mip_quiet(self) -> list[str]:

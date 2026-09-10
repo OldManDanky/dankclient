@@ -795,6 +795,19 @@ class Store:
             "SELECT * FROM edge WHERE from_room = ? ORDER BY seen DESC", (room_id,)
         ))
 
+    def edge_table(self) -> dict[int, list[tuple[int, str, int]]]:
+        """Every way out at once, for a search across the whole map.
+
+        One query for the lot, where a search that asks room by room makes
+        tens of thousands of them.
+        """
+        out: dict[int, list[tuple[int, str, int]]] = {}
+        for row in self.db.execute(
+                "SELECT from_room, to_room, command, failed FROM edge"):
+            out.setdefault(int(row[0]), []).append(
+                (int(row[1]), str(row[2]), int(row[3] or 0)))
+        return out
+
     def neighbours(self, room_id: int) -> set[int]:
         """Rooms adjacent either way.
 

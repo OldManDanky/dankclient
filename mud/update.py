@@ -53,7 +53,11 @@ TARBALL = (f"https://codeload.github.com/{OWNER}/{REPO}"
 #: is frozen in place by the very record that says we already have this, and
 #: the fix reaches nobody who had already pulled.  Reading `.add_bot` lines
 #: with six fields as well as seven took the route library from 67 to 141.
-IMPORTERS = {"map": 1, "speedruns": 1, "bots": 2}
+#: The map went to 2 when rooms with no name stopped being thrown away and
+#: tt++'s void spacers were walked through: 3,478 dropped rooms had been the
+#: only ways into whole areas -- Xenolocles by way of Ravenloft, Westersea,
+#: the Underdark -- and a quarter of the speedruns could not be reached.
+IMPORTERS = {"map": 2, "speedruns": 1, "bots": 2}
 
 #: What we take, in the order it is worth having.
 WANTED = {

@@ -52,6 +52,14 @@ NEW = "new"
 NON_MOVING = {"look", "l", "glance", "exits", "brief", "map"}
 
 
+class Stacked(tuple):
+    """A (sent_at, command) sent as part of a whole path at once.
+
+    Its own type rather than an entry in a set: a stack of thirty `e` sent in
+    the same instant is thirty identical pairs, and a set holds one of them.
+    """
+
+
 class Mapper:
     """Tracks position and grows the map as you walk.
 
@@ -83,6 +91,11 @@ class Mapper:
         #: did not move, rather than that we walked somewhere identical.
         self._verifying = False
         self._pending: deque[tuple[float, str]] = deque()
+        #: Set while a whole path is being sent at once.  3K runs a stack of
+        #: moves back to back -- six rooms came back in 0.07s -- so each one's
+        #: reply is due when the one before it has arrived, not when it was
+        #: sent, and a forty-step stack must not age out behind its own queue.
+        self.stacking = False
 
     # --- input --------------------------------------------------------------
 
@@ -90,7 +103,8 @@ class Mapper:
         cmd = line.strip().lower()
         if not cmd or cmd in self.non_moving:
             return
-        self._pending.append((time.time() if at is None else at, cmd))
+        entry = (time.time() if at is None else at, cmd)
+        self._pending.append(Stacked(entry) if self.stacking else entry)
 
     def arrived(self, exits: Iterable[str], scenery: Iterable[str],
                 name: str | None = None, at: float | None = None) -> int | None:
@@ -114,6 +128,7 @@ class Mapper:
                 self._pending.popleft()        # that command moved nothing
             sent_at, cmd = self._blame(ways, now)
         self.moved_at = sent_at
+        self._queue_behind(now)
 
         if cmd is None:
             # Nothing we sent caused this.  Usually a redisplay -- after a
@@ -140,6 +155,17 @@ class Mapper:
             return self._locate(exits, scenery, now, cmd=cmd, name=name)
 
         return self._step(cmd, exits, scenery, name, now, verifying, ways)
+
+    def _queue_behind(self, now: float) -> None:
+        """The next stacked command waits its turn from this block, not from
+        when it was sent.
+
+        Only stacked ones: a stray `look` or `aset` that never answers must
+        still age out, or every arrival after it is blamed on the wrong line.
+        """
+        if self._pending and isinstance(self._pending[0], Stacked):
+            head = self._pending[0]
+            self._pending[0] = Stacked((max(head[0], now), head[1]))
 
     def _ways_out(self) -> set[str]:
         """Commands that could take us out of the room we are standing in.
@@ -619,6 +645,40 @@ class Mapper:
         if command.startswith((".", "#", "$")):
             return 100.0 + penalty        # a tt++ alias; it may not exist here
         return (3.0 if ";" in command else 2.0) + penalty
+
+    def reach(self, targets: Iterable[int] | None = None,
+              start: int | None = None) -> dict[int, int]:
+        """Steps from here to every room the router can reach, by its rules.
+
+        One search out from here rather than a route to each place: the
+        speedrun list has 399 of them, and 399 separate routes across a
+        49,000-room map is a long wait.  The same costs and the same refusals
+        as `route` -- no personal ways out, failed ones avoided -- so a place
+        listed N steps away is the walk /go would take.  Stops as soon as
+        every target has been found.
+        """
+        start = self.here if start is None else start
+        if start is None:
+            return {}
+        want = set(targets) if targets is not None else None
+        edges = self.store.edge_table()
+        found: dict[int, int] = {}
+        queue = [(0.0, 0, start)]              # (cost, steps, room)
+        while queue:
+            spent, steps, room = heapq.heappop(queue)
+            if room in found:
+                continue
+            found[room] = steps
+            if want is not None and want <= found.keys():
+                break
+            for nxt, command, failed in edges.get(room, ()):
+                if nxt in found or personal(command):
+                    continue
+                heapq.heappush(queue, (spent + self.cost(command, failed),
+                                       steps + 1, nxt))
+        if want is None:
+            return found
+        return {r: found[r] for r in want if r in found}
 
     def route(self, dest: int, start: int | None = None) -> list[str] | None:
         """Cheapest sequence of commands from here to ``dest``.

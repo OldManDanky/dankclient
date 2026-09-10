@@ -35,7 +35,7 @@ The three buttons above the map are the ones you will use most:
 
 - **Options** -- routes and bots, triggers, aliases and timers; layout, fonts,
   keyboard and sounds; your character's 3K settings; updates, and a list of
-  every client command.
+  every client command.  **Find a setting**, at the top, searches all of it.
 - **Bots** -- straight to your routes and bots.
 - **Disconnect** -- stops the bots, saves everything, and closes the
   connection.  It does **not** send `quit`: you go link-dead, exactly as if
@@ -45,7 +45,9 @@ The three buttons above the map are the ones you will use most:
 Under them, **Session** says who is logged in (click it to switch
 character), whether MIP is live, how many commands you have spent this
 minute (APM), and the MUD's uptime.  If the connection drops, the reason
-shows here first.
+shows here first.  The window's title shows the version, and counts tells
+that arrive while you are in another window -- "(2) Dank Mud Client" on the
+taskbar -- until you come back.
 
 **The Bot panel**, under the map, runs a bot without opening Options.  Type
 part of a route's name, a step or a creature it hunts, and press **Start**
@@ -63,12 +65,20 @@ If 3K drops you, the client goes back by itself and logs you in again,
 waiting a little longer between tries.  The sidebar counts down while it waits.
 
 Commands that start with `/` are for the client and never reach the MUD --
-`/help` lists them, and so does **Options -> Commands**.  Clicking a room on
-the map walks there.
+`/help` lists them, and so does **Options -> Commands**.  **Options ->
+Marks** lists every place `/go` knows by name -- areas, mobs, shops -- nearest
+first, with a **Go** button; `/speedruns` shows the same in the terminal.
+Some say *can't reach*: the map has no way in to that area yet, and walking
+in once teaches it.  Clicking a room on
+the map walks there, and so does `/go <name>`: the whole way goes at once, so
+you arrive as fast as 3K can move you, and the Bot panel shows where you are
+going.  A route with nothing to fight goes the same way.
 
 In the output, drag to select, double-click for a word or triple-click for a
 whole line, then **Ctrl+C** to copy it.  Web addresses underline when you
-point at them; **shift-click** opens one in your own browser.
+point at them; **shift-click** opens one in your own browser.  Scrolled up
+and more arrives?  **↓ new output** appears at the bottom; click it, or just
+send a command, to jump back down.
 
 `/gag <text>` hides every line containing that text, as tt++'s `#gag` does;
 `/gags` lists them and `/ungag <text>` shows it again.  Your triggers and the

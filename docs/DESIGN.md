@@ -101,6 +101,31 @@ still in the map, unreachable: a room is not wrong, only the claim that
 anybody can walk into it.  A route that starts in one of them still runs for
 somebody who has got there themselves.
 
+### Rooms that are not rooms, and rooms with no name
+
+The importer used to skip every room with no name, as "an unused room
+number".  3,478 of them had exits, and they were the only ways into whole
+areas.  They are two different things.
+
+1,253 are tt++ *void* rooms: spacers for drawing a long corridor between two
+rooms.  Nobody stands in one -- typing `e` walks you straight through to the
+room beyond -- so they are not made into rooms.  An exit into one is followed
+through the chain, taking the one way on that is not the way back, and
+recorded as leading where the spacers end; a chain that forks or stops leads
+nowhere and is dropped.
+
+The other 2,225 are real rooms tt++ passed without catching a title.  They
+come in with no name and their exits taken from their edges, so the map can
+route through them and dead reckoning can check them; the first walk through
+one records its name.  A number with no name *and* no way out is still an
+unused number.
+
+On 3kdb's map that is 51,720 rooms instead of 49,494, and the speedruns
+reachable from the Center of Town went from 301 of 399 to 371.  Every
+capture replayed against the new map places every room exactly where the old
+one did.  The importer's version in `update.py` went up with it, so a client
+that had already taken the map is offered it again, and a merge only adds.
+
 `tools/repair_map.py` brings an older import up to date;
 `tools/import_bots.py` reads 3kdb's route library.
 
@@ -134,6 +159,22 @@ board.
 
 `/bind` anchors it by hand, `/here` says where it thinks you are, `/lost`
 tells it that it is wrong.
+
+`/speedruns` lists the places `/go` knows by name -- the 399 speedruns
+imported from 3kdb -- with how many steps each is from where you stand, and
+which cannot be reached at all.  Distances come from one search out from
+here, not a route per place: the whole map's ways out are read in one query
+and searched with the router's own costs and refusals, so a place listed
+twelve steps away is the walk `/go` would take.  A few cannot be reached
+from anywhere; walking in once teaches the map the way, locked or not -- a
+lock stops new rooms, not new ways between rooms it has.
+
+For a while it was a quarter of them, and not because of the houses.  Whole
+areas -- the Underdark, Westersea, Xenolocles, over a thousand rooms apiece --
+were islands, joined up inside with no way in.  The ways in were in 3kdb's
+map all along; the importer had thrown them away (see *Rooms that are not
+rooms*, under The map).  A player's "for xeno you'd go to ravenloft, then go
+to xeno" was the clue: the route now goes exactly that way.
 
 ### Brief mode
 
@@ -340,6 +381,20 @@ Disconnect is last and set apart, being the only press in the sidebar you
 cannot take back by pressing it again -- a mis-click leaves you link-dead in
 whatever room you were standing in, so it asks first.
 
+Three small things, each from something that went wrong.  A terminal
+scrolled up stays put while output lands beneath it, which looked to a tester
+exactly like the game freezing -- so **↓ new output** appears whenever that is
+happening, and any command sent jumps back down.  The window's title carries
+the version and counts tells that arrive while the window is not in front,
+because the taskbar shows the title even with the sound off.  And Options has
+**Find a setting**: it searches the pages as they are when you type -- page,
+box, each setting's name and hint -- rather than a list kept beside them, so a
+setting added to a page can be found without anybody remembering to list it.
+
+Character setup shows 3K's `brief` setting, and it used to say "not asked yet"
+until somebody pressed Ask.  It is asked once per login now, with the
+handshake -- the one moment the login is known to be behind us.
+
 Tells, emotes and channel traffic share one window across the top of the
 output.  MIP separates the first two from the third -- `BAB` is personal, `CAA`
 is channels -- and this was two panels for a while on that basis, but the split
@@ -538,12 +593,27 @@ as a form rather than a file.  Paths read the way people write them:
 `n n e s w`, `3n 2e s`, semicolons for a pasted tt++ path, and braces for a
 step that is several commands (`{pick fruit;get seed;d}`).
 
-Every walk goes one step at a time, waiting for the room block the last one
-produced.  Sending them together looks like a speedwalk and is not: after the
-first step you are somewhere else, and the rest go out from a room they were
-never meant for.  A step that produces nothing is *looked* at rather than
-assumed to have failed -- some moves send no room block at all -- and a way out
-that really does not work is remembered, so routing stops choosing it.
+A route walks its own path one step at a time, because it stops in each room
+to fight.  Getting somewhere -- `/go`, a click on the map, a route walking to
+its start or back to where it paused -- sends the whole way at once.
+
+That used to be one step at a time too, and it went at one step a round: the
+next step waited for the last room to *settle*, a room settles on the next
+message, and between steps that is 3K's two-second sample.  Forty-three walks
+in the captures went out a median 1.99s apart.  But 3K runs a stack of moves
+back to back -- six rooms came back in 0.07s -- so the stack is the speedwalk.
+The map is told the commands queue behind each other, so each one's
+one-second window starts when the room before it arrives rather than when it
+was sent; otherwise the tail of a long stack would age out behind its own
+queue.  Only stacked commands are treated that way: a stray `look` still ages
+out.
+
+What was sent cannot be taken back, so if the stack does not arrive -- a door
+now locked, a way out that no longer works -- the client walks the rest room
+by room from wherever the map says it is.  A step that produces nothing is
+*looked* at rather than assumed to have failed -- some moves send no room
+block at all -- and a way out that really does not work is remembered, so
+routing stops choosing it.
 
 ### The Bot panel, and pausing
 
@@ -1087,7 +1157,7 @@ one loads it into the input box, because most of them take an argument.
 
     /help  /state  /clock  /find <text>            what happened, and where
     /here  /bind <where>  /lost  /go <name>        where you are, and getting
-    /marks [text]  /region <name>  /regions        about
+    /speedruns [word]  /region <name>  /regions    about
     /name  /merge <id>  /forget <id>  /new         correcting the map
     /dupes  /repair  /lock  /unlock
     /bots  /stop  /prefixes [set]                  what is driving the

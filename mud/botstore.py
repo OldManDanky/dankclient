@@ -323,7 +323,27 @@ class RouteStore:
                 if route.setup_steps():
                     await asyncio.sleep(0.5)      # let the MUD answer first
 
+            # A route that fights nothing and rests nowhere is only a walk, so
+            # it goes as one stack, like /go -- when the map can follow the
+            # whole path and so knows where it ends.  Otherwise room by room.
+            stack = not targets and not route.rest
             while True:
+                if stack and mapper is not None and mapper.here is not None:
+                    left = steps[first:]
+                    end = self._follow(mapper.here, left)
+                    if left and end is not None:
+                        # Where the stack will leave it, set before it goes:
+                        # a pause mid-stack resumes from the right place.
+                        bot.at, bot.room = len(steps), end
+                        if not await api["dash"](left, end, route.name):
+                            bot.note = "the walk did not arrive where the path ends"
+                            return
+                        bot.steps += len(left)
+                        first = 0
+                        if not route.loop:
+                            bot.note = f"finished {len(steps)} steps"
+                            return
+                        continue
                 for i in range(first, len(steps)):
                     step = steps[i]
                     if not await walk(step):
@@ -364,6 +384,17 @@ class RouteStore:
         if self.paused.pop(route.id, None) is not None:
             self._save_paused()
         return self.host.bots.stop(route.name)
+
+    def _follow(self, room, steps) -> int | None:
+        """Where a path leads on the map, or None if the map cannot follow it."""
+        store = getattr(self.host.session, "store", None)
+        if store is None:
+            return None
+        for step in steps:
+            room = store.destination(room, step)
+            if room is None:
+                return None
+        return room
 
     def _room_name(self, room) -> str:
         store = getattr(self.host.session, "store", None)

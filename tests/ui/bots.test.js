@@ -77,4 +77,18 @@ check('Enter picks the first match and starts nothing',
   el('bot-name').textContent);
 check('...and sent nothing', sent.length === 0);
 
+// A /go or a click on the map, shown with Stop and nothing else.
+sent.length = 0;
+renderBotPanel(ROUTES, { running: true, goal: 'Center of Town', steps: 23, note: '' });
+check('a walk shows where it is going', el('bot-name').textContent === 'Walking to Center of Town'
+  && el('bot-step').textContent === '23 steps', el('bot-name').textContent);
+check('a walk: Stop, and no Start or Pause',
+  el('bot-start').disabled && el('bot-pause').disabled && !el('bot-stop').disabled);
+el('bot-stop').onclick();
+check('Stop stops the walk', same(last(), { t: 'routes', op: 'stop_walk' }), last());
+type('tree');
+check('nothing else starts during a walk', rows()[0].children[2].disabled);
+renderBotPanel(ROUTES, { running: false, goal: 'Center of Town', steps: 23, note: 'finished' });
+check('a finished walk leaves the panel', el('bot-name').textContent !== 'Walking to Center of Town');
+
 finish();

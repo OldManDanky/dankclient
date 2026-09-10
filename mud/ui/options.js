@@ -23,7 +23,7 @@
   //: timer does not match anything; it just comes round.
   const TESTABLE = new Set(['trigger', 'alias', 'event', 'watch']);
   //: the tabs that show a list, and so have something to search
-  const LIST_TABS = new Set([...RULE_TABS, 'routes', 'scripts']);
+  const LIST_TABS = new Set([...RULE_TABS, 'routes', 'scripts', 'marks']);
   const LAST = 'opt:tab';
 
   let current = 'routes';
@@ -57,6 +57,8 @@
     // Each list asks the server for itself; opening a tab is when to refresh.
     if (name === 'routes') {
       if (window.refreshRoutes) window.refreshRoutes();
+    } else if (name === 'marks') {
+      if (window.refreshMarks) window.refreshMarks();
     } else if (name === 'panels') {
       if (window.renderPanels) window.renderPanels();
     } else if (RULE_TABS.has(name) || name === 'scripts') {
@@ -92,6 +94,8 @@
   function refilter() {
     if (current === 'routes') {
       if (window.renderRoutes) window.renderRoutes();
+    } else if (current === 'marks') {
+      if (window.renderMarks) window.renderMarks();
     } else if (window.renderRules) {
       window.renderRules();
     }

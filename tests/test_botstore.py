@@ -325,7 +325,8 @@ def test_pause_keeps_the_step_and_the_room_and_survives_a_restart():
     with tempfile.TemporaryDirectory() as tmp:
         s, host = build(tmp)
         m, a, b, c = line_of_rooms(s)
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
 
         async def scenario():
             host.routes.start(route.id)
@@ -353,7 +354,8 @@ def test_resume_walks_back_to_that_room_and_carries_on():
     with tempfile.TemporaryDirectory() as tmp:
         s, host = build(tmp)
         m, a, b, c = line_of_rooms(s)
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
 
         async def scenario():
             host.routes.start(route.id)
@@ -404,7 +406,8 @@ def test_resume_does_what_the_route_does_in_that_room_first():
 def test_start_stop_and_a_new_path_forget_a_pause():
     with tempfile.TemporaryDirectory() as tmp:
         s, host = build(tmp)
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
         held = {"step": 1, "room": None, "steps": 1, "kills": 0}
 
         host.routes.paused[route.id] = dict(held)
@@ -432,7 +435,8 @@ def test_it_cannot_get_back_and_keeps_the_pause():
         s, host = build(tmp)
         m, a, b, c = line_of_rooms(s)
         lost = s.store.add_room("Nowhere")          # no way to it
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
         host.routes.paused[route.id] = {"step": 1, "room": lost, "steps": 1,
                                         "kills": 0}
 
@@ -449,7 +453,8 @@ def test_it_cannot_get_back_and_keeps_the_pause():
 def test_pausing_something_not_walking_says_so():
     with tempfile.TemporaryDirectory() as tmp:
         s, host = build(tmp)
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
         assert host.routes.pause(route.id) == "it is not walking"
         assert host.routes.paused == {}
 
@@ -461,7 +466,8 @@ def test_it_reads_as_paused_the_moment_pause_returns():
     with tempfile.TemporaryDirectory() as tmp:
         s, host = build(tmp)
         m, a, b, c = line_of_rooms(s)
-        route, _ = host.routes.upsert({"name": "line", "path": "n e"})
+        route, _ = host.routes.upsert({"name": "line", "path": "n e",
+                                        "targets": ["rat"]})
 
         async def scenario():
             host.routes.start(route.id)
@@ -472,5 +478,83 @@ def test_it_reads_as_paused_the_moment_pause_returns():
             row = host.routes.status()[0]       # no await: still cancelling
             assert row["running"] is False and row["paused"]["room"] == b
             assert row["note"].startswith("paused at step 1")
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+
+# --- a route that fights nothing goes as one stack ------------------------------
+
+
+def test_a_route_that_fights_nothing_goes_as_one_stack():
+    """With nothing to fight and nowhere to rest it is only a walk, so it goes
+    the way /go does -- all of it at once -- when the map can follow it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "stroll", "path": "n e"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            assert s.sent == ["n", "e"], "both at once"
+            arrive(s, m, c)
+            await asyncio.sleep(0.05)
+            bot = host.bots.bots["stroll"]
+            assert "finished" in bot.note and bot.steps == 2
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_route_that_hunts_still_goes_room_by_room():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e",
+                                       "targets": ["rat"]})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            assert s.sent == ["n"], "one step, then it looks for rats"
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_path_the_map_cannot_follow_is_walked():
+    """No stack without knowing where it ends: that is what says it arrived."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        route, _ = host.routes.upsert({"name": "off map", "path": "n climb tree"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            assert s.sent == ["n"]
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_go_walk_rides_along_with_the_routes_and_can_be_stopped():
+    """The Bot panel shows /go and map-click walks: where to, how far, Stop."""
+    from mud.web import WebServer
+
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        web = WebServer(s, port=0, scripts=host)
+        pushed = []
+        web.push = pushed.append
+
+        async def scenario():
+            assert s.travel(c, "speedwalk", "Room C")
+            await asyncio.sleep(0)
+            msg = web._routes_msg(host.routes)
+            assert msg["walk"] == {"running": True, "goal": "Room C",
+                                   "steps": 2, "note": ""}, msg["walk"]
+            web._routes_op({"t": "routes", "op": "stop_walk"})
+            await asyncio.sleep(0)
+            assert pushed[-1]["walk"]["running"] is False
 
         asyncio.new_event_loop().run_until_complete(scenario())

@@ -8,6 +8,8 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   let routes = [];
+  //: a /go or map-click walk, if one is going: shown in the Bot panel
+  let walk = null;
 
   //: set while a save is in flight, so the list coming back closes the form
   let saving = false;
@@ -135,7 +137,7 @@
 
     // What is walking, and what is paused, in the sidebar's Bot panel.
     const walking = routes.filter((r) => r.running);
-    if (window.renderBotPanel) window.renderBotPanel(routes);
+    if (window.renderBotPanel) window.renderBotPanel(routes, walk);
 
     const btn = $('open-options');
     btn.classList.toggle('live', walking.length > 0);
@@ -158,6 +160,7 @@
     }
     if (m.op === 'list') {
       routes = m.routes || [];
+      walk = m.walk || null;
       // The form closes only once the server has taken the save: an error
       // comes back on the same channel, and closing on the click would throw
       // away what you typed before you had seen why it was refused.

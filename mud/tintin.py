@@ -81,6 +81,12 @@ DELAY = re.compile(r"^#delay\s+[\d.]+\s+(.+)$", re.I)
 SEND = re.compile(r"^#send\s+(.+)$", re.I)
 DIRECTIVE = re.compile(r"^#(\w+)")
 
+#: tt++'s room flag for a *void* room: a spacer for drawing a long way
+#: between two rooms, not a room in the game.  Walking into one carries on to
+#: the room beyond it, so an exit into one leads, in 3K, to wherever the
+#: spacers end.
+VOID = 8
+
 #: No edge is worth more than this many commands.  `#31 climb` is real and
 #: means it, but a mis-read number should not empty the rate limiter.
 MOST_REPEATS = 50
@@ -183,6 +189,11 @@ def import_map(store, path: str | Path, progress=None,
     areas: dict[str, int] = {}
     current: int | None = None
     skipped = 0
+    #: spacer rooms, and where each one's exits go
+    voids: dict[int, list[int]] = {}
+    #: rooms tt++ never caught a name for: vnum -> (region, note)
+    unnamed: dict[int, tuple] = {}
+    in_void = False
 
     def flush() -> None:
         db.executemany(
@@ -200,16 +211,28 @@ def import_map(store, path: str | Path, progress=None,
     try:
         for kind, got in read_map(path):
             if kind == "R":
-                current = None
+                current, in_void = None, False
                 if len(got) < 4 or not got[0].isdigit():
                     continue
                 vnum = int(got[0])
+                flags = int(got[1]) if got[1].strip().isdigit() else 0
                 name, exits = parse_bad(got[3].strip())
-                if not name:
-                    skipped += 1              # an unused room number
-                    continue
                 area = got[6].strip() if len(got) > 6 else ""
                 note = got[7].strip() if len(got) > 7 else ""
+                if not name and flags & VOID:
+                    # A spacer.  Its exits say where the corridor goes on to;
+                    # the room itself is not one anybody stands in.
+                    voids[vnum] = []
+                    current, in_void = vnum, True
+                    continue
+                if not name:
+                    # Either an unused number or a real room tt++ never caught
+                    # a title for -- 2,225 of them in 3kdb's map, on the only
+                    # way into the Underdark, Westersea and Xenolocles.  Its
+                    # exits, read next, say which.
+                    unnamed[vnum] = (area, note)
+                    current = vnum
+                    continue
                 if area and area not in areas:
                     # By name, not by insertion: a merge that made its own
                     # region rows gave a map two of every area, and the rooms
@@ -237,12 +260,61 @@ def import_map(store, path: str | Path, progress=None,
             elif kind == "E" and current is not None:
                 if len(got) < 3 or not got[0].isdigit():
                     continue
+                if in_void:
+                    voids[current].append(int(got[0]))
+                    continue
                 command = walkable((got[2] or got[1]).strip().lower())
                 # Somebody's own house, or somebody's own alias, is not a way
                 # out of a public room.
                 if command and not personal(command):
                     edges.append((current, command, int(got[0]), now))
+
+        # A room with no name is a room if it has a way out; otherwise it is a
+        # number nobody used.  Its exits come from its edges below, the way a
+        # bare title's do.
+        leads = {e[0] for e in edges}
+        for vnum, (area, note) in unnamed.items():
+            if vnum not in leads:
+                skipped += 1              # an unused room number
+                continue
+            if area and area not in areas:
+                have = store.region_by_name(area) if merge else None
+                if have is not None:
+                    areas[area] = int(have["id"])
+                else:
+                    cur = db.execute(
+                        "INSERT INTO region (name, parent_id, layout) "
+                        "VALUES (?,NULL,'grid')", (area,))
+                    areas[area] = int(cur.lastrowid)
+            rooms.append((vnum, None, areas.get(area), now, now, note or None))
+            prints.append((vnum, "", now))
         flush()
+
+        # Through the spacers: an exit into one leads where they end.  Each
+        # step takes the one way on that is not the way back; a chain that
+        # forks, stops or loops is not a corridor and goes nowhere.
+        def beyond(frm: int, first: int) -> int | None:
+            prev, cur = frm, first
+            for _ in range(64):
+                if cur not in voids:
+                    return cur
+                onward = {t for t in voids[cur] if t != prev}
+                if len(onward) != 1:
+                    return None
+                prev, cur = cur, onward.pop()
+            return None
+
+        collapsed = 0
+        through: list[tuple] = []
+        for frm, command, to, seen in edges:
+            if to in voids:
+                end = beyond(frm, to)
+                if end is None:
+                    continue
+                collapsed += 1
+                to = end
+            through.append((frm, command, to, seen))
+        edges = through
 
         # Edges last: every room exists by now, so a link to a room that was
         # never defined can be dropped rather than left dangling.
@@ -274,7 +346,7 @@ def import_map(store, path: str | Path, progress=None,
     return {"rooms": len(known), "edges": len(good),
             "dangling": len(edges) - len(good), "areas": len(areas),
             "blank": skipped, "backfilled": filled, "scrubbed": scrubbed,
-            "folded": folded}
+            "folded": folded, "voids": collapsed, "unnamed": len(unnamed) - skipped}
 
 
 

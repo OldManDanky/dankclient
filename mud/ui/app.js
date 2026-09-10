@@ -157,6 +157,22 @@ try {
   // sound is ours.  The scrollback put back after a refresh has its control
   // characters taken out, so an old bell never rings twice.
   term.onBell(() => { if (window.ding) window.ding('bell'); });
+  // "new output" while scrolled up: output landing out of sight looked, to a
+  // tester, exactly like the game having frozen.  Shown only then, and gone
+  // the moment the view is back at the bottom.
+  const below = $('term-new');
+  if (below) {
+    const atBottom = () => term.buffer.active.viewportY >= term.buffer.active.baseY;
+    const settle = () => { if (atBottom()) below.hidden = true; };
+    if (term.onLineFeed) term.onLineFeed(() => { if (!atBottom()) below.hidden = false; });
+    if (term.onScroll) term.onScroll(settle);
+    $('term').addEventListener('wheel', () => setTimeout(settle, 50), { passive: true });
+    below.onclick = () => {
+      term.scrollToBottom();
+      below.hidden = true;
+      cmd.focus();
+    };
+  }
   refit();
   addEventListener('resize', refit);
   // The status strip grows when the guild line arrives and wraps on a narrow
@@ -234,6 +250,28 @@ function restore(lines) {
   term.write(`\x1b[2m${rule}${label}${rule}\x1b[0m\r\n`);
 }
 
+/* The window title: the client and its version, and how many tells arrived
+   while you were somewhere else -- the taskbar shows the title, so it says so
+   even with the sound off.  Your own tells do not count. */
+let titleBase = document.title;
+let unread = 0;
+function paintTitle() {
+  document.title = (unread ? `(${unread}) ` : '') + titleBase;
+}
+function noteTell(d) {
+  if (d && d.from_me) return;
+  if (!document.hidden && document.hasFocus()) return;
+  unread += 1;
+  paintTitle();
+}
+function seen() {
+  if (!unread) return;
+  unread = 0;
+  paintTitle();
+}
+addEventListener('focus', seen);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) seen(); });
+
 function handle(m) {
   if (m.t === 'text') {
     if (term) term.write(m.d);
@@ -242,11 +280,14 @@ function handle(m) {
   } else if (m.t === 'state') {
     render(m);
   } else if (m.t === 'tell' || m.t === 'chat') {
+    if (m.t === 'tell') noteTell(m.d);
     // The MUD prints these in the main output already; echoing them into the
     // terminal made a third copy.  The monitor is the second.
     if (window.pushMessage) window.pushMessage(m.t, m.d);
   } else if (m.t === 'rules' && window.handleRules) {
     window.handleRules(m);
+  } else if (m.t === 'marks' && window.handleMarks) {
+    window.handleMarks(m);
   } else if (m.t === 'routes' && window.handleRoutes) {
     window.handleRoutes(m);
   } else if (m.t === 'login' && window.handleLogin) {
@@ -523,6 +564,7 @@ function send(text, echo) {
   // scrolled up stays there while output arrives beneath it, which from the
   // chair looks exactly like the game having stopped.
   if (term) term.scrollToBottom();
+  if ($('term-new')) $('term-new').hidden = true;
   if (echo && term) term.write(`\x1b[2m> ${text}\x1b[0m\r\n`);
   cmd.focus();
 }
@@ -682,6 +724,13 @@ function render(s) {
 
   if (s.messages && window.seedMessages) window.seedMessages(s.messages);
   if (s.where && window.renderAbout) window.renderAbout(s.where);
+  if (s.where && s.where.version) {
+    const base = `${s.where.name} ${s.where.version}`;
+    if (base !== titleBase) {
+      titleBase = base;
+      paintTitle();
+    }
+  }
   if (s.release && window.renderRelease) window.renderRelease(s.release);
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {

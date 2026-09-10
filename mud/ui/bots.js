@@ -18,6 +18,8 @@
   const MOST = 8;
 
   let routes = [];
+  //: a /go or map-click walk the server says is going
+  let walk = null;
   let chosen = store ? store.get('bot:route', '') : '';
   //: what the results were last drawn from, so a step taken does not rebuild
   //: the buttons under the cursor
@@ -40,6 +42,10 @@
   }
 
   const walking = () => routes.find((r) => r.running) || null;
+  const walkingTo = () => (walk && walk.running ? walk : null);
+  //: what stops anything else being started: a route, or a walk
+  const busyWith = () => walking()
+    || (walkingTo() ? { id: '__walk', name: 'A walk' } : null);
 
   /* The one the panel is about: whatever is walking, else the one picked,
      else one that is paused. */
@@ -66,6 +72,22 @@
   // --- what it is doing -------------------------------------------------------
 
   function drawNow() {
+    // A /go or a click on the map: where to, and Stop.  Nothing to pause --
+    // it is a stack, already sent.
+    const w = walkingTo();
+    if (w && !walking()) {
+      $('bot-name').textContent = w.goal ? `Walking to ${w.goal}` : 'Walking';
+      $('bot-step').textContent = w.steps ? `${w.steps} step${w.steps === 1 ? '' : 's'}` : '';
+      $('bot-bar').style.width = '100%';
+      $('bot-now').className = 'live';
+      $('bot-note').textContent = w.note || '';
+      $('bot-start').textContent = 'Start';
+      $('bot-start').disabled = true;
+      $('bot-pause').textContent = 'Pause';
+      $('bot-pause').disabled = true;
+      $('bot-stop').disabled = false;
+      return;
+    }
     const r = current();
     const all = r ? r.step_count || 0 : 0;
     const done = r ? r.steps_taken || 0 : 0;
@@ -106,7 +128,7 @@
   function drawFound() {
     const q = $('bot-find').value.trim();
     const hits = q ? found(q) : [];
-    const busy = walking();
+    const busy = busyWith();
     const key = JSON.stringify([q, busy && busy.id,
       hits.slice(0, MOST).map((r) => [r.id, r.name, r.step_count])]);
     if (key === drawn) return;
@@ -167,6 +189,10 @@
     if (r) send({ op: r.paused ? 'resume' : 'pause', id: r.id });
   };
   $('bot-stop').onclick = () => {
+    if (walkingTo() && !walking()) {
+      send({ op: 'stop_walk' });
+      return;
+    }
     const r = current();
     if (r) send({ op: 'stop', id: r.id });
   };
@@ -184,8 +210,9 @@
     }
   };
 
-  window.renderBotPanel = function (list) {
+  window.renderBotPanel = function (list, w) {
     routes = list || [];
+    walk = w || null;
     draw();
   };
   draw();
