@@ -149,9 +149,32 @@ def test_tells_and_chat_are_captured():
 
 def test_enemy_label_comes_from_aab():
     world, _, _ = drive([
+        mip("12345", "FFFK~Gabriel, archangel of Yesod {glowing}~L~93"),
         mip("12345", "AAB~Gabriel, archangel of Yesod {glowing} [scratched]"),
     ])
     assert world.enemy_label.startswith("Gabriel")
+
+
+def test_the_end_of_a_fight_takes_the_enemy_panel_down():
+    """3K empties the enemy when a fight ends -- in every one of the 137
+    fights in the captures -- but never sends its health as 0, and never
+    clears the AAB label.  The panel stayed up after the kill."""
+    world, _, _ = drive([
+        mip("12345", "FFFK~Gabriel, archangel of Yesod {glowing}~L~12"),
+        mip("12345", "AAB~Gabriel, archangel of Yesod {glowing} [bleeding]"),
+        mip("12345", "FFFK~"),
+    ])
+    assert world.player.enemy == ""
+    assert world.enemy_label == "" and world.player.enemy_pct is None
+
+
+def test_a_label_after_the_fight_does_not_bring_it_back():
+    world, _, _ = drive([
+        mip("12345", "FFFK~rat~L~40"),
+        mip("12345", "FFFK~"),
+        mip("12345", "AAB~rat [dead]"),
+    ])
+    assert world.enemy_label == ""
 
 
 def test_a_code_that_stops_arriving_is_noticed():

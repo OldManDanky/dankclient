@@ -912,6 +912,11 @@ class WebServer:
         if kind == "start":
             self._start_op(msg)
             return
+        if kind == "guide":
+            from . import guide
+
+            self.push({"t": "guide", "topics": guide.topics()})
+            return
         if kind == "help":
             from .commands import HELP
 
@@ -967,8 +972,11 @@ class WebServer:
         # else talking to this socket need not be, and each line should meet
         # the aliases and the rate governor on its own rather than go out as
         # one write with line breaks inside it.
+        # And one command per `;`, as every MUD client has done: n;w;n;n;e;n.
+        from .commands import stack
         for line in text.splitlines() or [""]:
-            self._command(line)
+            for piece in stack(line):
+                self._command(piece)
 
     def _touched(self) -> None:
         """A person did something: the deadman starts counting again."""

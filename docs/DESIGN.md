@@ -802,6 +802,21 @@ as finished for matching, though: a room title split across two reads would
 become two lines.  If the rest of a line already drawn arrives later and is gagged, the
 row is wiped.  With no gags nothing is held at all.
 
+## The guide
+
+**Options -> Help** and `/help <topic>` are one guide, written once as
+Markdown in `mud/ui/guide/` and read two ways: the page draws it, the output
+prints it plain.  The list of client commands is not written into it at all
+-- it is generated from `commands.HELP`, the list `/help` prints, so it
+cannot fall behind.  Only the Markdown the guide uses is understood, and the
+page builds elements from it rather than HTML, so nothing in a topic can
+become markup.  Links go to another topic (`#id`), to a page of Options
+(`options:page`), or out to the player's own browser.
+
+It is held to the code: a test fails if a topic names a `/` command the
+client does not have, links to a topic or page that is not there, or shows a
+pattern that does not match the 3K line it is shown with.
+
 ## Sounds
 
 A tell, a channel line you chose to ding, 3K's bell, a bot ending by itself,

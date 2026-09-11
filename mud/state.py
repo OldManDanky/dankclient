@@ -280,6 +280,15 @@ class World:
             values, unknown = codes.parse_composite(data)
             for name, value in values.items():
                 self._set(self.player, name, value)
+            if values.get("enemy") == "":
+                # The fight is over.  3K says so by emptying the enemy -- in
+                # all 137 fights in the captures -- but never sends its
+                # health as 0 (the last it sends is the round before it
+                # died) and never clears the AAB label.  Left alone, the
+                # enemy panel stayed up after the kill, with that name and
+                # that last health.
+                self._set(self.player, "enemy_pct", None)
+                self._set(self, "enemy_label", "")
             for tag in unknown:
                 self._count_unknown(f"FFF:{tag}")
 
@@ -331,7 +340,10 @@ class World:
             # Spec says <filename>~<label> for an image.  3k.org sends an empty
             # filename and puts the enemy's name and condition in the label.
             _, label = codes.fields(data, 2)[:2]
-            self._set(self, "enemy_label", label)
+            # Only during a fight: one that trails in after the enemy has
+            # gone would put the panel back up for a creature already dead.
+            if self.player.enemy:
+                self._set(self, "enemy_label", label)
 
         elif code in codes.SIMPLE:
             attr = codes.SIMPLE[code]

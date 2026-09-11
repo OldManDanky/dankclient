@@ -73,8 +73,27 @@ HELP = [
         ('/ansivars restore', 'show what would put them back'),
         ('/ansivars restore go', 'send it'),
         ('/help', 'this list'),
+        ('/help <topic>', 'read the guide: /help triggers, /help regex, /help routes...'),
     ]),
 ]
+
+
+def stack(line: str) -> list[str]:
+    """One typed line as the commands it holds: `n;w;n;n;e;n` is six.
+
+    Each piece then goes where a typed line would -- an alias, a client
+    command, or 3K -- so `n;/go bank` works.  `\\;` is a semicolon that stays
+    in the command (`say hi\\; bye`).  A line that starts with `/` is left
+    whole: it is the client's, and its own `;` belong to it --
+    `/alias gk kill {1};glance`.  A line with no `;` is not touched at all,
+    spaces and all, and an empty one is still one empty command: Enter on
+    nothing is how you ask 3K for a prompt.
+    """
+    if line.startswith("/") or ";" not in line:
+        return [line]
+    pieces = [p.replace("\x00", ";").strip()
+              for p in line.replace("\\;", "\x00").split(";")]
+    return [p for p in pieces if p] or [""]
 
 
 def handle(text: str, session, scripts, note) -> bool:
@@ -86,11 +105,26 @@ def handle(text: str, session, scripts, note) -> bool:
     verb, rest = verb.lower(), rest.strip()
 
     if verb in ("help", "?"):
+        from . import guide
+
+        if rest:
+            # A topic of the guide, by name or by a word in it.
+            found = guide.find(rest)
+            if not found:
+                note(f"nothing in the guide about {rest!r}.  " + guide.index())
+            elif len(found) == 1 or found[0]["id"] == rest.strip().lower():
+                note(guide.plain(found[0]))
+            else:
+                note(f"{rest!r} is in: " + ", ".join(
+                    f"{t['id']} ({t['title']})" for t in found[:8])
+                    + f"\n/help {found[0]['id']} to read one.")
+            return True
         wide = max(len(v) for _t, _b, rows in HELP for v, _d in rows)
         out = []
         for title, _blurb, rows in HELP:
             out.append(f"\n  {title}")
             out += [f"    {v:<{wide}}  {d}" for v, d in rows]
+        out.append("\n" + guide.index())
         note("\n".join(out).lstrip("\n"))
 
     elif verb in ("js", "jumpstart"):

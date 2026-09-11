@@ -66,6 +66,8 @@
       if (window.refreshMarks) window.refreshMarks();
     } else if (name === 'panels') {
       if (window.renderPanels) window.renderPanels();
+    } else if (name === 'guide') {
+      if (window.refreshGuide) window.refreshGuide();
     } else if (RULE_TABS.has(name) || name === 'scripts') {
       if (window.refreshRules) window.refreshRules();
     }

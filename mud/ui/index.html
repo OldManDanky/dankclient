@@ -282,6 +282,51 @@
               background:var(--sunk);border:1px solid var(--line);
               border-radius:3px;padding:4px 6px;margin:3px 0;
               overflow-wrap:anywhere;cursor:text}
+  /* --- Options -> Help: the guide --- */
+  #guide{display:grid;grid-template-columns:minmax(10em,13em) minmax(0,1fr);gap:18px;
+         align-items:start}
+  #guide-nav{position:sticky;top:0;display:flex;flex-direction:column;gap:6px}
+  #guide-find{width:100%;font-size:12px}
+  #guide-topics{display:flex;flex-direction:column}
+  #guide-topics button{all:unset;cursor:pointer;padding:4px 8px;border-radius:3px;
+                       font-size:12px;color:var(--dim);line-height:1.35}
+  #guide-topics button:hover{color:var(--ink);background:rgba(111,155,235,.08)}
+  #guide-topics button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  #guide-topics button.on{color:var(--ink);background:rgba(111,155,235,.14)}
+  #guide-topics .none{padding:4px 8px;font-size:12px;color:var(--dim);font-style:italic}
+  #guide-article{min-width:0;font-size:13px;line-height:1.6;color:var(--ink);max-width:44em;
+                 outline:none}
+  #guide-article h3{margin:0 0 6px;font-size:18px;font-weight:600;text-wrap:balance}
+  #guide-article .lede{margin:0 0 14px;color:var(--dim)}
+  #guide-article h4{margin:18px 0 6px;font-size:11px;letter-spacing:.1em;
+                    text-transform:uppercase;color:var(--dim);font-weight:600}
+  #guide-article p{margin:0 0 10px}
+  /* The page-wide ul and li rules are for the room's contents -- a flex
+     column of flex rows -- so the guide's lists put ordinary lists back. */
+  #guide-article ul,#guide-article ol{display:block;margin:0 0 10px;padding-left:1.4em;gap:0}
+  #guide-article ul{list-style:disc}
+  #guide-article ol{list-style:decimal}
+  #guide-article li{display:list-item;margin:0 0 4px;font-size:inherit;gap:0}
+  #guide-article code{font-family:var(--term-font);font-size:12px;padding:1px 4px;
+                      border-radius:3px;background:var(--sunk);border:1px solid var(--line)}
+  #guide-article pre{margin:0 0 12px;padding:10px 12px;overflow-x:auto;background:var(--sunk);
+                     border:1px solid var(--line);border-radius:4px}
+  #guide-article pre code{padding:0;border:0;background:none}
+  #guide-article .table{overflow-x:auto;margin:0 0 12px}
+  #guide-article table{border-collapse:collapse;font-size:12px;min-width:100%}
+  #guide-article th,#guide-article td{text-align:left;vertical-align:top;padding:5px 10px 5px 0;
+                                      border-bottom:1px solid var(--line)}
+  #guide-article th{font-weight:600;color:var(--dim);font-size:11px}
+  #guide-article a{color:var(--accent);cursor:pointer;text-decoration:none}
+  #guide-article a:hover{text-decoration:underline}
+  #guide-article mark{background:rgba(242,204,96,.25);color:inherit;border-radius:2px}
+  .guide-link{font-size:11px;color:var(--accent);cursor:pointer;background:none;border:0;
+              padding:0;margin-left:6px}
+  .guide-link:hover{text-decoration:underline}
+  @media (max-width:720px){
+    #guide{grid-template-columns:minmax(0,1fr)}
+    #guide-nav{position:static}
+  }
   .help-group{margin:0 0 14px}
   .help-group h5{margin:0 0 2px;font-size:11px;letter-spacing:.04em;
                  text-transform:uppercase;color:var(--dim)}
@@ -823,6 +868,7 @@
       <button type="button" data-tab="marks">Marks<span class="n"></span></button>
       <button type="button" data-tab="settings">Character setup</button>
       <div class="opt-group">Client</div>
+      <button type="button" data-tab="guide">Help</button>
       <button type="button" data-tab="help">Commands</button>
       <button type="button" data-tab="updates">Updates<span class="n"></span></button>
       <button type="button" data-tab="about">About<span class="n"></span></button>
@@ -1315,6 +1361,25 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div id="help-groups"></div>
         </section>
 
+        <!-- the guide ---------------------------------------------------- -->
+        <section class="opt-pane" data-pane="guide" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Help</h4>
+              <p>How to use the client, a topic at a time. The same guide is in the
+                 output: <code>/help triggers</code>, <code>/help regex</code>.</p>
+            </div>
+          </div>
+          <div id="guide">
+            <nav id="guide-nav" aria-label="Help topics">
+              <input id="guide-find" type="search" spellcheck="false"
+                     placeholder="search the help" aria-label="Search the help">
+              <div id="guide-topics"></div>
+            </nav>
+            <article id="guide-article" tabindex="-1"></article>
+          </div>
+        </section>
+
         <!-- updates ------------------------------------------------------ -->
         <section class="opt-pane" data-pane="updates" hidden>
           <div class="opt-head">
@@ -1400,7 +1465,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                   or new lines. <code>3n</code> repeats a step. Anything that is not
                   a direction is sent as a command &mdash; <code>climb pipe</code>,
                   <code>enter</code>. Wrap a step in <code>{ }</code> to keep
-                  something containing a separator together.</p>
+                  something containing a separator together.<button type="button"
+                  class="guide-link" data-guide="routes">How routes work</button></p>
               </div>
               <div class="frow">
                 <label for="r-start">Start room</label>
@@ -1498,7 +1564,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                   <label for="f-pattern">Text</label>
                   <input id="f-pattern" type="text" spellcheck="false"
                          placeholder="text to match" class="mono">
-                  <p class="fhint" id="f-hint"></p>
+                  <p class="fhint"><span id="f-hint"></span><button type="button"
+                     class="guide-link" data-guide="patterns">How patterns work</button></p>
                 </div>
               </div>
 
@@ -1559,7 +1626,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
             <div class="in">
               <div id="f-actions"></div>
               <button id="f-add-action" type="button">+ action</button>
-              <p class="say">A capture goes in with braces: <code>{who}</code>,
+              <p class="say"><button type="button" class="guide-link" style="margin:0 6px 0 0"
+                data-guide="actions">What a rule can do</button>A capture goes in with braces: <code>{who}</code>,
                 <code>{args}</code>, <code>{1}</code>.  A <b>wait</b> holds back
                 everything below it for that many seconds.</p>
             </div>
@@ -1636,6 +1704,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="fonts.js"></script>
   <script src="numpad.js"></script>
   <script src="sound.js"></script>
+  <script src="guide.js"></script>
   <script src="optfind.js"></script>
 </body>
 </html>

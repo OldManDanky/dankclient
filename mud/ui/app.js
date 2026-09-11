@@ -303,6 +303,8 @@ function handle(m) {
     window.handleLogin(m);
   } else if (m.t === 'update' && window.handleUpdate) {
     window.handleUpdate(m);
+  } else if (m.t === 'guide' && window.handleGuide) {
+    window.handleGuide(m);
   } else if (m.t === 'help' && window.handleHelp) {
     window.handleHelp(m);
   }

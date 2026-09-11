@@ -69,6 +69,10 @@ Closing the window does the same as Disconnect, then quits.
 If 3K drops you, the client goes back by itself and logs you in again,
 waiting a little longer between tries.  The sidebar counts down while it waits.
 
+**Options -> Help** is the guide: triggers, patterns and regex, aliases,
+groups, routes and the rest, a topic at a time.  The same guide is in the
+output -- `/help triggers`, `/help regex`.
+
 Commands that start with `/` are for the client and never reach the MUD --
 `/help` lists them, and so does **Options -> Commands**.  **Options ->
 Marks** lists every place `/go` knows by name -- areas, mobs, shops -- nearest
