@@ -223,6 +223,13 @@
     }
     forget();
   };
+  /* AutoCollect: `get all` once a room's fights are over, before the route
+     moves on.  The server keeps it, with the routes, and says what it is on
+     every list -- so the box shows what the bots will actually do. */
+  const collect = $('bot-autocollect');
+  if (collect) collect.onchange = () => send({ op: 'autocollect', on: collect.checked });
+  window.setAutoCollect = (on) => { if (collect) collect.checked = on; };
+
   $('bot-find').oninput = drawFound;
   $('bot-find').onkeydown = (e) => {
     if (e.key === 'Escape') {

@@ -374,14 +374,22 @@ def test_the_installer_closes_a_running_client_first():
 
     src = msi.source(Path(__file__).resolve().parents[1] / "mud")
     assert '<Custom Action="FindPowerShell" After="CostFinalize"/>' in src
-    assert '<Custom Action="CloseClient" After="FindPowerShell"/>' in src
+    assert ('<Custom Action="CloseClient" After="FindPowerShell">'
+            'NOT UPGRADINGPRODUCTCODE</Custom>') in src, \
+        "not again when a newer version removes this one"
     assert 'Return="ignore"' in src, "a machine where it cannot run still installs"
     assert "-EncodedCommand [DANKCLOSE]" in src
     script = base64.b64decode(re.search(r'Property Id="DANKCLOSE" Value="([^"]+)"',
                                         src).group(1)).decode("utf-16-le")
     assert script == msi.close_script()
-    assert r"'Programs\Dank Mud Client\'" in script, "only this client's folder"
-    assert r"'dankclient\window'" in script, "only this client's own window"
+    assert r"'\Programs\Dank Mud Client\'" in script, "only this client's folder"
+    assert r"'\dankclient\window'" in script, "only this client's own window"
+    # Upgrading to 0.2.11 over a running client closed nothing: under the
+    # installer the environment is not necessarily the player's.
+    assert "$env:" not in script, "never finds anything through the environment"
+    assert "$_.SessionId -eq $session" in script, "only this session's processes"
+    assert "installer.log" in script and "GetFolderPath('LocalApplicationData')" in script
+    assert "-ExecutionPolicy Bypass" not in src
     assert script.index("CloseMainWindow") < script.index("Stop-Process"), \
         "the window first, so it saves; stopping is for what is left"
     assert "if ($closed)" in script, "nothing to wait for if no window closed"

@@ -1132,7 +1132,7 @@ class WebServer:
 
     def _routes_msg(self, store) -> dict:
         return {"t": "routes", "op": "list", "routes": store.status(),
-                "walk": self._walk_state()}
+                "walk": self._walk_state(), "autocollect": store.autocollect}
 
     def _routes_op(self, msg: dict) -> None:
         store = getattr(self.scripts, "routes", None) if self.scripts else None
@@ -1174,6 +1174,8 @@ class WebServer:
         elif op == "stop_all":
             self.scripts.bots.stop_all()
             self.session.queue.flush()
+        elif op == "autocollect":
+            store.set_autocollect(bool(msg.get("on")))
 
         self.push(self._routes_msg(store))
 

@@ -179,16 +179,37 @@ const who = body().querySelectorAll('.cm-who').map((w) => w.textContent);
 check('a tell to you says who told you', who[0] === 'Buddy tells you:', who);
 check('a tell you sent says who you told', who[1] === 'You tell Buddy:', who);
 check('no arrows', !who.some((w) => /[\u2190\u2192]/.test(w)), who);
+let saidTo = '';
+const realGet = document.getElementById;
+document.getElementById = (id) => (id === 'cmd'
+  ? { set value(v) { saidTo = v; }, focus() {} } : realGet(id));
 pushMessage('tell', { who: 'Buddy', message: 'moos at you.', from_me: false, soul: true });
 pushMessage('tell', { who: 'Buddy', message: 'you moo at Buddy.', from_me: true, soul: true });
 const all = rows();
 const soulIn = all[all.length - 2];
 const soulOut = all[all.length - 1];
-check('a soul to you reads as 3K prints it, with no "tells you:"',
-  soulIn.children.length === 1 && soulIn.children[0].textContent === 'Buddy moos at you.'
+check('a soul to you reads as 3K prints it',
+  soulIn.children.length === 1 && soulIn.children[0].textContent === 'From afar, Buddy moos at you.'
   && soulIn.className.includes('soul'), soulIn.children.map((c) => c.textContent));
-check('a soul you sent says who it went to',
-  soulOut.children[0].textContent === 'To Buddy:' && soulOut.children[1].textContent === 'You moo at Buddy.',
+check('and so does one you sent, on one line',
+  soulOut.children.length === 1 && soulOut.children[0].textContent === 'From afar, you moo at Buddy.',
   soulOut.children.map((c) => c.textContent));
+soulOut.onclick();
+check('clicking your own soul replies to who it went to', saidTo === 'tell Buddy ', saidTo);
+const tags = filters().querySelectorAll('button').map((b) => b.textContent);
+check('souls have a tag of their own beside tell', tags.includes('soul') && tags.includes('tell'), tags);
+filters().querySelectorAll('button').find((b) => b.textContent === 'soul').onclick({ stopPropagation() {} });
+check('hiding souls leaves the tells', rows().length === 2
+  && rows().every((r) => !r.className.includes('soul')), rows().map((r) => r.className));
+filters().querySelectorAll('button').find((b) => b.textContent === 'soul').onclick({ stopPropagation() {} });
+rows()[rows().length - 2].oncontextmenu(click(10, 10));
+const soulMenu = menu().querySelectorAll('h6').map((h) => h.textContent);
+const soulDings = menu().querySelectorAll('.cm-ding').map((b) => b.textContent);
+check('its menu speaks of souls', soulMenu[0] === 'All souls' && soulDings[0] === 'every soul',
+  [soulMenu, soulDings]);
+check('and a soul ding plays the tell sound', same(hear(() => menu().querySelectorAll('.cm-ding')[0].onclick()), ['tell(test)']));
+check('then dings for the next soul, not for a tell',
+  same(hear(() => pushMessage('tell', { who: 'Friend', message: 'pokes you.', from_me: false, soul: true })), ['tell'])
+  && hear(() => pushMessage('tell', { who: 'Friend', message: 'hi', from_me: false })).length === 0);
 
 finish();

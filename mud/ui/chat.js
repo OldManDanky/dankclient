@@ -25,6 +25,11 @@
   const toggleEl = root.querySelector('.cm-toggle');
 
   let messages = [];
+
+  /* The two tags that are BAB's rather than a channel's: what somebody said
+     to you, and what they did at you from afar.  A moo is not a tell, so it
+     has a tag of its own to hide, colour or ding by. */
+  const PERSONAL = new Set(['tell', 'soul']);
   let seeded = false;
 
   let muted = new Set();
@@ -167,7 +172,10 @@
   //   Someone tells you:   they told you
   //   You tell Someone:    you told them
   // A soul -- an emote sent over tell -- is not something said, so it is not
-  // "tells you:".  The server works out which it was from what 3K printed.
+  // "tells you:".  The server works out which it was from what 3K printed,
+  // and a soul is shown as 3K prints it:
+  //   From afar, Someone moos at you.
+  //   From afar, you moo at Someone.
   function speaker(m) {
     return m.mine ? `You tell ${m.who}:` : `${m.who} tells you:`;
   }
@@ -333,20 +341,17 @@
       };
 
       // BAB is the other way round from CAA: its message often omits the name
-      // ("moos at you."), so a tell still needs a speaker beside it.
-      if (m.kind === 'tell' && m.soul && !m.mine) {
-        // As 3K prints it, less "From afar,": "Someone moos at you."
-        txt.textContent = `${m.who} ${m.text || ''}`;
+      // ("moos at you."), so a tell still needs a speaker beside it.  A soul
+      // is one line, 3K's own; yours already starts "you moo at ...".
+      if (m.kind === 'tell' && m.soul) {
+        txt.textContent = m.mine ? `From afar, ${m.text || ''}`
+          : `From afar, ${m.who} ${m.text || ''}`;
         row.append(txt);
       } else if (m.kind === 'tell') {
         const who = document.createElement('span');
         who.className = 'cm-who';
-        who.textContent = m.soul ? `To ${m.who}:` : speaker(m);
+        who.textContent = speaker(m);
         if (colour) who.style.color = colour;
-        if (m.soul && m.text) {
-          // "you moo at Someone." -- and half of them never name who it went to.
-          txt.textContent = m.text.charAt(0).toUpperCase() + m.text.slice(1);
-        }
         row.append(who, txt);
       } else {
         row.append(txt);
@@ -440,11 +445,11 @@
         saveDings();
         closeMenu();
         refresh();
-        if (table[key] && window.ding) window.ding(channel === 'tell' ? 'tell' : 'channel', true);
+        if (table[key] && window.ding) window.ding(PERSONAL.has(channel) ? 'tell' : 'channel', true);
       };
       row.append(b);
     };
-    toggle(channel === 'tell' ? 'every tell' : `every ${channel} line`,
+    toggle(PERSONAL.has(channel) ? `every ${channel}` : `every ${channel} line`,
            dings.channel, channel);
     if (m.who) toggle(`anything from ${m.who}`, dings.who, personKey(m.who));
     part.append(head, row);
@@ -457,7 +462,7 @@
     menu.className = 'cm-menu';
     menu.setAttribute('role', 'menu');
     const channel = m.channel || 'other';
-    menu.append(swatches(channel === 'tell' ? 'All tells' : `The ${channel} channel`,
+    menu.append(swatches(PERSONAL.has(channel) ? `All ${channel}s` : `The ${channel} channel`,
                          colours.channel, channel));
     if (m.who) {
       menu.append(swatches(`Everything from ${m.who}`,
@@ -489,7 +494,7 @@
 
   window.pushMessage = function (kind, d) {
     messages.push(kind === 'tell'
-      ? { kind, at: Date.now() / 1000, who: d.who, channel: 'tell',
+      ? { kind, at: Date.now() / 1000, who: d.who, channel: d.soul ? 'soul' : 'tell',
           text: d.message, mine: !!d.from_me, soul: !!d.soul }
       : { kind, at: Date.now() / 1000, who: d.who, channel: d.channel,
           command: d.command, text: d.message, mine: false });

@@ -20,12 +20,15 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .outbound import HIGH
 from .paths import set_aside, write_atomically
 from .patrol import Stopped, wanted
 
 #: Glances after a fight that may go unanswered before the route stops.  It
 #: stops rather than moving on: it only leaves a room it has seen is clear.
 GLANCE_TRIES = 3
+#: What AutoCollect sends after a room's fights, before the route moves on.
+COLLECT = "get all"
 
 #: How many times one step may be repeated.  A cap, because "999n" in a path
 #: is a typo far more often than it is a plan.
@@ -165,15 +168,39 @@ class RouteStore:
         #: that left it in, and its counts.  Kept on disk, so a pause survives
         #: closing the client.
         self.paused: dict[str, dict] = {}
+        #: The Bot panel's AutoCollect: `get all` after a room's fights,
+        #: before moving on.  For every route, and read in every room, so
+        #: ticking it mid-walk counts from the next one.
+        self.autocollect = False
 
     @property
     def paused_path(self) -> Path:
         return self.path.with_name(self.path.stem + "-paused.json")
 
+    @property
+    def settings_path(self) -> Path:
+        return self.path.with_name(self.path.stem + "-settings.json")
+
+    def set_autocollect(self, on: bool) -> None:
+        self.autocollect = bool(on)
+        write_atomically(self.settings_path,
+                         json.dumps({"autocollect": self.autocollect}, indent=2))
+
+    def _load_settings(self) -> None:
+        self.autocollect = False
+        if not self.settings_path.exists():
+            return
+        try:
+            raw = json.loads(self.settings_path.read_text())
+            self.autocollect = bool(raw.get("autocollect", False))
+        except (ValueError, OSError, AttributeError):
+            set_aside(self.settings_path)
+
     # --- persistence --------------------------------------------------------
 
     def load(self) -> None:
         self._load_paused()
+        self._load_settings()
         if not self.path.exists():
             self.routes = []
             return
@@ -281,6 +308,7 @@ class RouteStore:
             # the kill command will not start a fight with at all is left
             # alone, or it would hold the route there for good.
             refused: set[str] = set()
+            fought = False
             while True:
                 mobs = self.host.session.world.room.mobs()
                 here_now = [m for m in mobs
@@ -289,7 +317,9 @@ class RouteStore:
                     break
                 mob = here_now[0]
                 had = sum(1 for m in mobs if m.name == mob.name)
-                if not await attack(mob):
+                if await attack(mob):
+                    fought = True
+                else:
                     refused.add(mob.name)
                 for _ in range(GLANCE_TRIES):
                     if await api["glance"]():
@@ -301,6 +331,11 @@ class RouteStore:
                            if m.name == mob.name)
                 if left < had:
                     bot.kills += 1                  # seen gone, not assumed
+            if fought and self.autocollect:
+                # Once, when the glance has shown the room clear: what every
+                # fight here dropped.  At the moves' own priority, so it
+                # reaches 3K before the next step does.
+                self.host.session.queue.put(COLLECT, HIGH)
             if route.rest:
                 await asyncio.sleep(route.rest)
 

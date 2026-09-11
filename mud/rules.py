@@ -12,6 +12,7 @@ door: click your way to something that works, then take the code and grow it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -134,7 +135,30 @@ PACE_LABELS = {
     PACED: "normal (throttles near the APM limit)",
     ROUND: "one per combat round",
 }
-ACTIONS = ("send", "log")
+ACTIONS = ("send", "log", "wait")
+#: The longest a `wait` action may hold the rest of a rule back, in seconds.
+#: An hour: a wait longer than that is a timer, and the Timer rule is there
+#: for it.
+MOST_WAIT = 3600.0
+
+
+def wait_seconds(action: dict) -> float | None:
+    """A wait action's seconds, or None if it is not a usable number."""
+    try:
+        seconds = float(str(action.get("text", "")).strip())
+    except ValueError:
+        return None
+    if not 0 < seconds <= MOST_WAIT:           # NaN fails this too
+        return None
+    return seconds
+
+
+def describe(action: dict) -> str:
+    """One action as a listing shows it: its text, or "wait 2s"."""
+    if action.get("type") == "wait":
+        seconds = wait_seconds(action)
+        return f"wait {seconds:g}s" if seconds is not None else "wait ?"
+    return str(action.get("text", ""))
 
 
 def _safe_format(text: str, captured: dict) -> str:
@@ -230,11 +254,17 @@ class Rule:
             if self.kind == "trigger" and self.gag:
                 return None
             return "no actions"
-        for a in self.actions:
+        for i, a in enumerate(self.actions):
             if a.get("type") not in ACTIONS:
                 return f"unknown action {a.get('type')!r}"
             if not str(a.get("text", "")).strip():
                 return "an action has no text"
+            if a.get("type") == "wait":
+                if wait_seconds(a) is None:
+                    return (f"wait {str(a.get('text', '')).strip()!r} -- give it "
+                            f"a number of seconds, up to {MOST_WAIT:g}")
+                if all(b.get("type") == "wait" for b in self.actions[i + 1:]):
+                    return "a wait with nothing after it does nothing"
         return None
 
     def as_python(self) -> str:
@@ -244,6 +274,9 @@ class Rule:
 
         body = []
         for a in self.actions:
+            if a["type"] == "wait":
+                body.append(f"    await wait({wait_seconds(a) or 0:g})")
+                continue
             text = a["text"].replace('"', '\\"')
             # captures arrive as the dict `m`, so {who} has to become {m['who']}
             text = re.sub(r"\{(\w+)\}", lambda mo: "{m[" + repr(mo.group(1)) + "]}",
@@ -253,6 +286,8 @@ class Rule:
             else:
                 body.append(f'    log(f"{text}")')
         block = "\n".join(body) or "    pass"
+        # A wait is an await, and only a coroutine can await.
+        fn = "async def" if any(a["type"] == "wait" for a in self.actions) else "def"
 
         if self.kind == "event":
             guards = []
@@ -262,12 +297,12 @@ class Rule:
                               f'{c.get("value")!r}')
             head = "\n".join(guards)
             return (f"@on({self.event!r})\n"
-                    f"def {name}(m):\n"
+                    f"{fn} {name}(m):\n"
                     + (head + "\n" if head else "") + block + "\n")
 
         if self.kind == "timer":
             return (f"@every({float(self.every):g})\n"
-                    f"def {name}(m=None):\n" + block.replace("m[", "_[") + "\n")
+                    f"{fn} {name}(m=None):\n" + block.replace("m[", "_[") + "\n")
 
         if self.kind == "watch":
             sym = {"lt": "<", "lte": "<=", "gt": ">", "gte": ">=",
@@ -277,7 +312,7 @@ class Rule:
             edge = "" if self.edge else ", edge=False"
             return (f"@when(lambda p: {field_expr} is not None "
                     f"and {field_expr} {sym} {self.value}{edge})\n"
-                    f"def {name}():\n"
+                    f"{fn} {name}():\n"
                     + block.replace("m[", "player_field[") + "\n")
 
         gagged = ""
@@ -297,7 +332,7 @@ class Rule:
         if self.stop:
             args.append("stop=True")
         return gagged + (f"@{deco}({', '.join(args)})\n"
-                         f"def {name}(m):\n" + block + "\n")
+                         f"{fn} {name}(m):\n" + block + "\n")
 
 
 def _nothing(_captured=None) -> None:
@@ -333,6 +368,9 @@ class RuleStore:
         self._timers: list[list] = []          # [rule, next_at]
         self._state_hooked = False
         self._tick_hooked = False
+        #: Rules part-way through, held by a wait: timer handle -> the rule
+        #: as it was when it fired.
+        self._waiting: dict[asyncio.TimerHandle, Rule] = {}
 
     # --- persistence --------------------------------------------------------
 
@@ -370,6 +408,13 @@ class RuleStore:
         for kind, fn in self._subs:
             self.host.bus.off(kind, fn)
         self._subs.clear()
+        # A rule changed, switched off or deleted while it waits does not
+        # carry on as it was.  One untouched by the edit does.
+        live = {r.id: r for r in self.rules if r.enabled}
+        for handle, rule in list(self._waiting.items()):
+            if live.get(rule.id) != rule:
+                handle.cancel()
+                del self._waiting[handle]
         self._watches.clear()
         self._timers.clear()
 
@@ -470,18 +515,52 @@ class RuleStore:
         return context_fields(self.host.session.world)
 
     def _runner(self, rule: Rule):
-        session, host = self.host.session, self.host
-
         def run(captured: dict[str, Any]) -> None:
-            for action in rule.actions:
-                text = _safe_format(action["text"], captured or {})
-                if action["type"] == "send":
-                    session.queue.put(text, rule.priority, rule.pace)
-                else:
-                    host.note(text)
+            self._carry_on(rule, 0, captured or {})
 
         run.__name__ = re.sub(r"\W+", "_", rule.name or rule.pattern)[:30] or "rule"
         return run
+
+    def _carry_on(self, rule: Rule, start: int, captured: dict) -> None:
+        """Do the rule's actions from `start`, until a wait or the end.
+
+        A wait hands the rest to the event loop and returns, so nothing else
+        is held up while it counts: the line that fired it is shown, other
+        rules fire, and the rest follows when the time is up.  Sends queued
+        then are held by the deadman like any other, and /stop drops them.
+        """
+        session, host = self.host.session, self.host
+        for i in range(start, len(rule.actions)):
+            action = rule.actions[i]
+            if action["type"] == "wait":
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    host.note(f"{rule.name or rule.pattern or rule.kind}: a wait needs the "
+                              "client running -- the rest was not done")
+                    return
+                held: list[asyncio.TimerHandle] = []
+
+                def resume(i=i) -> None:
+                    self._waiting.pop(held[0], None)
+                    self._carry_on(rule, i + 1, captured)
+
+                held.append(loop.call_later(wait_seconds(action) or 0, resume))
+                self._waiting[held[0]] = rule
+                return
+            text = _safe_format(action["text"], captured)
+            if action["type"] == "send":
+                session.queue.put(text, rule.priority, rule.pace)
+            else:
+                host.note(text)
+
+    def cancel_waits(self) -> int:
+        """Drop every rule held by a wait.  How many there were."""
+        n = len(self._waiting)
+        for handle in self._waiting:
+            handle.cancel()
+        self._waiting.clear()
+        return n
 
     # --- editing ------------------------------------------------------------
 

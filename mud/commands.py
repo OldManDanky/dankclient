@@ -112,7 +112,7 @@ def handle(text: str, session, scripts, note) -> bool:
              f"  apm {a.rate()}/{a.limit} (throttles at {a.soft}) "
              f"queued={len(session.queue)} sent={session.queue.sent}")
 
-    elif verb in ("flush", "stop"):
+    elif verb == "flush":
         note(f"dropped {session.queue.flush()} queued command(s)")
 
     elif verb == "scripts":
@@ -239,12 +239,17 @@ def handle(text: str, session, scripts, note) -> bool:
                 for b in rows) or "no bots")
 
     elif verb == "stop":
+        # This used to sit below an earlier `verb in ("flush", "stop")`, which
+        # took it: /stop emptied the queue and left every bot walking.
         if scripts is None:
-            note("scripting is disabled (--no-scripts)")
+            note(f"dropped {session.queue.flush()} queued command(s)")
         else:
             n = scripts.bots.stop_all()
             session.queue.flush()
-            note(f"stopped {n} bot(s), queue cleared")
+            rules = getattr(scripts, "rules", None)
+            held = rules.cancel_waits() if rules is not None else 0
+            note(f"stopped {n} bot(s), queue cleared"
+                 + (f", {held} waiting rule(s) dropped" if held else ""))
 
     elif verb in ("tick", "ticks", "untick"):
         _tick(session, verb, rest, scripts, note)
@@ -421,7 +426,7 @@ def _tick(session, verb: str, rest: str, scripts, note) -> None:
     if store is None:
         note("scripting is disabled (--no-scripts)")
         return
-    from .rules import MIN_EVERY, Rule
+    from .rules import MIN_EVERY, Rule, describe
 
     timers = [r for r in store.rules if r.kind == "timer"]
 
@@ -432,7 +437,7 @@ def _tick(session, verb: str, rest: str, scripts, note) -> None:
         note("\n".join(
             f"  {'on ' if t.enabled else 'off'} every {float(t.every):g}s  "
             f"{t.name or '(unnamed)'}  "
-            + " ; ".join(a['text'] for a in t.actions)
+            + " ; ".join(describe(a) for a in t.actions)
             for t in timers))
         return
 
@@ -521,7 +526,7 @@ def _gag(verb: str, rest: str, scripts, note) -> None:
     if store is None:
         note("scripting is disabled (--no-scripts)")
         return
-    from .rules import Rule
+    from .rules import Rule, describe
 
     gags = [r for r in store.rules if r.kind == "trigger" and r.gag]
     text = rest.strip()
@@ -532,7 +537,7 @@ def _gag(verb: str, rest: str, scripts, note) -> None:
             return
         note("\n".join(
             f"  {'on ' if g.enabled else 'off'} {g.mode:<8} {g.pattern}"
-            + (f"   (also: {' ; '.join(a['text'] for a in g.actions)})"
+            + (f"   (also: {' ; '.join(describe(a) for a in g.actions)})"
                if g.actions else "")
             for g in gags))
         return

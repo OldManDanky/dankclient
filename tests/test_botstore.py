@@ -703,3 +703,93 @@ def test_a_room_it_cannot_see_after_a_fight_is_not_left():
             asyncio.new_event_loop().run_until_complete(scenario())
         finally:
             patrol.LOOK_TIMEOUT = was
+
+
+# --- AutoCollect -------------------------------------------------------------------
+
+def two_kills(s, host, rat, cur):
+    """Walk in, kill both, glance clear -- and return what went out."""
+    async def scenario():
+        host.routes.start(host.routes.routes[0].id)
+        await asyncio.sleep(0)
+        s._consume(mip("DDD", "s~e") + rat + cur)
+        s._consume(mip("FFF", "A~100"))
+        await asyncio.sleep(0.02)
+        s._consume(mip("FFF", "K~rat"))
+        s._consume(mip("FFF", "K~"))
+        await asyncio.sleep(0.02)
+        s._consume(mip("DDD", "s~e") + cur)
+        s._consume(mip("FFF", "A~100"))
+        await asyncio.sleep(0.02)
+        s._consume(mip("FFF", "K~Cur"))
+        s._consume(mip("FFF", "K~"))
+        await asyncio.sleep(0.02)
+        s._consume(mip("DDD", "s~e"))                # clear
+        s._consume(mip("FFF", "A~100"))
+        await asyncio.sleep(0.05)
+    asyncio.new_event_loop().run_until_complete(scenario())
+    return s.sent
+
+
+RAT = mip("HAA", "npc~rat~A leaping rat~kill #N")
+CUR = mip("HAA", "npc~Cur~Cur, the dog~kill #N")
+
+
+def test_autocollect_gets_all_once_the_room_is_clear_and_before_moving_on():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        host.routes.upsert({"name": "hunt", "path": "n e", "targets": ["rat", "Cur"]})
+        host.routes.set_autocollect(True)
+        sent = two_kills(s, host, RAT, CUR)
+        assert sent[-3:] == ["glance", "get all", "e"], sent
+        assert sent.count("get all") == 1, "once for the room, not per kill"
+
+
+def test_without_autocollect_it_just_moves_on():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        host.routes.upsert({"name": "hunt", "path": "n e", "targets": ["rat", "Cur"]})
+        sent = two_kills(s, host, RAT, CUR)
+        assert "get all" not in sent and sent[-1] == "e"
+
+
+def test_autocollect_does_nothing_in_a_room_with_no_fight():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "hunt", "path": "n e", "targets": ["rat"]})
+        host.routes.set_autocollect(True)
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0)
+            s._consume(mip("DDD", "s~e"))            # nothing to kill
+            s._consume(mip("FFF", "A~100"))
+            await asyncio.sleep(0.05)
+        asyncio.new_event_loop().run_until_complete(scenario())
+        assert "get all" not in s.sent and s.sent[-1] == "e", s.sent
+
+
+def test_autocollect_is_kept_with_the_routes():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        host.routes.set_autocollect(True)
+        again = RouteStore(host, Path(tmp) / "routes.json")
+        again.load()
+        assert again.autocollect is True
+        again.set_autocollect(False)
+        again.load()
+        assert again.autocollect is False
+
+
+def test_the_bot_panel_sets_it_and_hears_it():
+    from mud.web import WebServer
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        web = WebServer(s, scripts=host)
+        pushed = []
+        web.push = pushed.append
+        web._on_client_message(b'{"t": "routes", "op": "autocollect", "on": true}')
+        assert host.routes.autocollect is True
+        assert pushed[-1]["autocollect"] is True
+        html = (Path(__file__).resolve().parents[1] / "mud/ui/index.html").read_text()
+        assert 'id="bot-autocollect"' in html and "AutoCollect" in html

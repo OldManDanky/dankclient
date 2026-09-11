@@ -122,6 +122,11 @@ class World:
         self._event_listeners: list[Callable[[str, object], None]] = []
         self._last_code: str | None = None
         self._room_open_at: float | None = None
+        #: The two halves of a soul you do at a distance (see _own_soul): the
+        #: `~you~` half held until the other says who it went to, and the
+        #: words of an `x~` half that came first.
+        self._echo: Tell | None = None
+        self._paired: str | None = None
 
     def on_change(self, fn: Listener) -> Listener:
         self._listeners.append(fn)
@@ -162,6 +167,10 @@ class World:
         # themselves would miss a room that has neither scenery nor contents
         # -- rare, but one missed room puts dead reckoning off by one for the
         # rest of the session.
+        if self._echo is not None and not (code == "BAB" and self._completes(data)):
+            self.flush_echo()
+        if code != "BAB":
+            self._paired = None
         opening = code == "DDD" and self._last_code != "BAD"
         if opening or code not in codes.ROOM_RECORD_CODES:
             # A new block clears the old room, so tell anyone waiting on the
@@ -173,6 +182,54 @@ class World:
             if opening:
                 self._room_open_at = time.time()
             self._last_code = code
+
+    # --- tells and souls ------------------------------------------------------
+
+    def _tell(self, tell: Tell) -> None:
+        self.tells.append(tell)
+        self.messages.append({
+            "kind": "tell", "at": time.time(), "who": tell.who,
+            "channel": "soul" if tell.soul else "tell",
+            "text": tell.message, "mine": tell.from_me,
+            "soul": tell.soul,
+        })
+        self._emit("tell", tell)
+        self.log("tell", tell.message, "tell", tell.who)
+
+    def _own_soul(self, tell: Tell) -> bool:
+        """Is this the `~you~` half of a soul you did at a distance?
+
+        3K sends those twice, in either order, back to back:
+
+            BAB~you~moo at Someone.
+            BABx~Someone~you moo at Someone.
+
+        and prints "From afar, you moo at Someone." once.  Taken as two tells
+        the first was a tell *to* you, from "you" -- your own moo shown twice,
+        with a ding and an unread mark for it.  The `x~` half is the one kept:
+        it says who it went to, which is who a click replies to.
+
+        Held rather than dropped, until the next message: a `~you~` with no
+        other half is shown after all.
+        """
+        if tell.from_me or tell.who != "you":
+            return False
+        if self._paired is not None and self._paired == tell.message:
+            self._paired = None                   # its other half came first
+            return True
+        self._echo = replace(tell, soul=True)
+        return True
+
+    def _completes(self, data: str) -> bool:
+        """Is this BAB the other half of the `~you~` being held?"""
+        other = codes.parse_bab(data)
+        return other.from_me and other.message == f"you {self._echo.message}"
+
+    def flush_echo(self) -> None:
+        """A `~you~` whose other half never came is a soul like any other."""
+        echo, self._echo = self._echo, None
+        if echo is not None:
+            self._tell(echo)
 
     def settle(self) -> None:
         """The room block that is open has finished: say so.
@@ -249,15 +306,15 @@ class World:
 
         elif code == "BAB":
             tell = codes.parse_bab(data)
+            if self._own_soul(tell):
+                return
             tell = replace(tell, soul=not codes.told(tell, self.recent))
-            self.tells.append(tell)
-            self.messages.append({
-                "kind": "tell", "at": time.time(), "who": tell.who,
-                "channel": "tell", "text": tell.message, "mine": tell.from_me,
-                "soul": tell.soul,
-            })
-            self._emit("tell", tell)
-            self.log("tell", tell.message, "tell", tell.who)
+            if tell.from_me and tell.soul and tell.message.startswith("you "):
+                if self._echo is not None:
+                    self._echo = None                 # its other half, held
+                else:
+                    self._paired = tell.message[4:]   # the other half is next
+            self._tell(tell)
 
         elif code == "CAA":
             chat = codes.parse_caa(data)

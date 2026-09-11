@@ -161,6 +161,7 @@
     if (m.op === 'list') {
       routes = m.routes || [];
       walk = m.walk || null;
+      if (window.setAutoCollect) window.setAutoCollect(!!m.autocollect);
       // The form closes only once the server has taken the save: an error
       // comes back on the same channel, and closing on the click would throw
       // away what you typed before you had seen why it was refused.

@@ -403,6 +403,15 @@ gets a tag under the title bar, `tell` among them, and switching one off hides
 it; the count says how many are showing out of how many there are.  Clicking a
 line puts the reply in the input box.
 
+`BAB` carries souls as well as tells -- "From afar, Someone moos at you." -- and
+they get a tag of their own, `soul`, since a moo is not something said.  Each
+is shown as 3K prints it.  A soul you do at a distance arrives twice, in either
+order: `BAB~you~moo at Someone.` and `BABx~Someone~you moo at Someone.`.  Taken
+as two, the first was a tell *to* you from "you" -- your own moo twice, with a
+ding and an unread mark -- so they are paired and the `x~` half kept, since it
+says who a click should reply to.  A `~you~` with no partner by the next
+message or prompt is shown after all.
+
 Right-clicking one colours it -- or rather colours every line like it.  The
 colour sticks to the channel or to the person, because a single coloured line
 scrolls away and what somebody means is "clan in green" or "this friend in
@@ -660,6 +669,14 @@ The results are redrawn only when the search or the set of routes changes,
 not as a route takes its steps, so a button is never replaced under the
 cursor between press and release.
 
+**AutoCollect**, a box on the panel, sends `get all` in a room where the
+route fought -- once, after the glance has shown the room clear, and before
+the next step.  Once rather than per kill, because the corpses of every fight
+there are still on the floor at the end and each `get all` costs APM.  It
+goes at the moves' own priority, so the queue keeps it ahead of the step that
+follows.  It is for every route, kept in `routes-settings.json`, and read in
+each room, so ticking it mid-walk counts from the next one.
+
 **Pause is not stop.**  After every step the runner notes how far through
 its path it is and the room the map says that left it in.  Pause keeps both,
 with the step and kill counts, in `routes-paused.json` beside the routes, so a
@@ -722,6 +739,20 @@ the login prompt, where sending `xp` every 290 seconds types it into the
 password box.
 
 A delay is not stored.  It happens and it is gone.
+
+### A wait inside a rule
+
+Any rule's actions can include **wait (seconds)**: everything below it goes
+out that much later -- `kill rat`, wait 2, `get all`.  Unlike a timer it is
+the wall clock, not the beat, because "two seconds after the line" is what
+was asked for and the beat would round it to the next tick.  The wait hands
+the rest of the rule to the event loop and returns, so the line is shown and
+other rules fire while it counts; a rule that fires again meanwhile runs
+twice.  What comes out the other end is queued like any send, so the deadman
+holds it and the APM governor paces it.  A rule edited, switched off or
+deleted while it waits does not carry on as it was, and `/stop` drops every
+waiting rule along with the bots.  Up to an hour; longer is a timer.  As a
+script it becomes `await wait(2)` in an `async def`.
 
 ## Gags
 

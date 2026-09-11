@@ -5,7 +5,7 @@ const { page, load, check, same, finish } = require('./stage');
 
 const sent = [];
 const IDS = ['bot-now', 'bot-name', 'bot-step', 'bot-bar', 'bot-note', 'bot-start',
-  'bot-pause', 'bot-stop', 'bot-find', 'bot-found'];
+  'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect'];
 const saved = {};
 const p = page(Object.fromEntries(IDS.map((i) => [i, i === 'bot-find' ? 'input' : 'div'])), saved);
 global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
@@ -115,5 +115,12 @@ check('nothing else starts during a walk', rows()[0].children[2].disabled);
 renderBotPanel(ROUTES, { running: false, goal: 'Center of Town', steps: 23, note: 'finished' });
 check('a finished walk leaves the panel', el('bot-name').textContent !== 'Walking to Center of Town'
   && el('bot-stop').textContent !== 'Stop', el('bot-stop').textContent);
+
+// AutoCollect: the box shows what the server says, and ticking it tells the server.
+setAutoCollect(true);
+check('the box shows the setting the server sent', el('bot-autocollect').checked === true);
+el('bot-autocollect').checked = false;
+el('bot-autocollect').onchange();
+check('unticking it tells the server', same(last(), { t: 'routes', op: 'autocollect', on: false }), last());
 
 finish();

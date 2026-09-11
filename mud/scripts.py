@@ -320,6 +320,8 @@ class ScriptHost:
             "send_round": (lambda text, priority=NORMAL:
                            session.queue.put(text, priority, ROUND)),
             "flush": lambda: session.queue.flush(),
+            # `await wait(2)`: what a rule's wait action becomes as a script.
+            "wait": lambda seconds: asyncio.sleep(max(0.0, float(seconds))),
             "log": lambda *a: self.note(" ".join(str(x) for x in a)),
             "world": session.world,
             "player": session.world.player,

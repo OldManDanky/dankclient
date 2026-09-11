@@ -300,7 +300,10 @@ def test_snapshot_carries_recent_chat_history():
     web._clients = set()
 
     session.world.apply("CAA", "ctell~Clan Sa~Friend~[Clan] Friend : moo")
+    # 3K prints a tell just before its BAB; without that it is a soul.
+    session.world.recent.append("Buddy tells you: you around?")
     session.world.apply("BAB", "~Buddy~you around?")
+    session.world.recent.append("You tell Buddy: yep")
     session.world.apply("BAB", "x~Buddy~yep")
 
     msgs = web.snapshot()["messages"]

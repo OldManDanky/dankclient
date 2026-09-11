@@ -115,30 +115,49 @@ def close_script() -> str:
     Whatever is still running after that is stopped: a process whose program
     is in this client's folder, or an Edge (or Chrome) running the client's
     own window profile.  Nothing else on the machine is touched.
+
+    It finds them by *part* of a path, never by $env:LOCALAPPDATA.  0.2.10's
+    and 0.2.11's did, and upgrading to 0.2.11 over a running client closed
+    nothing.  The likeliest reason is that the installer's service starts
+    this with its own environment, whose LOCALAPPDATA is not the player's.
+    Where it writes down what it did is asked of Windows for this user
+    rather than read from the environment, so if it fails again there is
+    something to read: %LOCALAPPDATA%\\dankclient\\installer.log.
+    Only this session's processes: running as the service, it would otherwise
+    see every user's.
     """
     return f"""$ErrorActionPreference = 'SilentlyContinue'
-$program = Join-Path $env:LOCALAPPDATA '{PROGRAMS}\\{NAME}\\'
-$window = Join-Path $env:LOCALAPPDATA '{SLUG}\\window'
+$program = '\\{PROGRAMS}\\{NAME}\\'
+$window = '\\{SLUG}\\window'
+$session = (Get-Process -Id $PID).SessionId
+$log = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) '{SLUG}\\installer.log'
+function Say($text) {{ Add-Content -Path $log -Value ((Get-Date -Format s) + '  ' + $text) }}
+function Get-Mine {{
+  Get-CimInstance Win32_Process | Where-Object {{ $_.SessionId -eq $session }}
+}}
 function Get-Client {{
-  Get-CimInstance Win32_Process | Where-Object {{
-    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($program, [StringComparison]::OrdinalIgnoreCase) }}
+  Get-Mine | Where-Object {{
+    $_.ExecutablePath -and $_.ExecutablePath.IndexOf($program, [StringComparison]::OrdinalIgnoreCase) -ge 0 }}
 }}
 function Get-ClientWindow {{
-  Get-CimInstance Win32_Process | Where-Object {{
+  Get-Mine | Where-Object {{
     $_.CommandLine -and $_.CommandLine.IndexOf($window, [StringComparison]::OrdinalIgnoreCase) -ge 0 }}
 }}
+Say ('installer: closing a running client (session ' + $session + ', as ' + [Environment]::UserName + ')')
 $closed = $false
 foreach ($w in @(Get-ClientWindow)) {{
   $p = Get-Process -Id $w.ProcessId
   if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) {{
-    if ($p.CloseMainWindow()) {{ $closed = $true }}
+    if ($p.CloseMainWindow()) {{ $closed = $true; Say ('closed its window, process ' + $p.Id) }}
   }}
 }}
 if ($closed) {{
   $until = (Get-Date).AddSeconds(15)
   while (@(Get-Client).Count -gt 0 -and (Get-Date) -lt $until) {{ Start-Sleep -Milliseconds 250 }}
 }}
-foreach ($c in @(Get-Client) + @(Get-ClientWindow)) {{ Stop-Process -Id $c.ProcessId -Force }}
+$left = @(Get-Client) + @(Get-ClientWindow)
+foreach ($c in $left) {{ Stop-Process -Id $c.ProcessId -Force; Say ('stopped ' + $c.Name + ' ' + $c.ProcessId) }}
+if (-not $closed -and $left.Count -eq 0) {{ Say 'no client was running' }}
 exit 0
 """
 
@@ -191,7 +210,7 @@ def source(root: Path) -> str:
          and wixl says only "Extra content at the end of the document".) -->
     <InstallExecuteSequence>
       <Custom Action="FindPowerShell" After="CostFinalize"/>
-      <Custom Action="CloseClient" After="FindPowerShell"/>
+      <Custom Action="CloseClient" After="FindPowerShell">NOT UPGRADINGPRODUCTCODE</Custom>
       <RemoveExistingProducts After="InstallFinalize"/>
     </InstallExecuteSequence>
 
@@ -207,13 +226,15 @@ def source(root: Path) -> str:
          property of its own, since a custom action's command is a 255
          character column and the encoded script is thousands.  Return is
          ignore: a machine where this cannot run gets the files in use
-         question it always got, and an install that goes on. -->
+         question it always got, and an install that goes on.  Not when this
+         version is itself being removed by a newer one: that one has already
+         closed the client, and it only put a second window on the screen. -->
     <Property Id="DANKCLOSE" Value="{close_encoded()}"/>
     <CustomAction Id="FindPowerShell" Property="DANKPS"
                   Value="[SystemFolder]WindowsPowerShell\\v1.0\\powershell.exe"/>
     <CustomAction Id="CloseClient" Property="DANKPS" Execute="immediate"
                   Return="ignore"
-                  ExeCommand="-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand [DANKCLOSE]"/>
+                  ExeCommand="-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand [DANKCLOSE]"/>
 
     <Media Id="1" Cabinet="{SLUG}.cab" EmbedCab="yes"/>
 

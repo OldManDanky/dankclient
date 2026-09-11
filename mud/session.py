@@ -812,6 +812,7 @@ class Session:
                 # block waiting for the next message to close it is closed.
                 self._room_from_title(now=True)
                 self.world.settle()
+                self.world.flush_echo()
             shown, was = self.hidden.line(plain), plain
             self.bus.emit(events.LINE, self.hidden.line(raw), shown)
             if self.logbook is not None and (shown.strip() or not was.strip()):

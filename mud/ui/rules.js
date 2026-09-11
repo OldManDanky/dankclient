@@ -63,15 +63,27 @@
 
   // --- action rows ----------------------------------------------------------
 
+  const ACTION_TYPES = [
+    ['send', 'send to MUD'],
+    ['log', 'show in client'],
+    ['wait', 'wait (seconds)'],
+  ];
+
+  //: One action as the list shows it.
+  function describe(a) {
+    if (a.type === 'wait') return `wait ${parseFloat(a.text)}s`;
+    return (a.type === 'log' ? 'show' : 'send') + ` "${a.text}"`;
+  }
+
   function actionRow(action) {
     const row = document.createElement('div');
     row.className = 'action-row';
 
     const type = document.createElement('select');
-    for (const t of ['send', 'log']) {
+    for (const [t, label] of ACTION_TYPES) {
       const o = document.createElement('option');
       o.value = t;
-      o.textContent = t === 'send' ? 'send to MUD' : 'show in client';
+      o.textContent = label;
       type.append(o);
     }
     type.value = (action && action.type) || 'send';
@@ -79,8 +91,17 @@
     const text = document.createElement('input');
     text.type = 'text';
     text.spellcheck = false;
-    text.placeholder = 'command, {name} inserts a capture';
     text.value = (action && action.text) || '';
+
+    // A wait holds back the actions below it; its box takes the seconds.
+    const fit = () => {
+      const wait = type.value === 'wait';
+      text.placeholder = wait ? 'seconds, e.g. 2.5' : 'command, {name} inserts a capture';
+      text.inputMode = wait ? 'decimal' : 'text';
+      row.classList.toggle('wait', wait);
+    };
+    type.onchange = fit;
+    fit();
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -412,8 +433,7 @@
       how,
       r.kind === 'trigger' && r.gag ? 'kept off the screen' : '',
       r.pace && r.pace !== 'paced' ? paceLabel || r.pace : '',
-      r.actions.map((a) => (a.type === 'log' ? 'show' : 'send') + ` "${a.text}"`)
-        .join(' · '),
+      r.actions.map(describe).join(' · '),
     ].filter(Boolean).join('  ·  ');
 
     el.append(top, meta);
