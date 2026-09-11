@@ -105,6 +105,15 @@ def licence_rtf(plain: Path) -> str:
             r"\fs16 " + body + "}")
 
 
+#: The data folder of an installation from before the name, which the client
+#: still uses when that is where the map is (see paths.home).
+OLD_SLUG = "3k"
+#: The client's window, by the profile it was started with: the `window`
+#: folder in either data folder, quoted or not.  Somebody's own Edge has no
+#: such profile.  A .NET regex, and a Python one too, which is how it is tested.
+WINDOW_PROFILE = r'--user-data-dir=[^"]*?\\(?:dankclient|3k)\\window(?=["\s]|$)'
+
+
 def close_script() -> str:
     """PowerShell that closes a running client before any file is replaced.
 
@@ -115,6 +124,13 @@ def close_script() -> str:
     Whatever is still running after that is stopped: a process whose program
     is in this client's folder, or an Edge (or Chrome) running the client's
     own window profile.  Nothing else on the machine is touched.
+
+    The window is found by the profile it was started with, in either data
+    folder: `dankclient`, or `3k` for an installation from before the name.
+    On one of those, 0.2.12 would have stopped the client without closing its
+    window, and so without it saving.  The client is whatever runs from
+    the program folder, and whatever Python opened that window, wherever it
+    lives.
 
     It finds them by *part* of a path, never by $env:LOCALAPPDATA.  0.2.10's
     and 0.2.11's did, and upgrading to 0.2.11 over a running client closed
@@ -128,24 +144,29 @@ def close_script() -> str:
     """
     return f"""$ErrorActionPreference = 'SilentlyContinue'
 $program = '\\{PROGRAMS}\\{NAME}\\'
-$window = '\\{SLUG}\\window'
+$window = '{WINDOW_PROFILE}'
 $session = (Get-Process -Id $PID).SessionId
-$log = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) '{SLUG}\\installer.log'
+$base = [Environment]::GetFolderPath('LocalApplicationData')
+$data = Join-Path $base '{SLUG}'
+if (-not (Test-Path $data) -and (Test-Path (Join-Path $base '{OLD_SLUG}\\map.sqlite'))) {{ $data = Join-Path $base '{OLD_SLUG}' }}
+$log = Join-Path $data 'installer.log'
 function Say($text) {{ Add-Content -Path $log -Value ((Get-Date -Format s) + '  ' + $text) }}
 function Get-Mine {{
   Get-CimInstance Win32_Process | Where-Object {{ $_.SessionId -eq $session }}
 }}
+function Get-ClientWindow {{
+  Get-Mine | Where-Object {{ $_.CommandLine -and $_.CommandLine -match $window }}
+}}
+$windows = @(Get-ClientWindow)
+$opener = @($windows | ForEach-Object {{ $_.ParentProcessId }})
 function Get-Client {{
   Get-Mine | Where-Object {{
-    $_.ExecutablePath -and $_.ExecutablePath.IndexOf($program, [StringComparison]::OrdinalIgnoreCase) -ge 0 }}
-}}
-function Get-ClientWindow {{
-  Get-Mine | Where-Object {{
-    $_.CommandLine -and $_.CommandLine.IndexOf($window, [StringComparison]::OrdinalIgnoreCase) -ge 0 }}
+    ($_.ExecutablePath -and $_.ExecutablePath.IndexOf($program, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+    ($opener -contains $_.ProcessId -and $_.Name -like 'python*') }}
 }}
 Say ('installer: closing a running client (session ' + $session + ', as ' + [Environment]::UserName + ')')
 $closed = $false
-foreach ($w in @(Get-ClientWindow)) {{
+foreach ($w in $windows) {{
   $p = Get-Process -Id $w.ProcessId
   if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) {{
     if ($p.CloseMainWindow()) {{ $closed = $true; Say ('closed its window, process ' + $p.Id) }}
@@ -255,7 +276,7 @@ def source(root: Path) -> str:
          An action that sets a property does format its value, and after
          CostFinalize the folders have their real paths. -->
     <CustomAction Id="SayWhere" Property="WIXUI_EXITDIALOGOPTIONALTEXT"
-                  Value="Installed to [INSTALLDIR]. Your map, characters, triggers and session logs live separately in [LocalAppDataFolder]{SLUG}, so updating this program never touches them. That folder also holds client.log, which is where it writes down anything that goes wrong."/>
+                  Value="Installed to [INSTALLDIR]. Your map, characters, triggers and session logs live separately in [LocalAppDataFolder]{SLUG} (or [LocalAppDataFolder]{OLD_SLUG}, if you had the client before it had this name), so updating this program never touches them. That folder also holds client.log, which is where it writes down anything that goes wrong."/>
     <InstallUISequence>
       <Custom Action="SayWhere" After="CostFinalize"/>
     </InstallUISequence>

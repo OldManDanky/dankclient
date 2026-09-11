@@ -383,7 +383,7 @@ def test_the_installer_closes_a_running_client_first():
                                         src).group(1)).decode("utf-16-le")
     assert script == msi.close_script()
     assert r"'\Programs\Dank Mud Client\'" in script, "only this client's folder"
-    assert r"'\dankclient\window'" in script, "only this client's own window"
+    assert f"$window = '{msi.WINDOW_PROFILE}'" in script
     # Upgrading to 0.2.11 over a running client closed nothing: under the
     # installer the environment is not necessarily the player's.
     assert "$env:" not in script, "never finds anything through the environment"
@@ -394,6 +394,33 @@ def test_the_installer_closes_a_running_client_first():
         "the window first, so it saves; stopping is for what is left"
     assert "if ($closed)" in script, "nothing to wait for if no window closed"
     assert "Get-Process msedge" not in script, "never somebody's own Edge"
+
+
+def test_it_knows_the_window_in_either_data_folder_and_nothing_else():
+    """An installation from before the name keeps its data -- the window's
+    profile included -- in `3k`; 0.2.12 looked only in `dankclient`, found
+    no window there, and would have stopped the client without it saving."""
+    import tools.build_msi as msi
+    from mud.paths import SLUG
+
+    ours = re.compile(msi.WINDOW_PROFILE, re.I)
+    for line in (
+        r"msedge.exe --app=http://127.0.0.1:8080/ --user-data-dir=C:\Users\Player\AppData\Local\dankclient\window --window-size=1280,820",
+        r"msedge.exe --app=http://127.0.0.1:8080/ --user-data-dir=C:\Users\Player\AppData\Local\3k\window --no-first-run",
+        r'msedge.exe "--user-data-dir=C:\Users\Some One\AppData\Local\3k\window" --no-first-run',
+        r"msedge.exe --type=renderer --user-data-dir=C:\Users\Player\AppData\Local\DankClient\Window",
+    ):
+        assert ours.search(line), line
+    for line in (
+        r"msedge.exe --profile-directory=Default",
+        r"msedge.exe --user-data-dir=C:\Users\Player\AppData\Local\3k\windows",
+        r"chrome.exe --user-data-dir=C:\stuff\dankclient\window2",
+    ):
+        assert not ours.search(line), line
+    assert SLUG == "dankclient" and msi.OLD_SLUG == "3k"
+    script = msi.close_script()
+    assert r"'3k\map.sqlite'" in script, "the log goes where the client's data is"
+    assert "$opener -contains $_.ProcessId" in script, "whatever Python opened the window"
 
 
 def test_the_installer_source_is_valid_xml():
