@@ -282,6 +282,29 @@
               background:var(--sunk);border:1px solid var(--line);
               border-radius:3px;padding:4px 6px;margin:3px 0;
               overflow-wrap:anywhere;cursor:text}
+  /* --- Options -> From TinTin++ --- */
+  #tt-summary{margin:12px 0 8px;font-size:12.5px}
+  #tt-summary b{font-weight:600}
+  .tt-kind{margin:14px 0 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--dim);font-weight:600;display:flex;align-items:center;gap:8px}
+  .tt-kind button{all:unset;cursor:pointer;color:var(--accent);letter-spacing:0;
+                  text-transform:none;font-weight:400;font-size:11px}
+  .tt-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;
+           padding:5px 0;border-bottom:1px solid var(--line);align-items:start}
+  .tt-item input{margin:3px 0 0}
+  .tt-item .from{font-family:var(--term-font);font-size:11px;color:var(--dim);
+                 overflow-wrap:anywhere}
+  .tt-item .to{grid-column:2;font-family:var(--term-font);font-size:11.5px;color:var(--ink);
+               overflow-wrap:anywhere}
+  .tt-item .note{grid-column:2;font-size:11px;color:var(--dim);font-style:italic}
+  .tt-item.have{opacity:.55}
+  #tt-skipped{margin-top:14px}
+  #tt-skipped summary{cursor:pointer;font-size:12px;color:var(--dim)}
+  #tt-skip-list .tt-item{grid-template-columns:minmax(0,1fr)}
+  #tt-skip-list .to,#tt-skip-list .note{grid-column:1}
+  .tt-bar{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+  #tt-said{font-size:12px;color:var(--dim)}
+
   /* --- Options -> Help: the guide --- */
   #guide{display:grid;grid-template-columns:minmax(10em,13em) minmax(0,1fr);gap:18px;
          align-items:start}
@@ -859,6 +882,7 @@
       <button type="button" data-tab="watch">Stat watches<span class="n"></span></button>
       <button type="button" data-tab="timer">Timers<span class="n"></span></button>
       <button type="button" data-tab="scripts">Script files<span class="n"></span></button>
+      <button type="button" data-tab="tintin">From other clients</button>
       <div class="opt-group">Interface</div>
       <button type="button" data-tab="panels">Layout<span class="n"></span></button>
       <button type="button" data-tab="fonts">Fonts</button>
@@ -1139,6 +1163,17 @@
                 <p class="fhint">It stays selected: Enter sends it again, and
                   typing anything replaces it.</p>
               </div>
+              <div class="frow">
+                <label>Speedwalk</label>
+                <div class="stack">
+                  <label class="check"><input type="checkbox" id="speedwalk">
+                    zMUD's speedwalk: <code>.3n2e</code> walks n, n, n, e, e</label>
+                </div>
+                <p class="fhint"><code>h</code> <code>j</code> <code>k</code>
+                  <code>l</code> are nw, ne, sw and se; a step in brackets is any
+                  command, as in <code>.2n(climb pipe)e</code>. Only a line of
+                  nothing but moves walks; anything else is sent as typed.</p>
+              </div>
             </div>
           </div>
           <div class="fset">
@@ -1359,6 +1394,39 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
             </div>
           </div>
           <div id="help-groups"></div>
+        </section>
+
+        <!-- importing tt++ -------------------------------------------------- -->
+        <section class="opt-pane" data-pane="tintin" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>From TinTin++, zMUD or CMUD</h4>
+              <p>Bring your aliases, triggers, gags, timers and paths across: pick
+                 your TinTin++ files, or zMUD's or CMUD's settings export, and see what
+                 each becomes before anything is added.</p>
+            </div>
+            <div class="acts">
+              <button id="tt-pick" type="button" class="primary">Choose files&hellip;</button>
+              <input id="tt-files" type="file" multiple accept=".tin,.tt,.txt,.xml" hidden>
+            </div>
+          </div>
+          <p class="fhint" id="tt-intro">Aliases, triggers, gags and timers come
+            across, with <code>%1</code> as <code>{1}</code>, a class as a group,
+            <code>#delay</code> or <code>#WAIT</code> as a wait; a zMUD
+            <code>#PATH</code> becomes a route, and a speedwalk its steps. Real
+            TinTin++ programming &mdash; <code>#if</code>, <code>#math</code>,
+            <code>#foreach</code> &mdash; does not; each is listed with the reason, so
+            you can write it as a script instead.
+            <button type="button" class="guide-link" data-guide="patterns">How patterns work</button></p>
+          <div id="tt-result" hidden>
+            <p id="tt-summary"></p>
+            <div id="tt-list"></div>
+            <details id="tt-skipped"><summary></summary><div id="tt-skip-list"></div></details>
+            <div class="tt-bar">
+              <button id="tt-import" type="button" class="primary">Import</button>
+              <span id="tt-said"></span>
+            </div>
+          </div>
         </section>
 
         <!-- the guide ---------------------------------------------------- -->
@@ -1705,6 +1773,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="numpad.js"></script>
   <script src="sound.js"></script>
   <script src="guide.js"></script>
+  <script src="ttimport.js"></script>
   <script src="optfind.js"></script>
 </body>
 </html>

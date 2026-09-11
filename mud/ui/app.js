@@ -303,6 +303,8 @@ function handle(m) {
     window.handleLogin(m);
   } else if (m.t === 'update' && window.handleUpdate) {
     window.handleUpdate(m);
+  } else if (m.t === 'ttimport' && window.handleTTImport) {
+    window.handleTTImport(m);
   } else if (m.t === 'guide' && window.handleGuide) {
     window.handleGuide(m);
   } else if (m.t === 'help' && window.handleHelp) {
@@ -330,16 +332,43 @@ if (keepCmd) {
   };
 }
 
+/* zMUD's speedwalk, for anybody who types one from habit: `.3n2el` is
+   n;n;n;e;e;se.  Off unless switched on under Options -> Keyboard -- a line
+   starting with a dot is sent as it is otherwise, since `.news` is a word
+   too.  The letters are zMUD's: h j k l for nw ne sw se, as the map showed
+   (zmimport.py).  Only a line made of nothing but moves is a speedwalk. */
+const SPEEDWALK = { n: 'n', s: 's', e: 'e', w: 'w', u: 'u', d: 'd',
+  h: 'nw', j: 'ne', k: 'sw', l: 'se' };
+const speedCmd = $('speedwalk');
+if (speedCmd) {
+  speedCmd.checked = window.prefs.get('speedwalk', '0') === '1';
+  speedCmd.onchange = () => window.prefs.set('speedwalk', speedCmd.checked ? '1' : '0');
+}
+
+function speedwalk(text) {
+  const m = /^\.((?:\d*(?:[nsewudhjkl]|\([^()]*\)))+)$/.exec(text.trim());
+  if (!m) return null;
+  const steps = [];
+  for (const [, count, step] of m[1].matchAll(/(\d*)([nsewudhjkl]|\([^()]*\))/g)) {
+    const one = step.startsWith('(') ? step.slice(1, -1).trim() : SPEEDWALK[step];
+    for (let i = 0; i < Math.min(parseInt(count || '1', 10), 99); i++) steps.push(one);
+  }
+  return steps.join(';');
+}
+window.speedwalk = speedwalk;
+
 $('bar').addEventListener('submit', (e) => {
   e.preventDefault();
-  const text = cmd.value;
+  const typed = cmd.value;
+  const walk = speedCmd && speedCmd.checked ? speedwalk(typed) : null;
+  const text = walk || typed;
   // One entry for a command sent ten times running, not ten.
-  if (text && history[history.length - 1] !== text) {
-    history.push(text);
+  if (typed && history[history.length - 1] !== typed) {
+    history.push(typed);
     if (history.length > 500) history.shift();
   }
   histPos = history.length;
-  if (keepCmd && keepCmd.checked && text) {
+  if (keepCmd && keepCmd.checked && typed) {
     cmd.select();
   } else {
     cmd.value = '';

@@ -124,7 +124,18 @@ class Trigger:
                 self.literal = None
         else:
             self.regex = re.compile(self.pattern)
-            self.literal = literal_hint(self.pattern)
+            # Flags at the front are not text: "(?i)" would lend its "i".
+            self.literal = literal_hint(re.sub(r"^\(\?[aiLmsux]+\)", "", self.pattern))
+            if self.literal and self.regex.flags & re.IGNORECASE:
+                # The quick check has to ignore capitals when the pattern
+                # does, or "(?i)ready for battle" never sees "READY FOR
+                # BATTLE" -- which was every trigger imported from zMUD.
+                self.literal = self.literal.lower()
+                self.fold = True
+
+    #: Set for a pattern that ignores capitals: its literal is lower-cased,
+    #: and TriggerSet checks it against the line lower-cased.
+    fold: bool = False
 
     def match(self, plain: str):
         if self.mode == "command":
@@ -146,13 +157,20 @@ class Trigger:
 class TriggerSet:
     def __init__(self) -> None:
         self._by_literal: dict[str, list[Trigger]] = defaultdict(list)
+        #: Triggers that ignore capitals, by their lower-cased literal.
+        self._by_folded: dict[str, list[Trigger]] = defaultdict(list)
         self._always: list[Trigger] = []
 
+    def _buckets(self):
+        return list(self._by_literal.values()) + list(self._by_folded.values())
+
     def __len__(self) -> int:
-        return sum(len(v) for v in self._by_literal.values()) + len(self._always)
+        return sum(len(v) for v in self._buckets()) + len(self._always)
 
     def add(self, trigger: Trigger) -> Trigger:
-        if trigger.literal:
+        if trigger.literal and trigger.fold:
+            self._by_folded[trigger.literal].append(trigger)
+        elif trigger.literal:
             self._by_literal[trigger.literal].append(trigger)
         else:
             self._always.append(trigger)
@@ -160,7 +178,7 @@ class TriggerSet:
 
     def remove_owner(self, owner: str) -> int:
         n = 0
-        for bucket in list(self._by_literal.values()):
+        for bucket in self._buckets():
             before = len(bucket)
             bucket[:] = [t for t in bucket if t.owner != owner]
             n += before - len(bucket)
@@ -171,7 +189,7 @@ class TriggerSet:
     def all(self) -> list[Trigger]:
         """Every registered trigger, in priority order."""
         found = list(self._always)
-        for bucket in self._by_literal.values():
+        for bucket in self._buckets():
             found.extend(bucket)
         found.sort(key=lambda t: (t.priority, t.owner, t.pattern))
         return found
@@ -181,6 +199,11 @@ class TriggerSet:
         for literal, bucket in self._by_literal.items():
             if literal in plain:
                 found.extend(bucket)
+        if self._by_folded:
+            low = plain.lower()
+            for literal, bucket in self._by_folded.items():
+                if literal in low:
+                    found.extend(bucket)
         found.sort(key=lambda t: t.priority)
         return found
 

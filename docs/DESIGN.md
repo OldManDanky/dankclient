@@ -802,6 +802,75 @@ as finished for matching, though: a room title split across two reads would
 become two lines.  If the rest of a line already drawn arrives later and is gagged, the
 row is wiped.  With no gags nothing is held at all.
 
+## Coming from TinTin++
+
+**Options -> From TinTin++** reads a player's `.tin` files and shows what each
+`#alias`, `#action`, `#gag` and `#ticker` becomes -- or why it does not come
+across -- before anything is added.  `mud/ttimport.py` does the reading, once
+to show and again to import what was ticked, so what is imported is what was
+shown; the same rule twice is never added.
+
+It translates only what means the same thing here.  `%1` is `{1}` and `%0`
+`{args}`; a pattern's `%w`, `%d`, `%*`, `( )` and `{a|b}` become a regex with
+captures numbered as tt++ numbers them; a `#class` is a group; `#delay` last
+in a body is a wait (anywhere else it is not, because tt++ carries on at once
+and a wait holds the rest back); `#if {!$idle_flag}` -- in 3kdb's files on
+nearly every action -- is dropped, being what the deadman already does.  A
+`$variable` is filled in only if nothing changes it as it runs.  An alias
+with no `%` argument gets what was typed on the end, as tt++ does.  A command
+that is one of the player's own aliases is replaced by that alias's
+commands, since a rule's sends go to 3K and not through aliases; one that is
+plainly 3kdb's own machinery (`.fly`, `corpsetrig+`, from the list of 3kdb's
+aliases in `tt3kdb.txt`) is left out rather than sent to 3K.  Everything else
+-- `#math`, `#list`, `#foreach`, `#if` on anything else -- is programming, and
+is listed with its reason.
+
+Across the 41 character folders in 3kdb it brings over about half of what is
+there; most of the rest is `#macro` keys, 3kdb's own hooks, and real tt++
+programming.
+
+### And from zMUD
+
+zMUD keeps its settings in a binary `.mud` file, but exports them as text,
+one command to a line -- `#TRIGGER {pattern} {commands} "class" {options}` --
+and `mud/zmimport.py` reads that into the same preview.  The reading is by
+line and never runs on: one real export has an alias with unbalanced braces,
+which a brace-counting reader would have run on into the rest of the file.
+Classes become groups (`areas|zombies` is `areas/zombies`), `#T-`/`#T+` become
+`/group` for the class and every class inside it, `#WAIT` in milliseconds is
+a wait, `{disable}` comes in switched off, and a `#PATH` becomes a route --
+with its start, when its moves fit only one room on the map.  A zMUD trigger
+ignores capitals unless {case} (no trigger in a real export of a thousand
+had it), so an imported one starts `(?i)`.
+
+zMUD's speedwalk -- `.3n2e` -- has letters of its own for the diagonals, and
+which is which was measured, not remembered: across a real export's twenty
+paths, only h=nw, j=ne, k=sw, l=se lets all of them be walked on the map,
+and its 169-step Section Z walk then fits exactly one room in the world.
+The command box understands speedwalk too, switched on under Options ->
+Keyboard; off, a line starting with a dot is sent as typed, because `.news`
+is a word as well as four moves.
+
+CMUD, zMUD's successor, exports XML instead: nested `<class>` elements with
+the rules inside, and the settings zMUD left to guesswork said outright --
+`regex="true"`, `case="true"`, `autoappend="true"`, `enabled="false"` (which
+switches off everything in the class).  `mud/cmimport.py` reads the XML and
+hands each rule to zmimport's builders, since the language inside is
+zMUD's; a line break between commands is a `;`.  Its own direction
+definitions (`<dir name="h" dir="nw">`) confirm the h j k l the map had
+shown.  A rule in one of CMUD's own windows -- a Tells window, `host="none"`
+-- acts on that window, not on the game, and is left out.
+
+Every imported rule is put through the same check Import makes before the
+preview shows it, so the preview never promises what Import then refuses --
+a CMUD anti-idle alias waiting an hour and more at a time was one.
+
+Importing zMUD found a bug in the trigger engine itself.  Every trigger is
+first checked for a fixed piece of its pattern before its regex runs, and
+that check cared about capitals when the pattern did not: `(?i)ready for
+battle` never saw `READY FOR BATTLE`.  A trigger that ignores capitals now
+keeps that piece in lower case and is checked against the line lower-cased.
+
 ## The guide
 
 **Options -> Help** and `/help <topic>` are one guide, written once as

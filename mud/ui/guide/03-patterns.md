@@ -72,6 +72,8 @@ The client does not read TinTin++'s `%` codes. Write them like this:
 
 So `There are two obvious exits: light, (%w)` sending `%1` becomes `There are two obvious exits: light, (\w+)` sending `{1}`.
 
+You do not have to do this by hand: [Options → From TinTin++](options:tintin) reads your `.tin` files and translates them for you. See [Coming from TinTin++](#tintin).
+
 ## When it does not fire
 
 - Try the line in **Try a line**, at the bottom of the triggers page.

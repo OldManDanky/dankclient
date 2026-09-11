@@ -912,6 +912,9 @@ class WebServer:
         if kind == "start":
             self._start_op(msg)
             return
+        if kind == "ttimport":
+            self._ttimport_op(msg)
+            return
         if kind == "guide":
             from . import guide
 
@@ -996,6 +999,58 @@ class WebServer:
         elif not (self.scripts and self.scripts.input(text)):
             # A human is waiting on this one, so it bypasses the pacing queue.
             self.session.queue.now(text)
+
+    def _ttimport_op(self, msg: dict) -> None:
+        """Options -> From TinTin++: read the files, then bring in what was chosen."""
+        from . import ttimport
+
+        store = getattr(self.scripts, "rules", None) if self.scripts else None
+        files = [(str(f.get("name", "file.tin"))[:120], str(f.get("text", "")))
+                 for f in (msg.get("files") or []) if isinstance(f, dict)]
+        if store is None:
+            self.push({"t": "ttimport", "op": "error", "error": "scripting is disabled"})
+            return
+        routes = getattr(self.scripts, "routes", None)
+        rooms = self._rooms_walkable()
+        if msg.get("op") == "import":
+            ids = [i for i in (msg.get("ids") or []) if isinstance(i, int)]
+            added, problems = ttimport.bring_in(files, ids, store, routes, rooms)
+            self.push({"t": "ttimport", "op": "done", "added": added,
+                       "problems": problems})
+            if routes is not None:
+                self.push(self._routes_msg(routes))
+            return
+        self.push({"t": "ttimport", "op": "read", **ttimport.preview(
+            files, store.rules, routes.routes if routes is not None else None, rooms)})
+
+    def _rooms_walkable(self):
+        """For an imported path: every room its moves can be walked from.
+
+        Built once from the map's edges -- a walk that hits a wall is not a
+        start -- so a path whose moves fit one room only knows where it starts.
+        """
+        store = getattr(self.session, "store", None)
+        if store is None:
+            return None
+        edges: dict[int, dict[str, int]] = {}
+        for frm, cmd, to in store.db.execute(
+                "SELECT from_room, command, to_room FROM edge WHERE failed = 0"):
+            edges.setdefault(frm, {})[cmd] = to
+
+        def fits(moves: list[str]) -> list[int]:
+            out = []
+            for room in edges:
+                here = room
+                for m in moves:
+                    here = edges.get(here, {}).get(m)
+                    if here is None:
+                        break
+                else:
+                    out.append(room)
+                    if len(out) > 1:
+                        break                   # only "exactly one" is any use
+            return out
+        return fits
 
     def _sound_op(self, msg: dict) -> None:
         """Options -> Sounds: choose, upload or remove an event's sound."""
