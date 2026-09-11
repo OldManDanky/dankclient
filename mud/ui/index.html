@@ -522,6 +522,23 @@
   .rule .meta,.route .meta{font-size:10.5px;color:var(--dim);
                            font-family:Consolas,monospace;word-break:break-word}
   .rule.off{opacity:.5}
+  #sound-rows{display:flex;flex-direction:column;gap:6px}
+  .sound-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .sound-label{flex:1 1 14em;min-width:0}
+  .sound-row select{flex:0 1 13em;width:13em;min-width:0}
+  .sound-row button{flex:none;padding:3px 9px}
+  .sound-row .sound-up{width:6.5em}
+  /* Every row keeps the \00D7's place, so the controls line up. */
+  .sound-row .sound-drop{width:2.4em}
+  .sound-row .sound-drop:empty{visibility:hidden}
+  #sound-error:empty{display:none}
+  .rule-group{display:flex;align-items:center;gap:8px;margin-top:8px;padding:0 2px;
+              font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .rule-group:first-child{margin-top:0}
+  .rule-group b{color:var(--ink);font-weight:600}
+  .rule-group span{flex:1;letter-spacing:0;text-transform:none}
+  .rule-group button{padding:1px 7px;font-size:10.5px;letter-spacing:0;text-transform:none}
+  .rule-group.loose b{color:var(--dim)}
   .rule .acts,.route .acts,.route .top>button{flex:none}
   .rule .acts{display:flex;gap:4px;flex:none}
   .route .go{color:var(--good)}
@@ -1106,9 +1123,9 @@
           <div class="opt-head">
             <div>
               <h4>Sounds</h4>
-              <p>A tell chimes twice, a channel once, and 3K's bell &mdash; what a
-                 <code>wake</code> sends you &mdash; three times. Choose which lines
-                 ding by right-clicking them in the messages window.</p>
+              <p>What each thing sounds like: the built-in chime, nothing, or a
+                 file of your own. Choose which lines ding by right-clicking them
+                 in the messages window.</p>
             </div>
           </div>
           <div class="fset">
@@ -1128,18 +1145,18 @@
                     ring when 3K rings the bell (<code>wake</code>)</label>
                 </div>
               </div>
-              <div class="frow">
-                <label>Try them</label>
-                <div class="ctl">
-                  <button type="button" id="sound-test-bell">Bell</button>
-                  <button type="button" id="sound-test-tell">Tell</button>
-                  <button type="button" id="sound-test-channel">Channel</button>
-                </div>
-              </div>
             </div>
           </div>
-          <p class="fhint">Your own lines never ding, and nor does a channel you
-            have hidden. Saved in this browser.</p>
+          <div class="fset">
+            <h5>What plays</h5>
+            <div class="in">
+              <div id="sound-rows"></div>
+              <p class="err" id="sound-error"></p>
+              <p class="fhint">Your own files are mp3, wav, ogg or m4a, up to 2 MB,
+                and are kept with your map, not in the browser. Your own lines never
+                ding, and nor does a channel you have hidden.</p>
+            </div>
+          </div>
         </section>
 
         <!-- fonts ------------------------------------------------------------ -->
@@ -1554,6 +1571,15 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
               <div class="frow">
                 <label for="f-name">Name</label>
                 <input id="f-name" type="text" placeholder="optional, for the list">
+              </div>
+              <div class="frow">
+                <label for="f-group">Group</label>
+                <input id="f-group" type="text" list="f-groups" spellcheck="false"
+                       placeholder="optional, e.g. party">
+                <datalist id="f-groups"></datalist>
+                <p class="fhint">Rules with the same group are switched together:
+                  type <code>/group party on</code> or <code>/group party off</code>,
+                  or give an alias those as its actions.</p>
               </div>
               <div class="frow">
                 <label for="f-pace">Speed</label>

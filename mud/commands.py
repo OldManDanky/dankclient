@@ -38,6 +38,10 @@ HELP = [
         ('/ticks', 'the ones that are running'),
         ('/untick <name|all>', 'stop one, or all of them'),
         ('/delay <secs> <command>', 'send it once, later'),
+        ('/group <name> on|off', 'switch a group of rules on or off; /groups lists them'),
+        ('/alias <word> <cmd;cmd>', 'make an alias; {args} or {1} for what follows it'),
+        ('/alias', 'the aliases you have made; /alias <word> shows one'),
+        ('/unalias <word>', 'remove one'),
         ('/flush', 'drop everything the scripts have queued'),
     ]),
     ('Gags', 'Lines kept off the screen -- also under Options -> Gags. Your triggers and the log still see them.', [
@@ -259,6 +263,12 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb == "delay":
         _delay(session, rest, note)
+
+    elif verb in ("group", "groups"):
+        _group(rest, scripts, note)
+
+    elif verb in ("alias", "unalias"):
+        _alias(verb, rest, scripts, note)
 
     elif verb == "repair":
         store = getattr(session, "store", None)
@@ -512,6 +522,158 @@ def _delay(session, rest: str, note) -> None:
     from .events import spawn
     spawn(later(), f"/delay {command}")
     note(f"in {wait:g}s: {command}")
+
+
+def by_group(rules, show) -> str:
+    """Rules listed under their groups, the ungrouped last, as the panel does.
+
+    With no groups at all, just the rules.
+    """
+    key = lambda r: (r.pattern or r.name or "").lower()      # noqa: E731
+    groups: dict[str, list] = {}
+    loose = []
+    for r in rules:
+        if r.group:
+            groups.setdefault(r.group.lower(), []).append(r)
+        else:
+            loose.append(r)
+    if not groups:
+        return "\n".join(show(r) for r in sorted(loose, key=key))
+    out = []
+    for name in sorted(groups):
+        members = groups[name]
+        out.append(f"{members[0].group}:")
+        out.extend(show(r) for r in sorted(members, key=key))
+    if loose:
+        out.append("no group:")
+        out.extend(show(r) for r in sorted(loose, key=key))
+    return "\n".join(out)
+
+
+def _alias_actions(text: str) -> list[dict]:
+    """`recall;n;/wait 2;n` -> a send for each, and `/wait 2` a wait."""
+    actions = []
+    for piece in (p.strip() for p in text.split(";")):
+        if not piece:
+            continue
+        verb, _, arg = piece.partition(" ")
+        if verb.lower() == "/wait":
+            actions.append({"type": "wait", "text": arg.strip()})
+        else:
+            actions.append({"type": "send", "text": piece})
+    return actions
+
+
+def _alias(verb: str, rest: str, scripts, note) -> None:
+    """An alias made from the input line, as tt++'s #alias does.
+
+    It is an ordinary alias rule -- the word you type, matched as a command,
+    so `{args}` is everything after it and `{1}` the first word -- stored with
+    the character and editable under Options -> Aliases.  Setting a word
+    again changes what it does rather than making a second one; anything the
+    form gave it, a group say, is kept.
+    """
+    store = getattr(scripts, "rules", None)
+    if store is None:
+        note("scripting is disabled (--no-scripts)")
+        return
+    from .rules import describe
+
+    def mine():
+        return [r for r in store.rules if r.kind == "alias" and r.mode == "command"]
+
+    def show(r) -> str:
+        return (f"  {'   ' if r.enabled else 'off'} {r.pattern:<14} "
+                + " ; ".join(describe(a) for a in r.actions))
+
+    word, _, commands_ = rest.strip().partition(" ")
+    found = [r for r in mine() if r.pattern.lower() == word.lower()] if word else []
+
+    if verb == "unalias":
+        if not word:
+            note("usage: /unalias <word>")
+        elif not found:
+            note(f"no alias {word!r} -- /alias lists them")
+        else:
+            for r in found:
+                store.delete(r.id)
+            note(f"removed the alias {word}")
+        return
+
+    if not word:
+        note(by_group(mine(), show)
+             or "no aliases.  /alias <word> <command;command> makes one, "
+                "e.g. /alias gk kill {1};glance")
+        return
+    if not commands_.strip():
+        note(show(found[0]) + (f"   (group {found[0].group})" if found[0].group else "")
+             if found else f"no alias {word!r}")
+        return
+    if word.startswith("/"):
+        note("an alias cannot start with / -- those are the client's commands")
+        return
+
+    data = {"kind": "alias", "mode": "command", "pattern": word, "name": word,
+            "actions": _alias_actions(commands_)}
+    if found:
+        from dataclasses import asdict
+        data = {**asdict(found[0]), "actions": data["actions"]}
+    rule, problem = store.upsert(data)
+    if problem:
+        note(f"/alias {word}: {problem}")
+        return
+    note(f"{'changed' if found else 'new'} alias {rule.pattern}: "
+         + " ; ".join(describe(a) for a in rule.actions))
+
+
+def _group(rest: str, scripts, note) -> None:
+    """Rules switched on and off together, as tt++'s #class does.
+
+    A group is only a name on each rule, set in the rule's form, so there is
+    nothing to create: `/group party on` switches on every rule named party,
+    and an alias whose actions are `/group solo off` and `/group party on`
+    is a mode.
+    """
+    store = getattr(scripts, "rules", None)
+    if store is None:
+        note("scripting is disabled (--no-scripts)")
+        return
+    groups = store.groups()
+
+    def state(rules) -> str:
+        on = sum(1 for r in rules if r.enabled)
+        return ("on" if on == len(rules) else "off" if not on
+                else f"{on} of {len(rules)} on")
+
+    words = rest.split()
+    if not words:
+        note("\n".join(f"  {name:<16} {state(rules):<10} {len(rules)} rule(s)"
+                        for name, rules in sorted(groups.items(), key=lambda g: g[0].lower()))
+             or "no groups.  Give rules a group in their form, then /group <name> on|off.")
+        return
+    switch = words[-1].lower() if words[-1].lower() in ("on", "off") else None
+    name = " ".join(words[:-1] if switch else words)
+    known = {g.lower(): g for g in groups}
+    if name.lower() not in known:
+        note(f"no rules in a group called {name!r}"
+             + (f" -- there are: {', '.join(sorted(groups))}" if groups else ""))
+        return
+    name = known[name.lower()]
+    if switch is None:
+        from .rules import describe
+
+        def what(r) -> str:
+            said = (r.pattern if r.kind in ("trigger", "alias")
+                    else f"on {r.event}" if r.kind == "event"
+                    else f"every {float(r.every):g}s" if r.kind == "timer"
+                    else f"{r.watch_field} {r.op} {r.value}")
+            return (f"  {'   ' if r.enabled else 'off'} {r.kind:<8} {said:<24} "
+                    + " ; ".join(describe(a) for a in r.actions))
+        note(f"{name}: {state(groups[name])}\n"
+             + "\n".join(what(r) for r in groups[name]))
+        return
+    hit = store.set_group(name, switch == "on")
+    note(f"{name}: {len(hit)} rule(s) {switch}")
 
 
 def _gag(verb: str, rest: str, scripts, note) -> None:

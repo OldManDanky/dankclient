@@ -286,8 +286,10 @@ async def amain(args: argparse.Namespace) -> int:
         # Loopback, always.  Opening the app is how you play on a machine; a
         # second machine is a second app, not a second window onto this one --
         # and everything the socket accepts is total control of the character.
+        from .sounds import Sounds
         web = WebServer(session, host="127.0.0.1", port=asked,
-                        scripts=host, characters=chars)
+                        scripts=host, characters=chars,
+                        sounds=Sounds(home() / "sounds"))
         try:
             port = await web.start(spare)
         except OSError as exc:

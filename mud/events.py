@@ -35,6 +35,7 @@ TICK = "tick"            # None -- the ~2s game tick
 PROMPT = "prompt"        # None -- IAC GA/EOR
 CONNECTED = "connected"
 DISCONNECTED = "disconnected"
+BOT_ENDED = "bot_ended"  # patrol.Bot -- a bot finished or gave up, by itself
 RETRYING = "retrying"    # float -- seconds until the next attempt to reconnect
 
 Handler = Callable[..., Any]

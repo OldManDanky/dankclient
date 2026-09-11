@@ -57,6 +57,6 @@ def test_an_old_bell_does_not_ring_again_after_a_refresh():
 def test_sounds_have_their_place_in_panels_and_are_loaded():
     page = read("index.html")
     for part in ('id="sound-volume"', 'id="sound-background"',
-                 'id="sound-test-tell"', 'id="sound-test-channel"',
+                 'id="sound-rows"', 'id="sound-error"',
                  'src="sound.js"'):
         assert part in page, part

@@ -16,6 +16,8 @@ captures/
 # What you have configured: rules, routes, the markup prefixes.  Yours, not
 # the client's.
 scripts/*.json
+# Your own sounds for events (Options -> Sounds), kept with the map.
+sounds/
 
 # packaging
 build/

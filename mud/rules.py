@@ -17,7 +17,7 @@ import json
 import re
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -199,10 +199,14 @@ class Rule:
     edge: bool = True
     #: kind == "timer" -- seconds between firings
     every: float = 60.0
+    #: A name shared by rules switched on and off together: `/group party on`.
+    #: Blank for a rule that belongs to none.
+    group: str = ""
 
     def __post_init__(self) -> None:
         if self.pace not in PACES:
             self.pace = PACED
+        self.group = " ".join(str(self.group or "").split())
         if not self.id:
             self.id = uuid.uuid4().hex[:12]
         if self.mode not in MODES:
@@ -268,6 +272,10 @@ class Rule:
         return None
 
     def as_python(self) -> str:
+        code = self._python()
+        return f"# group: {self.group}\n" + code if self.group else code
+
+    def _python(self) -> str:
         name = re.sub(r"\W+", "_", self.name or self.pattern or self.event
                       or self.watch_field)[:30].strip("_") or "rule"
         pace_arg = "" if self.pace == PACED else f", pace={self.pace!r}"
@@ -371,6 +379,8 @@ class RuleStore:
         #: Rules part-way through, held by a wait: timer handle -> the rule
         #: as it was when it fired.
         self._waiting: dict[asyncio.TimerHandle, Rule] = {}
+        #: Goes up on every save; see save().
+        self.version = 0
 
     # --- persistence --------------------------------------------------------
 
@@ -393,6 +403,9 @@ class RuleStore:
     def save(self) -> None:
         write_atomically(self.path,
                          json.dumps([asdict(r) for r in self.rules], indent=2))
+        # How the page hears of a change it did not make itself -- a group
+        # switched from the input line, or by an alias.
+        self.version += 1
 
     # --- registration -------------------------------------------------------
 
@@ -549,10 +562,46 @@ class RuleStore:
                 self._waiting[held[0]] = rule
                 return
             text = _safe_format(action["text"], captured)
-            if action["type"] == "send":
+            if action["type"] == "send" and text.startswith("/"):
+                # What typing it would do: "/" is the client's, never 3K's.
+                # So an alias can switch groups -- `/group solo off`.
+                from . import commands
+                commands.handle(text, session, host, host.note)
+            elif action["type"] == "send":
                 session.queue.put(text, rule.priority, rule.pace)
             else:
                 host.note(text)
+
+    # --- groups -------------------------------------------------------------
+
+    def groups(self) -> dict[str, list[Rule]]:
+        """Every group, by the name as first written, and its rules."""
+        found: dict[str, list[Rule]] = {}
+        names: dict[str, str] = {}
+        for rule in self.rules:
+            if rule.group:
+                name = names.setdefault(rule.group.lower(), rule.group)
+                found.setdefault(name, []).append(rule)
+        return found
+
+    def set_group(self, name: str, on: bool) -> list[Rule]:
+        """Switch every rule in a group on or off.  The rules it touched.
+
+        By name, whatever the case.  Switching is the rule's own `enabled`,
+        so the panel shows it, it is kept, and a single rule can still be
+        switched by itself afterwards.
+        """
+        want = " ".join(name.split()).lower()
+        hit = []
+        for i, rule in enumerate(self.rules):
+            if rule.group.lower() == want:
+                if rule.enabled != on:
+                    self.rules[i] = replace(rule, enabled=on)
+                hit.append(self.rules[i])
+        if hit:
+            self.save()
+            self.register()
+        return hit
 
     def cancel_waits(self) -> int:
         """Drop every rule held by a wait.  How many there were."""

@@ -21,11 +21,15 @@ class FakeAudio {
 
 const saved = {};
 const p = page({ 'sound-volume': 'input', 'sound-background': 'input', 'sound-bell': 'input',
-  'sound-test-bell': 'button', 'sound-test-tell': 'button', 'sound-test-channel': 'button' }, saved);
+  'sound-rows': 'div', 'sound-error': 'p' }, saved);
 global.AudioContext = FakeAudio;
 let focused = true;
 document.hasFocus = () => focused;
 load('sound.js');
+// Each event's row: its label, the choice, Upload, a file box, and play.
+const row = (slot) => p.els['sound-rows'].children.find((r) => r.children[0].textContent
+  === { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A bot ends by itself' }[slot]);
+const play = (slot) => row(slot).children.find((b) => b.title === 'Play it').onclick();
 
 const fresh = () => { played.length = 0; peak = 0; };
 const notes = () => played.map((n) => n.f);
@@ -58,8 +62,8 @@ p.els['sound-background'].checked = false;
 p.els['sound-background'].onchange();
 check('the background box saves too', saved['sound:background'] === '');
 fresh();
-p.els['sound-test-tell'].onclick();
-check('Test a tell plays the tell', same(notes(), [880, 1318.5]));
+play('tell');
+check("a tell's play button plays the tell", same(notes(), [880, 1318.5]));
 check('the loudest it gets follows the volume', peak > 0 && peak <= 0.25 * 0.4 + 1e-9, peak);
 
 // 3K's bell: what `wake` sends.
@@ -74,8 +78,57 @@ audio.currentTime += 5;
 fresh();
 check('switched off, the bell is silent', ding('bell') === false && played.length === 0);
 fresh();
-p.els['sound-test-bell'].onclick();
-check('Test the bell still plays it', played.length === 3);
+play('bell');
+check('its play button still plays it', played.length === 3);
 check('and the choice is saved', saved['sound:bell'] === '');
+
+
+// --- the new events, and your own files -----------------------------------------
+check('every event has a row before the server says anything', p.els['sound-rows'].children.length === 6);
+audio.currentTime += 5;
+fresh();
+check('a bot ending has a sound of its own', ding('bot') === true && same(notes(), [1174.7, 880, 659.3]), notes());
+
+const sent = [];
+global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
+const clips = [];
+global.Audio = class { constructor(src) { this.src = src; clips.push(this); } play() { this.played = true; return Promise.resolve(); } };
+const slots = (over) => ['tell', 'channel', 'bell', 'bot', 'idle', 'disconnect'].map((slot) => Object.assign(
+  { slot, label: { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A bot ends by itself' }[slot] || slot,
+    choice: 'builtin', name: '', stamp: 0 }, over[slot] || {}));
+setSounds(slots({ bot: { choice: 'file', name: 'horn.mp3', stamp: 42 }, tell: { choice: 'none' } }));
+audio.currentTime += 5;
+fresh();
+check('your own file plays from the client, past the cache, at the volume',
+  ding('bot') === true && played.length === 0 && clips.length === 1
+  && clips[0].src === '/sounds/bot?v=42' && clips[0].played && Math.abs(clips[0].volume - 0.4) < 1e-9,
+  clips.map((c) => c.src));
+audio.currentTime += 5;
+check("'no sound' is silent, even from its play button", ding('tell') === false && ding('tell', true) === false);
+const pick = row('bot').children.find((c) => c.tagName === 'select');
+check('the row offers your file by name', pick.children.map((o) => o.textContent).includes('your file: horn.mp3')
+  && pick.value === 'file');
+pick.value = 'builtin';
+pick.onchange();
+check('choosing tells the server', same(sent[sent.length - 1], { t: 'sound', op: 'choose', slot: 'bot', choice: 'builtin' }));
+row('bot').children.find((b) => b.title && b.title.startsWith('Remove')).onclick();
+check('× removes your file', same(sent[sent.length - 1], { t: 'sound', op: 'remove', slot: 'bot' }));
+check('a row without a file has no × and says Upload',
+  !row('tell').children.some((b) => b.title && b.title.startsWith('Remove'))
+  && row('tell').children.some((b) => b.textContent === 'Upload\u2026'));
+
+global.FileReader = class { readAsDataURL(f) { this.result = 'data:audio/mpeg;base64,' + f.b64; this.onload(); } };
+const box = row('tell').children.find((c) => c.type === 'file');
+box.files = [{ name: 'moo.mp3', size: 1000, b64: 'AAAA' }];
+box.onchange();
+check('uploading sends the file to the server, without the data: prefix',
+  same(sent[sent.length - 1], { t: 'sound', op: 'upload', slot: 'tell', name: 'moo.mp3', data: 'AAAA' }), sent[sent.length - 1]);
+const before = sent.length;
+box.files = [{ name: 'long.wav', size: 3 << 20, b64: '' }];
+box.onchange();
+check('a file over 2 MB is refused here, with a reason', sent.length === before
+  && p.els['sound-error'].textContent.includes('the most is 2 MB'), p.els['sound-error'].textContent);
+setSounds(slots({}), 'that file is empty');
+check("the server's reason is shown", p.els['sound-error'].textContent === 'that file is empty');
 
 finish();

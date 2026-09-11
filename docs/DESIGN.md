@@ -740,6 +740,26 @@ password box.
 
 A delay is not stored.  It happens and it is gone.
 
+### Groups, and modes
+
+A rule can carry a **group** name, and `/group party on` or `/group party off`
+switches every rule in it -- tt++'s `#class`, without a class to declare.  It
+is the rules' own `enabled`, so the panel shows it, it is kept, and one rule
+can still be switched by itself.  `/groups` lists them, with how many are on.
+A send action that starts with `/` is a client command, exactly as typing it
+would be, never sent to 3K -- so an alias `partymode` whose actions are
+`/group solo off` and `/group party on` is a mode.  The page hears of a
+switch it did not make through the rule store's version, which goes up on
+every save.
+
+`/alias <word> <cmd;cmd>` makes an alias from the input line, as tt++'s
+`#alias` does: an ordinary alias rule, matched as a command, so `{args}` is
+everything after the word and `{1}` the first of it; `/wait 2` between two
+commands is a wait.  Setting a word again changes what it does and keeps
+anything the form gave it, a group say.  So `/alias ksolo /group party off`
+is a mode made without opening Options.  `/alias` lists them, `/unalias`
+removes one.
+
 ### A wait inside a rule
 
 Any rule's actions can include **wait (seconds)**: everything below it goes
@@ -781,6 +801,25 @@ waiting for an ending that is not coming.  An unfinished line is *not* taken
 as finished for matching, though: a room title split across two reads would
 become two lines.  If the rest of a line already drawn arrives later and is gagged, the
 row is wiped.  With no gags nothing is held at all.
+
+## Sounds
+
+A tell, a channel line you chose to ding, 3K's bell, a bot ending by itself,
+the deadman tripping, and the MUD dropping you: each plays the built-in chime,
+nothing, or a file of your own, chosen under Options -> Sounds.  The built-in
+ones are made by the browser's own audio, so nothing ships; they differ in
+shape, so each can be told from the others without looking.
+
+Your files are kept with the map, in `sounds/` in the data folder, and the
+page plays them from `/sounds/<event>`.  Not in the browser: its storage is
+per address, the address has a port, and the port is "8080 or the next free
+one", so a sound kept there could vanish the day 8080 was busy.  One file per
+event, named after the event -- a name from the page is never a path -- and
+two megabytes at most, which is why the socket's message limit is three.
+
+"A bot ends by itself" means finished or gave up.  Stop and Pause are you,
+and a walk to a room on the map is over the moment you arrive, so neither
+chimes.  Disconnect, pressed, is not the MUD dropping you.
 
 ## Your own colours
 

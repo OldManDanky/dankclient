@@ -67,9 +67,9 @@ def ui_file(name: str) -> bytes:
 SCROLLBACK = 400
 
 #: Most one message from the page may be.  The largest thing it sends is a
-#: route or a rule being saved -- a few kilobytes -- so this is generous.
-#: Without it, a frame header claiming eight exabytes was simply believed.
-MESSAGE_MOST = 1 << 20
+#: sound for an event -- two megabytes at most, a third more as base64.
+#: Without a limit, a frame header claiming eight exabytes was simply believed.
+MESSAGE_MOST = 3 << 20
 #: Most that may wait to go out to one page before it is given up on.  A page
 #: that has stopped reading -- a frozen tab, a machine asleep with the window
 #: open -- used to have everything the MUD said queued for it without limit.
@@ -228,8 +228,10 @@ class WebServer:
     _map_centre: int | None = None
 
     def __init__(self, session, host: str = "127.0.0.1", port: int = 0,
-                 scripts=None, characters=None) -> None:
+                 scripts=None, characters=None, sounds=None) -> None:
         self.session = session
+        #: sounds.Sounds -- what each event plays, and your own files
+        self.sounds = sounds
         self.scripts = scripts        # ScriptHost, for alias interception
         self.characters = characters  # Characters, for the login screen
         self.host, self.port = host, port      # bind address
@@ -237,6 +239,7 @@ class WebServer:
         self._clients: set[asyncio.StreamWriter] = set()
         self._dirty = True
         self._live_routes = frozenset()
+        self._rules_seen = 0
         self._map_centre = None
         self._server: asyncio.base_events.Server | None = None
         #: What the latest release is, once we have asked.  Asked once, in the
@@ -311,6 +314,20 @@ class WebServer:
         @bus.on(events.STATE)
         def _(name, new, old) -> None:
             self._dirty = True
+            if name == "deadman" and new:
+                self.push({"t": "play", "slot": "idle"})
+
+        @bus.on(events.BOT_ENDED)
+        def _(bot) -> None:
+            # A route or a script's bot, not a walk to a room on the map: that
+            # is over the moment you arrive, and a chime every click is noise.
+            if getattr(bot, "owner", "") != "client":
+                self.push({"t": "play", "slot": "bot"})
+
+        @bus.on(events.DISCONNECTED)
+        def _() -> None:
+            if getattr(s, "wanted", True):          # dropped, not Disconnect
+                self.push({"t": "play", "slot": "disconnect"})
 
         @bus.on(events.ROOM)
         def _(room) -> None:
@@ -353,6 +370,12 @@ class WebServer:
                 self._dirty = True
             if self._clients and self._routes_changed():
                 self.push(self._routes_msg(self.scripts.routes))
+            rules = getattr(self.scripts, "rules", None) if self.scripts else None
+            if self._clients and rules is not None and rules.version != self._rules_seen:
+                self._rules_seen = rules.version
+                payload = rules.listing()
+                payload.update({"t": "rules", "op": "list"})
+                self.push(payload)
             if self._dirty and self._clients:
                 self._dirty = False
                 try:
@@ -744,8 +767,17 @@ class WebServer:
     async def _static(self, writer: asyncio.StreamWriter, path: str) -> None:
         name = "index.html" if path in ("/", "") else path.lstrip("/")
         try:
-            body = ui_file(name)
-            ctype = mimetypes.guess_type(name)[0] or "text/plain"
+            if name.startswith("sounds/"):
+                # Your own sound for an event, by the event's name: never a
+                # path.  The ?v= the page adds is only to get past its cache.
+                from .sounds import KINDS
+                got = self.sounds.file(name[7:].split("?")[0]) if self.sounds else None
+                if got is None:
+                    raise FileNotFoundError(name)
+                body, ctype = got.read_bytes(), KINDS[got.suffix.lower()]
+            else:
+                body = ui_file(name)
+                ctype = mimetypes.guess_type(name)[0] or "text/plain"
             status = "200 OK"
         except (ValueError, OSError, KeyError):
             body, ctype, status = b"not found", "text/plain", "404 Not Found"
@@ -899,6 +931,9 @@ class WebServer:
         if kind == "deadman":
             self._set_deadman(msg.get("minutes"))
             return
+        if kind == "sound":
+            self._sound_op(msg)
+            return
         if kind == "messages":
             # The window's Clear: the history a reload would seed it with.
             if msg.get("op") == "clear":
@@ -953,6 +988,22 @@ class WebServer:
         elif not (self.scripts and self.scripts.input(text)):
             # A human is waiting on this one, so it bypasses the pacing queue.
             self.session.queue.now(text)
+
+    def _sound_op(self, msg: dict) -> None:
+        """Options -> Sounds: choose, upload or remove an event's sound."""
+        if self.sounds is None:
+            return
+        op, slot = msg.get("op"), str(msg.get("slot", ""))
+        if op == "choose":
+            problem = self.sounds.choose(slot, str(msg.get("choice", "")))
+        elif op == "upload":
+            problem = self.sounds.upload(slot, msg.get("name", ""), msg.get("data", ""))
+        elif op == "remove":
+            problem = self.sounds.remove(slot)
+        else:
+            problem = None
+        self.push({"t": "sounds", "slots": self.sounds.listing(),
+                   "error": problem or "", "slot": slot})
 
     def _set_deadman(self, minutes) -> None:
         """Options -> Routes & bots: minutes before it trips, 0 for never."""
@@ -1010,7 +1061,10 @@ class WebServer:
         next moved.
         """
         self._map_centre = None
-        return self.snapshot()
+        first = self.snapshot()
+        if self.sounds is not None:
+            first["sounds"] = self.sounds.listing()
+        return first
 
     def _map_state(self) -> dict | None:
         """The map, but only when it has actually changed.
@@ -1194,6 +1248,9 @@ class WebServer:
             if problem:
                 self.push({"t": "rules", "op": "error", "error": problem})
                 return
+        elif op == "group":
+            # A group's heading in the panel: every rule in it on or off.
+            store.set_group(str(msg.get("name", "")), bool(msg.get("on")))
         elif op == "delete":
             store.delete(msg.get("id", ""))
         elif op == "test":

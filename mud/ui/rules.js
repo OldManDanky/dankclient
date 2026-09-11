@@ -32,7 +32,7 @@
      command, and the pattern that fires it is the part you have forgotten. */
   function haystack(r) {
     return [
-      r.name, r.pattern, r.mode, r.kind, r.event, r.watch_field, r.value,
+      r.name, r.group, r.pattern, r.mode, r.kind, r.event, r.watch_field, r.value,
       r.kind === 'timer' ? `every ${r.every}s` : '',
       ...(r.actions || []).map((a) => a.text),
       ...(r.conditions || []).map((c) => `${c.field} ${c.value}`),
@@ -186,6 +186,14 @@
     $('f-error').textContent = '';
     $('rule-form-title').textContent = rule ? 'Edit rule' : 'New rule';
     $('f-name').value = (rule && rule.name) || '';
+    $('f-group').value = (rule && rule.group) || '';
+    // The groups there are, to pick from rather than retype.
+    const names = [...new Set(cache.rules.map((r) => r.group).filter(Boolean))].sort();
+    $('f-groups').replaceChildren(...names.map((g) => {
+      const o = document.createElement('option');
+      o.value = g;
+      return o;
+    }));
     $('f-kind').value = (rule && rule.kind) || kind || 'trigger';
     $('f-mode').value = (rule && rule.mode)
       || ((kind || (rule && rule.kind)) === 'alias' ? 'command' : 'contains');
@@ -308,6 +316,7 @@
     return {
       id: editing ? editing.id : '',
       name: $('f-name').value,
+      group: $('f-group').value.trim(),
       kind: $('f-kind').value,
       mode: $('f-mode').value,
       pattern: $('f-pattern').value,
@@ -374,7 +383,7 @@
       list.dataset.empty = q
         ? `Nothing here matches “${q}”.`
         : list.dataset.none || 'Nothing here yet.';
-      for (const r of shown) list.append(card(r));
+      appendGrouped(list, shown);
     }
     if (window.options) window.options.count('scripts', cache.scripts.length);
     renderScripts();
@@ -382,6 +391,53 @@
 
   //: redraw from what we already have -- searching asks the server nothing
   window.renderRules = render;
+
+  /* By group, when there are any: each under a heading that says how many
+     are on and switches the lot, as `/group party on` does; then the rules
+     with no group.  With no groups at all the list is as it always was. */
+  function appendGrouped(list, rules) {
+    const byName = new Map();
+    const loose = [];
+    for (const r of rules) {
+      if (!r.group) { loose.push(r); continue; }
+      const key = r.group.toLowerCase();
+      if (!byName.has(key)) byName.set(key, { name: r.group, rules: [] });
+      byName.get(key).rules.push(r);
+    }
+    if (!byName.size) {
+      for (const r of rules) list.append(card(r));
+      return;
+    }
+    const groups = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    for (const g of groups) {
+      list.append(groupHead(g.name, g.rules));
+      for (const r of g.rules) list.append(card(r));
+    }
+    if (loose.length) {
+      list.append(groupHead('', loose));
+      for (const r of loose) list.append(card(r));
+    }
+  }
+
+  function groupHead(name, rules) {
+    const head = document.createElement('div');
+    head.className = 'rule-group' + (name ? '' : ' loose');
+    const title = document.createElement('b');
+    title.textContent = name || 'no group';
+    const count = document.createElement('span');
+    const on = rules.filter((r) => r.enabled).length;
+    count.textContent = on === rules.length ? `${on} on`
+      : on ? `${on} of ${rules.length} on` : `${rules.length} off`;
+    head.append(title, count);
+    if (name) {
+      // Switches the whole group, not only what a search is showing.
+      const all = cache.rules.filter((r) => (r.group || '').toLowerCase() === name.toLowerCase());
+      const allOn = all.every((r) => r.enabled);
+      head.append(button(allOn ? 'turn off' : 'turn on', () => rq('group', { name, on: !allOn })));
+      head.title = `/group ${name} ${allOn ? 'off' : 'on'} does the same from the input line`;
+    }
+    return head;
+  }
 
   function card(r) {
     const el = document.createElement('div');

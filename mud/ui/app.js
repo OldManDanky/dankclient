@@ -279,6 +279,11 @@ function handle(m) {
     restore(m.lines);
   } else if (m.t === 'state') {
     render(m);
+    if (m.sounds && window.setSounds) window.setSounds(m.sounds);
+  } else if (m.t === 'sounds') {
+    if (window.setSounds) window.setSounds(m.slots, m.error);
+  } else if (m.t === 'play') {
+    if (window.ding) window.ding(m.slot);
   } else if (m.t === 'tell' || m.t === 'chat') {
     if (m.t === 'tell') noteTell(m.d);
     // The MUD prints these in the main output already; echoing them into the

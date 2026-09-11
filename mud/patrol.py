@@ -157,6 +157,13 @@ class Bots:
             except Exception as err:
                 bot.note = f"failed: {err!r}"
                 raise
+            finally:
+                # By itself -- finished, or gave up -- and not because
+                # somebody pressed Stop or Pause: that is what a sound is for.
+                if bot.note != "stopped":
+                    bus = getattr(self.session, "bus", None)
+                    if bus is not None:
+                        bus.emit(events.BOT_ENDED, bot)
 
         bot.task = asyncio.ensure_future(run())
         return bot
