@@ -327,6 +327,7 @@ def test_the_map_is_not_resent_while_it_has_not_changed():
     from mud.web import WebServer
 
     store = Store()
+    store.locked = False                    # so the walking below maps
     session = Session("127.0.0.1", 1, sec_code=12345, store=store)
     web = WebServer.__new__(WebServer)
     web.session = session
@@ -355,7 +356,9 @@ def test_a_page_that_has_just_opened_gets_the_whole_map():
     from mud.store import Store
     from mud.web import WebServer
 
-    session = Session("127.0.0.1", 1, sec_code=12345, store=Store())
+    store = Store()
+    store.locked = False                    # so the walking below maps
+    session = Session("127.0.0.1", 1, sec_code=12345, store=store)
     web = WebServer(session)
     session.mapper.arrived(["n", "e"], ["sky"], at=0.0)
     assert "rooms" in web.snapshot()["map"]

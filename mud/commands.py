@@ -62,8 +62,10 @@ HELP = [
         ('/new', 'rooms found that the imported map did not have'),
         ('/dupes', 'rooms that look like the same place twice'),
         ('/repair', 'drop one-off readings that contradict a room'),
-        ('/lock', 'stop the map growing (an imported map is finished)'),
-        ('/unlock', 'let it add rooms again'),
+        ('/mapsum', 'a summary of your map, to send somebody'),
+        ('/mapcheck <file>', "compare a summary somebody sent with your own"),
+        ('/lock', "stop the map growing (it is 3kdb's, and locked from the start)"),
+        ('/unlock', 'let it add rooms, for mapping somewhere 3kdb does not cover'),
     ]),
     ('The connection', '', [
         ('/js', 're-send the 3klient handshake'),
@@ -297,6 +299,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb == "delay":
         _delay(session, rest, note)
+
+    elif verb in ("mapsum", "mapcheck"):
+        _mapsum(verb, rest, session, note)
 
     elif verb in ("group", "groups"):
         _group(rest, scripts, note)
@@ -660,6 +665,43 @@ def _alias(verb: str, rest: str, scripts, note) -> None:
          + " ; ".join(describe(a) for a in rule.actions))
 
 
+def _mapsum(verb: str, rest: str, session, note) -> None:
+    """Your map in a line, and the same from somebody else.
+
+    Two players cannot hand each other a map -- tens of megabytes, and the
+    file holds that player's session log as well.  A summary is counts,
+    digests and area names, and nothing else, so it is safe to send.
+    """
+    from pathlib import Path
+
+    from . import mapsum
+    from .paths import home
+
+    store = getattr(session, "store", None)
+    if store is None:
+        note("mapping is off (--no-map)")
+        return
+    if verb == "mapsum":
+        got = mapsum.summarize(store)
+        where = Path(rest.strip()) if rest.strip() else home() / "map-summary.json"
+        try:
+            mapsum.write(where, got)
+            said = f"written to {where} -- send that file, and they run /mapcheck on it"
+        except OSError as exc:
+            said = f"could not write it to {where}: {exc}"
+        note("\n".join(mapsum.lines(got) + ["  " + said]))
+        return
+    if not rest.strip():
+        note("usage: /mapcheck <file>   the summary somebody sent you (/mapsum writes yours)")
+        return
+    try:
+        theirs = mapsum.read(Path(rest.strip()).expanduser())
+    except (OSError, ValueError) as exc:
+        note(f"could not read {rest.strip()}: {exc}")
+        return
+    note("\n".join(mapsum.compare(mapsum.summarize(store), theirs)))
+
+
 def _group(rest: str, scripts, note) -> None:
     """Rules switched on and off together, as tt++'s #class does.
 
@@ -777,7 +819,12 @@ def _go(session, text: str, note) -> None:
         note("usage: /go <part of a room name>   e.g. /go center of town")
         return
     if mapper.here is None:
-        note("the map does not know where you are -- walk a room first")
+        # A look is cheaper and safer than the walk this used to ask for, and
+        # it is how the map finds itself again: one room's exits and scenery
+        # are usually a unique fingerprint.  If it does find us, the /go goes
+        # ahead from there rather than making the player type it twice.
+        note("the map does not know where you are -- looking first")
+        events.spawn(_look_then_go(session, text, note), "finding where we are")
         return
 
     # Landmarks first: they are the names a player already types, and "beloch"
@@ -811,6 +858,20 @@ def _go(session, text: str, note) -> None:
     session.travel(room, "speedwalk", name)
     others = "".join(f"\n  also #{i} {n} ({d} steps)" for i, n, d in matches[1:4])
     note(f"walking {len(route)} steps to #{room} {name}{others}")
+
+
+async def _look_then_go(session, text: str, note) -> None:
+    """Look, and if that puts the map right, walk after all."""
+    from .outbound import HIGH
+    from .patrol import LOOK, LOOK_TIMEOUT
+
+    mapper = session.mapper
+    session.queue.put(LOOK, HIGH)
+    await session.bus.wait(events.ROOM, LOOK_TIMEOUT)
+    if mapper.here is None:
+        note("still lost -- walk a room or two, or /bind <where you are>")
+        return
+    _go(session, text, note)
 
 
 def _regions(session, note) -> None:

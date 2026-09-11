@@ -447,7 +447,11 @@ class RouteStore:
             return False
         if self.paused.pop(route.id, None) is not None:
             self._save_paused()
-        return self.host.bots.stop(route.name)
+        # A background update owns this store on its own thread and has no
+        # Bots at all -- nothing is running there, so there is nothing to
+        # stop, and deleting a route must not depend on there being one.
+        bots = getattr(self.host, "bots", None)
+        return bots.stop(route.name) if bots is not None else False
 
     def _follow(self, room, steps) -> int | None:
         """Where a path leads on the map, or None if the map cannot follow it."""

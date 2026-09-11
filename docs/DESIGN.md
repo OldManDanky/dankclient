@@ -63,11 +63,18 @@ holds 49,494 rooms, 144,768 exits and 777 areas, and loads in three seconds::
         --into map.sqlite --speedruns ~/3kdbimport/speedruns.tin
 
 Room numbers are kept as room ids, because the speedrun list and years of
-scripts refer to them.  An imported map is **locked**: it is corrected, never
-grown.  A room it does not contain is far likelier to be one the client failed
-to recognise than a room that does not exist, and adding it makes a duplicate
-nothing will ever join up.  The exception is a room whose *name* the map has
-never heard of, which 3K does gain; those are tagged and `/new` lists them.
+scripts refer to them.  The map is **locked from the start**: it is corrected,
+never grown.  A room it does not contain is far likelier to be one the client
+failed to recognise than a room that does not exist, and adding it makes a
+duplicate nothing will ever join up -- one the router will happily walk you
+into and then be lost in.  There is no exception, not even for a room whose
+*name* the map has never heard of: 3K does gain rooms, but they arrive through
+**Options -> Updates** when 3kdb has them, not by being guessed at while
+walking.  Not recognising a room is a thing the client says out loud and
+recovers from in a step or two; a room it invented is silent and permanent.
+
+`/unlock` is there for anybody mapping somewhere the import does not cover,
+and everything that grows a map still works behind it.
 
 What is deliberately not imported is any claim about what a room looks like.
 tt++ identifies rooms by matching descriptions; this client identifies them by
@@ -656,6 +663,32 @@ by room from wherever the map says it is.  A step that produces nothing is
 block at all -- and a way out that really does not work is remembered, so
 routing stops choosing it.
 
+And because what was sent cannot be taken back, a long stack does not all go
+at once.  A route worked out from the wrong room is a walk into the wrong
+part of the world, and the whole path at once is forty moves of it before
+anything notices; the map is at its least sure exactly when nothing has moved
+for a while, which is when somebody types `/go`.  So two things bound it.
+A walk **looks first** -- unless a room block arrived in the last three
+seconds, in which case the map has just been told -- and works the route out
+from where the look puts us.  Then the stack goes out **eight commands at a
+time**, and each chunk is checked against the room the map says it should
+have reached before the next one is sent.  A chunk that lands somewhere else
+stops the rest, and the room-by-room walk takes over.
+
+A chunk is whole *steps*, never half of one.  725 edges in 3kdb's map are
+compound -- `lift grate;d`, `push button;s`, `unlock west door;open west
+door;w` -- one step of the route and two or three commands on the wire.  The
+map knows where the step goes; it does not know where `lift grate` alone
+goes.  Cut a chunk through the middle of one and it has nothing to check
+itself against, and the first compound way out on a path used to blind every
+check after it.
+
+`/go` when the map is lost **looks** rather than refusing.  It used to say
+"walk a room first", which is asking the player to do by hand, with a move,
+what a look does for free: a room's exits and scenery are usually a unique
+fingerprint.  If the look finds us the walk goes ahead; if it does not, then
+it says so.
+
 ### The Bot panel, and pausing
 
 The sidebar's Bot panel starts, pauses and stops a route without opening
@@ -1009,6 +1042,37 @@ named is left alone.  Both were measured before they were trusted, against a
 map that had been played on: a plain re-import duplicated every region, reset
 every visit count, wiped every fingerprint learned by walking and put a room
 renamed by hand back to the name tt++ gave it.
+
+### Fresh copy
+
+Only adding is right for an update and cannot fix anything that is already
+*wrong*: an importer that has been corrected since, or rooms an older client
+invented back when the map could still grow.  So **Fresh copy** drops this
+client's copy of what is ticked and takes 3kdb's as it stands.  It is two
+presses -- the button arms and says what it costs -- and it costs what this
+client added to those things: names set by hand, visit counts, exits learned
+by walking, and 3kdb's own routes as you have edited them.  Routes 3kdb's
+listing does not name are yours and are not touched.
+
+Nothing is dropped until the download has succeeded, so it cannot leave you
+with neither copy; and a fresh copy of something the repository no longer has
+is refused outright rather than dropping what we have and putting nothing
+back.
+
+**The session log survives it.**  `line.room_id` is `ON DELETE SET NULL`, so
+deleting a room quietly unfiles every line logged in it -- 28,824 of 33,412
+lines in the development map are filed under a room.  But 3kdb's room numbers
+*are* this map's room ids, so a line filed under room 4213 belongs under room
+4213 again the moment the map is back: the filing is read before the drop and
+written back after the import, for every room the new map still has.  Measured
+on that map: 33,412 lines in and 33,412 out, 28,672 refiled, and the 152 that
+lost their room had been filed in rooms 3kdb does not have -- which is the
+invented-room case, and the right answer for it.
+
+The same run rebuilt 49,496 rooms into 51,720.  The extra 2,224 are rooms
+tt++ never caught a name for, which the importer used to throw away and now
+keeps -- a correction no merge could ever have delivered, which is the whole
+argument for the button.
 
 Exits carrying TinTin++ directives are filtered on the way in -- `#map goto
 $puddle_room` moves tt++'s own cursor and typed at 3K means nothing while still

@@ -24,6 +24,7 @@ def session_with_store():
     from mud.session import Session
 
     store = Store()
+    store.locked = False                    # so the walking below maps
     s = Session("127.0.0.1", 1, sec_code=12345, store=store)
     s._writer = FakeWriter()
     return s, store

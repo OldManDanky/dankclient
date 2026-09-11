@@ -40,7 +40,8 @@ from .store import Store, personal
 #: median, comfortably past the observed maximum, and well under the 2s tick.
 WINDOW = 1.0
 
-#: Rooms added to a locked map: 3K has gained them since it was written.
+#: Rooms added to a locked map before it stopped growing at all; `/new`
+#: still lists them, and an update is what brings 3K's new rooms in now.
 #: Tagged rather than silently blended in, so they can be looked over and, if
 #: they are right, fed back to whatever made the map.
 NEW = "new"
@@ -91,6 +92,10 @@ class Mapper:
         #: did not move, rather than that we walked somewhere identical.
         self._verifying = False
         self._pending: deque[tuple[float, str]] = deque()
+        #: When a room block last settled.  A walk confirms where it is
+        #: before setting off, but not when a room has only just arrived:
+        #: the map is at its least sure when nothing has come for a while.
+        self.settled_at: float | None = None
         #: Set while a whole path is being sent at once.  3K runs a stack of
         #: moves back to back -- six rooms came back in 0.07s -- so each one's
         #: reply is due when the one before it has arrived, not when it was
@@ -113,6 +118,7 @@ class Mapper:
         exits, scenery = list(exits), list(scenery)
         ways = self._ways_out()          # of the room we are leaving, not this one
         self._last_exits = exits
+        self.settled_at = time.time()
 
         verifying, self._verifying = self._verifying, False
         if verifying and self._pending:
@@ -280,20 +286,12 @@ class Mapper:
         hits = [r for r, score in self.store.candidates(exits, scenery)
                 if score == 1.0]
         if len(hits) != 1 and self.store.locked:
-            # A locked map still has to be able to learn: 3K gains rooms, and
-            # a map that can never grow goes stale.  The distinction is in the
-            # name.  A room whose name the map has never heard of is genuinely
-            # new -- we knew where we were, we walked, and this is somewhere
-            # else.  A room whose name the map *does* have, that still did not
-            # match, is far likelier to be a failure to recognise it, and
-            # adding it would make the duplicate this lock exists to prevent.
-            if name and not self.store.by_name(name):
-                target = self.store.add_room(name, now)
-                self.store.tag(target, NEW)
-                self._record(target, exits, scenery, name, now)
-                self._join(here, cmd, target, now, ways)
-                self.here = target
-                return target
+            # A locked map does not grow, not even for a room whose name it
+            # has never heard of.  The map is 3kdb's and stays 3kdb's: what
+            #3K has gained comes in through Options -> Updates, not from a
+            # guess made while walking, which is how duplicates got in that
+            # nothing ever joins up.  Not recognising a room is being lost,
+            # and being lost resolves itself as you walk.
             self._was, self.here, self.candidates = here, None, []
             return self._locate(exits, scenery, now, name=name)
         target = hits[0] if len(hits) == 1 else self.store.add_room(name, now)

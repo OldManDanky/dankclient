@@ -311,13 +311,85 @@ def _unpack(blob: bytes, into: Path) -> Path:
     return into
 
 
+def _drop_map(store) -> list[tuple[int, int]]:
+    """Empty the map, and hand back the log's filing so it can be put back.
+
+    Deleting a room sets its logged lines' room to NULL on the way out, and
+    28,824 of them were filed under one here.  3kdb's room numbers are this
+    map's room ids, so a line filed under room 4213 belongs under room 4213
+    again the moment the map is back -- but nothing puts it there by itself.
+    """
+    db = store.db
+    filed = [(int(r["id"]), int(r["room_id"])) for r in db.execute(
+        "SELECT id, room_id FROM line WHERE room_id IS NOT NULL")]
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        # Exits, fingerprints, marks and landmarks all hang off room and go
+        # with it; regions are not reachable from a room and are not cascaded.
+        db.execute("DELETE FROM room")
+        db.execute("DELETE FROM region")
+        db.execute("COMMIT")
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    return filed
+
+
+def _refile(store, filed: list[tuple[int, int]]) -> int:
+    """Put the log's filing back, for the rooms the new map still has.
+
+    A line whose room is not in the map any more keeps no room, and that is
+    the right answer: it was filed under a room an older client invented
+    while walking, which is one of the reasons to be taking a fresh copy.
+    """
+    db = store.db
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        db.executemany(
+            "UPDATE line SET room_id = ? WHERE id = ? AND EXISTS "
+            "(SELECT 1 FROM room WHERE room.id = ?)",
+            [(room, line, room) for line, room in filed])
+        db.execute("COMMIT")
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    return int(db.execute("SELECT COUNT(*) c FROM line "
+                          "WHERE room_id IS NOT NULL").fetchone()["c"])
+
+
+def _drop_routes(routes, root: Path) -> int:
+    """Remove the routes 3kdb's own listing names, so they come back as 3kdb
+    has them.  A route of your own that it does not name is left alone."""
+    listing = Path(root) / "common" / "bot" / "bots.tin"
+    if not listing.exists():
+        return 0
+    from .tintin import read_add_bot
+    theirs = set()
+    for line in listing.read_text(encoding="latin-1").splitlines():
+        got = read_add_bot(line)
+        if got is not None:
+            theirs.add(got["alias"] or got["file"])
+    gone = [r.id for r in routes.routes if r.name in theirs]
+    for route_id in gone:
+        routes.delete(route_id)
+    return len(gone)
+
+
 def pull(store, routes, want=None, into: Path | None = None,
-         timeout: float = 300.0, note=None) -> dict:
+         timeout: float = 300.0, note=None, fresh: bool = False) -> dict:
     """Fetch 3kdb and merge what was asked for.  Returns what it did.
 
     `want` is the keys from `check()`; everything by default.  Whatever is
     downloaded, only what is asked for is imported: the map takes a while and
     there is no reason to redo it because a route file moved.
+
+    `fresh` throws this client's copy away first and takes 3kdb's as it
+    stands, rather than merging on top.  An ordinary update only ever adds,
+    which is right for an update and cannot fix anything that is already
+    wrong: an importer that has been corrected since, or rooms an older
+    client invented while the map could still grow.  What that costs is on
+    the panel before it runs.  Note the order -- nothing is dropped until the
+    download has succeeded, so a fresh copy cannot leave you with neither.
     """
     said = note or (lambda _text: None)
     want = set(want if want is not None else WANTED)
@@ -337,16 +409,32 @@ def pull(store, routes, want=None, into: Path | None = None,
         if "map" in want and store is not None:
             path = root / WANTED["map"]
             if path.exists():
-                said(f"merging the map ({path.stat().st_size // 1024}k)...")
-                done["did"]["map"] = import_map(store, path, merge=True)
+                filed = None
+                if fresh:
+                    said("dropping this client's copy of the map...")
+                    filed = _drop_map(store)
+                said(f"{'rebuilding' if fresh else 'merging'} the map "
+                     f"({path.stat().st_size // 1024}k)...")
+                got = import_map(store, path, merge=not fresh)
+                if filed is not None:
+                    got["refiled"] = _refile(store, filed)
+                    got["unfiled"] = len(filed) - got["refiled"]
+                done["did"]["map"] = got
         if "speedruns" in want and store is not None:
             path = root / WANTED["speedruns"]
             if path.exists():
+                if fresh:
+                    # Every landmark came from this file; a dropped map has
+                    # taken them with it already, and this is for when it was
+                    # not asked for.
+                    store.db.execute("DELETE FROM landmark")
                 added, missing = import_speedruns(store, path)
                 done["did"]["speedruns"] = {"added": added,
                                             "missing": len(missing)}
         if "bots" in want and routes is not None:
+            dropped = _drop_routes(routes, root) if fresh else 0
             done["did"]["bots"] = import_bots(routes, root)
+            done["did"]["bots"]["dropped"] = dropped
         if "gags" in want and routes is not None:
             from .gaglib import LIBRARY, import_gags
             done["did"]["gags"] = import_gags(
@@ -357,12 +445,16 @@ def pull(store, routes, want=None, into: Path | None = None,
     return done
 
 
-def sync(store, routes, want=None, note=None) -> dict:
+def sync(store, routes, want=None, note=None, fresh: bool = False) -> dict:
     """Check, take what has changed, and write down what was taken.
 
     The order matters at the end: what we imported is recorded only once the
     import worked.  Recording first and failing second is how an update quietly
     never happens again.
+
+    `fresh` takes 3kdb's copy over this client's rather than merging on top,
+    and is asked for by name: a fresh copy of something already up to date is
+    the whole point of it, so "nothing has changed" is not a reason to stop.
     """
     said = note or (lambda _text: None)
     got = check(store)
@@ -370,12 +462,16 @@ def sync(store, routes, want=None, note=None) -> dict:
         return {"error": got["error"], "did": {}, "items": {}, "changed": []}
 
     keys = list(want) if want is not None else list(got["changed"])
+    if fresh:
+        # Only what is actually in the repository: a fresh copy of something
+        # that is not there would drop the copy we have and put nothing back.
+        keys = [k for k in keys if got["items"].get(k, {}).get("there")]
     if not keys:
         return {"error": "", "did": {}, "items": got["items"],
                 "changed": got["changed"], "nothing": True}
 
-    said(f"taking: {', '.join(keys)}")
-    done = pull(store, routes, want=keys, note=said)
+    said(f"{'taking a fresh copy of' if fresh else 'taking'}: {', '.join(keys)}")
+    done = pull(store, routes, want=keys, note=said, fresh=fresh)
     if done.get("error"):
         return {"error": done["error"], "did": {}, "items": got["items"],
                 "changed": got["changed"]}
@@ -406,7 +502,8 @@ def never_run(store) -> bool:
     return not rooms
 
 
-def on_a_thread(store_path, routes_path, want=None, note=None) -> dict:
+def on_a_thread(store_path, routes_path, want=None, note=None,
+                fresh: bool = False) -> dict:
     """A sync on connections this thread owns, for asyncio.to_thread.
 
     sqlite3 refuses a connection across threads, and rightly: the file is the
@@ -426,7 +523,7 @@ def on_a_thread(store_path, routes_path, want=None, note=None) -> dict:
         theirs = RouteStore(Bare(), routes_path)
         theirs.load()
     try:
-        return sync(mine, theirs, want=want, note=note)
+        return sync(mine, theirs, want=want, note=note, fresh=fresh)
     finally:
         if mine is not None:
             mine.close()

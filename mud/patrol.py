@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
@@ -50,6 +51,20 @@ MOVE_TIMEOUT = 3.0
 #: A stacked walk: allowance per step on top of MOVE_TIMEOUT.  3K runs a
 #: stack back to back (six rooms in 0.07s), so this is generous.
 STACK_STEP = 0.05
+#: How many steps of a stacked walk go out before it checks where it is.  The
+#: whole path at once is fastest, and is also how a walk from a room the map
+#: had wrong sent forty moves into the wrong part of the world.  A check every
+#: few steps costs one settle per chunk and bounds what a wrong start can do.
+STACK_CHUNK = 8
+#: A walk looks first to be sure where it is -- unless a room has arrived
+#: this recently, in which case the map has just been told.
+FRESH = 3.0
+
+
+def _len(step: str) -> int:
+    """How many commands one route step is.  Compound edges -- "lift grate;d"
+    -- are one step of the route and two commands on the wire."""
+    return max(1, sum(1 for p in step.split(";") if p.strip()))
 
 #: A kill command that has not started a fight in this many seconds did not
 #: take.  Once one has started there is no limit: some of 3K's creatures take
@@ -316,33 +331,89 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         await gate()
         # The bot is left alone: this may be a route walking to its start or
         # back to a pause, and those steps are not the route's own.
-        commands = [p.strip() for step in route for p in step.split(";")
-                    if p.strip()]
-        mapper.stacking = True
-        try:
-            for command in commands:
-                session.queue.auto_now(command)
-        finally:
-            mapper.stacking = False
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + MOVE_TIMEOUT + STACK_STEP * len(commands)
-        while mapper.here != dest:
-            left = deadline - loop.time()
-            if left <= 0:
+        steps = list(route)
+        at = 0
+        while at < len(steps):
+            # A chunk is whole steps, never part of one.  725 edges in 3kdb's
+            # map are compound -- "lift grate;d", "unlock west door;open west
+            # door;w" -- and the map knows where the step goes, not where its
+            # first half goes, so cutting one in two is what blinds the check.
+            # A step longer than a chunk still goes as one chunk.
+            chunk, count = [], 0
+            while at < len(steps) and (not chunk or count + _len(steps[at]) <= STACK_CHUNK):
+                chunk.append(steps[at])
+                count += _len(steps[at])
+                at += 1
+            # Where this chunk should leave us, worked out from where we are
+            # now rather than from a guess made before the first command went
+            # out: each chunk predicts from ground the last one confirmed.
+            want = mapper.here
+            for step in chunk:
+                want = (mapper.store.destination(want, step)
+                        if want is not None else None)
+            mapper.stacking = True
+            try:
+                for step in chunk:
+                    for part in step.split(";"):
+                        if part.strip():
+                            session.queue.auto_now(part.strip())
+            finally:
+                mapper.stacking = False
+            deadline = loop.time() + MOVE_TIMEOUT + STACK_STEP * count
+            while True:
+                if want is not None and mapper.here == want:
+                    break
+                left = deadline - loop.time()
+                if left <= 0:
+                    break
+                room = await bus.wait(events.ROOM, min(left, 0.5))
+                if room is None and want is None:
+                    # Nothing to recognise arriving, and the rooms have
+                    # stopped coming: whatever this chunk did, it has
+                    # finished doing it, and the next one can predict from
+                    # wherever it left us.
+                    break
+            if want is not None and mapper.here != want:
+                # Not where this chunk should have left us.  What is already
+                # sent cannot be taken back; the rest can be, and is.
                 break
-            await bus.wait(events.ROOM, min(left, 0.5))
-        else:
+        if mapper.here == dest:
             return True
         # Silence does not mean the last step went nowhere: a teleport sends
         # no room.  With the map one step short, look before anything goes out
         # again -- walking that step again from where it had really taken us
         # sent "embrace void" a second time, from the temple doorway.
-        if commands and mapper.route(dest) == [commands[-1]]:
-            mapper.expect(commands[-1])
+        if steps and mapper.route(dest) == [steps[-1]]:
+            # The part of the step that moves, which for "lift grate;d" is
+            # the "d" -- and comparing the whole step is why a compound edge
+            # used never to reach this at all.
+            parts = [p.strip() for p in steps[-1].split(";") if p.strip()]
+            mapper.expect(parts[-1] if parts else steps[-1])
             await gate()
             session.queue.put(LOOK, HIGH)
             await bus.wait(events.ROOM, LOOK_TIMEOUT)
         return mapper.here == dest
+
+    async def confirm() -> bool:
+        """Look, so the map is sure where we are before a walk sets off.
+
+        A route worked out from the wrong room is a walk into the wrong part
+        of the world -- and the map is at its least sure exactly when nothing
+        has moved for a while, which is when somebody types /go.
+        """
+        mapper = getattr(session, "mapper", None)
+        if mapper is None:
+            return False
+        settled = mapper.settled_at
+        if (mapper.here is not None and settled is not None
+                and time.time() - settled < FRESH):
+            return True                 # a room has just arrived: we know
+        check()
+        await gate()
+        session.queue.put(LOOK, HIGH)
+        await bus.wait(events.ROOM, LOOK_TIMEOUT)
+        return mapper.here is not None
 
     async def travel(dest: int, name: str = "speedwalk", tries: int = 4):
         """Walk to a room, working around ways out that turn out not to work.
@@ -360,8 +431,10 @@ def make_api(session, bots: Bots, owner: str) -> dict:
             return False
         # The whole way at once first; walking it room by room is for when
         # that did not get there, and is what finds and marks a bad way out.
-        if mapper.here != dest:
-            first = mapper.route(dest)
+        if mapper.here != dest and mapper.route(dest):
+            if not await confirm():
+                return False            # lost: walking now is walking blind
+            first = mapper.route(dest)  # worked out from where the look put us
             if first and await dash(first, dest, name):
                 return True
         for _ in range(tries):

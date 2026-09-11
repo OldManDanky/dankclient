@@ -672,7 +672,8 @@ class WebServer:
             return
 
         want = [k for k in (msg.get("want") or []) if k in update.WANTED]
-        self.push({"t": "update", "op": "working",
+        fresh = bool(msg.get("fresh"))
+        self.push({"t": "update", "op": "working", "fresh": fresh,
                    "want": want or list(update.WANTED)})
 
         path = getattr(store, "path", None)
@@ -682,7 +683,8 @@ class WebServer:
 
         try:
             got = await asyncio.to_thread(
-                update.on_a_thread, path, where, want or None, said.append)
+                update.on_a_thread, path, where, want or None, said.append,
+                fresh)
         except Exception as exc:
             log("update failed:\n" + traceback.format_exc())
             got = {"error": f"{type(exc).__name__}: {exc}", "did": {}}
@@ -700,6 +702,16 @@ class WebServer:
                 self.push(self._routes_msg(routes))
             self._map_centre = None        # the drawn view may be stale now
             self._dirty = True
+            mapper = getattr(self.session, "mapper", None)
+            if (fresh and mapper is not None and mapper.here is not None
+                    and store is not None and store.room(mapper.here) is None):
+                # The room we were standing in is not in 3kdb's map: an older
+                # client invented it while walking, and the fresh copy has
+                # taken it away.  Better lost and saying so than standing in
+                # a room that no longer exists.
+                mapper.here, mapper.candidates = None, []
+                self.note("the room you were standing in was not 3kdb's -- "
+                          "the map is looking for you again")
             for line in said:
                 self.note(line)
         except Exception:

@@ -265,7 +265,10 @@ def test_a_route_walks_to_its_start_before_it_begins():
         async def scenario():
             host.routes.start(route.id)
             await asyncio.sleep(0)
-            assert s.sent == ["s"]          # walking to the start, not the path
+            assert s.sent == ["l"], "a look first, to be sure where it is"
+            arrive(s, m, away)
+            await asyncio.sleep(0.01)
+            assert s.sent[1:] == ["s"]      # walking to the start, not the path
 
         asyncio.new_event_loop().run_until_complete(scenario())
 
@@ -369,10 +372,13 @@ def test_resume_walks_back_to_that_room_and_carries_on():
 
             assert host.routes.start(route.id, resume=True) is None
             await asyncio.sleep(0)
-            assert s.sent == ["n"], "back to where it paused"
+            assert s.sent == ["l"], "a look first, to be sure where it is"
+            arrive(s, m, a)
+            await asyncio.sleep(0.01)
+            assert s.sent[1:] == ["n"], "back to where it paused"
             arrive(s, m, b)
             await asyncio.sleep(0.01)
-            assert s.sent == ["n", "e"], "then the next step, not the first"
+            assert s.sent[1:] == ["n", "e"], "then the next step, not the first"
             arrive(s, m, c)
             await asyncio.sleep(0.05)
             bot = host.bots.bots["line"]

@@ -10,6 +10,7 @@ The program is in `%LOCALAPPDATA%\Programs\Dank Mud Client`. Updating or reinsta
 
 - **The client**: [Options → About](options:about) says when a new version is out. Run the new installer; you do not need to close the client first.
 - **The map and routes**: [Options → Updates](options:updates) takes what has changed in 3kdb. It only adds.
+- **Fresh copy**, on the same screen, is the other way round: it drops your copy of what you tick and takes 3kdb's as it stands. Use it when the map is wrong rather than out of date. It costs room names you set, visit counts, exits you learned by walking, and 3kdb's own routes as you have edited them. Your own routes and your whole session log are kept. It takes two presses, and the button says what it will do before the second one.
 
 ## When something is wrong
 

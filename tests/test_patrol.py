@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import sys
 from pathlib import Path
 
@@ -310,13 +311,17 @@ def test_travel_sends_the_whole_way_at_once_and_the_map_follows():
     async def scenario():
         trip = asyncio.ensure_future(api["travel"](d))
         await asyncio.sleep(0)
-        assert s.sent == ["n", "n", "e"], "all of it, before any room came back"
+        assert s.sent == ["l"], "a look first: the map must be sure where it is"
+        s._consume(mip("DDD", "n") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))
+        await asyncio.sleep(0.05)
+        assert s.sent[1:] == ["n", "n", "e"], "then all of it, before any room came back"
         for exits in ("s~n", "s~e", "w"):
             s._consume(mip("DDD", exits) + mip("HAB", "noun~sky~sky~exa #N"))
         s._consume(mip("FFF", "A~100"))           # settles the last one
         assert await asyncio.wait_for(trip, 2) is True
         assert m.here == d
-        assert s.sent == ["n", "n", "e"], "and nothing sent after it"
+        assert s.sent[1:] == ["n", "n", "e"], "and nothing sent after it"
 
     run(scenario())
 
@@ -385,9 +390,10 @@ def test_a_stack_that_does_not_arrive_walks_the_rest():
         async def scenario():
             ok = await asyncio.wait_for(api["travel"](b, tries=1), 4)
             assert ok is False
-            assert s.sent[0] == "n", "the stack went first"
-            assert s.sent[1] == "l", "then a look, in case it had got there"
-            assert s.sent[2:] == ["n", "l"], "then a step, looked at"
+            assert s.sent[0] == "l", "a look first, to be sure where it is"
+            assert s.sent[1] == "n", "then the stack"
+            assert s.sent[2] == "l", "then a look, in case it had got there"
+            assert s.sent[3:] == ["n", "l"], "then a step, looked at"
             assert store.exits_from(a)[0]["failed"], "and the bad way marked"
 
         run(scenario())
@@ -458,8 +464,11 @@ def test_a_stack_ending_in_a_teleport_looks_before_sending_it_again():
 
         async def scenario():
             trip = asyncio.ensure_future(api["travel"](b))
+            await asyncio.sleep(0)
+            assert s.sent == ["l"], "a look first: the map must be sure where it is"
+            s._consume(mip("DDD", "e~w") + b"\r\n>\r\n")      # still in Eastwick
             await asyncio.sleep(0.3)                     # the stack times out
-            assert s.sent == ["embrace void", "l"], "looked, sent nothing again"
+            assert s.sent[1:] == ["embrace void", "l"], "looked, sent nothing again"
             s._consume(mip("DDD", "doorway~leave") + b"\r\n>\r\n")
             assert await asyncio.wait_for(trip, 2) is True
             assert m.here == b
@@ -468,3 +477,156 @@ def test_a_stack_ending_in_a_teleport_looks_before_sending_it_again():
         run(scenario())
     finally:
         patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was
+
+
+# --- a walk checks where it is, and checks as it goes ---------------------------
+
+def test_a_walk_looks_first_and_routes_from_where_the_look_puts_it():
+    """A tester's map had him in the shop while he stood in the town square;
+    /go then worked out a route from the shop and sent the lot.  A walk looks
+    first now, and works the route out from what the look says."""
+    s, bots, api = build()
+    store, m, (square, shop, bank) = corridor(
+        s, [("Square", ["n", "e"]), ("Shop", ["w"]), ("Bank", ["s"])])
+    store.link(square, "n", bank)
+    store.link(shop, "w", square)
+    m.here = shop                                  # wrong: he is in the square
+    s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+    async def scenario():
+        trip = asyncio.ensure_future(api["travel"](bank))
+        await asyncio.sleep(0)
+        assert s.sent == ["l"], "a look before anything is sent"
+        s._consume(mip("DDD", "n~e") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))            # the square, where he really is
+        await asyncio.sleep(0.05)
+        assert m.here == square, "the look put the map right"
+        assert s.sent[1:] == ["n"], "and the route is the one from here"
+        s._consume(mip("DDD", "s") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))
+        assert await asyncio.wait_for(trip, 2) is True
+        assert m.here == bank
+
+    run(scenario())
+
+
+def test_a_long_walk_goes_out_in_chunks_and_is_checked_as_it_goes():
+    """Sending forty steps at once from a room the map had wrong is forty
+    moves into the wrong part of the world.  A chunk at a time bounds it."""
+    import mud.patrol as patrol
+
+    s, bots, api = build()
+    names = [(f"Room {i}", ["n", "s"]) for i in range(12)]
+    store, m, rooms = corridor(s, names)
+    for i in range(11):
+        store.link(rooms[i], "n", rooms[i + 1])
+    m.here = rooms[0]
+    m.settled_at = time.time()                     # a room has just arrived
+    s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+    async def scenario():
+        trip = asyncio.ensure_future(api["travel"](rooms[11]))
+        await asyncio.sleep(0.05)
+        assert len(s.sent) == patrol.STACK_CHUNK, f"a chunk, not all eleven: {s.sent}"
+        for _ in range(patrol.STACK_CHUNK):        # the rooms of the first chunk
+            s._consume(mip("DDD", "n~s") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))
+        await asyncio.sleep(0.05)
+        assert m.here == rooms[patrol.STACK_CHUNK], "the map followed the chunk"
+        assert len(s.sent) > patrol.STACK_CHUNK, "and the rest followed it"
+        trip.cancel()
+
+    run(scenario())
+
+
+def test_a_chunk_that_lands_somewhere_else_stops_the_rest():
+    """What is sent cannot be taken back; what is not sent can be."""
+    import mud.patrol as patrol
+
+    was = patrol.MOVE_TIMEOUT
+    patrol.MOVE_TIMEOUT = 0.05
+    try:
+        s, bots, api = build()
+        names = [(f"Room {i}", ["n", "s"]) for i in range(12)]
+        store, m, rooms = corridor(s, names)
+        for i in range(11):
+            store.link(rooms[i], "n", rooms[i + 1])
+        m.here = rooms[0]
+        m.settled_at = time.time()
+        s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+        async def scenario():
+            trip = asyncio.ensure_future(api["travel"](rooms[11], tries=1))
+            await asyncio.sleep(0.05)
+            sent = len(s.sent)
+            assert sent == patrol.STACK_CHUNK
+            await asyncio.sleep(0.3)               # nothing comes back at all
+            assert len(s.sent) <= sent + 2, "the rest of the stack was not sent"
+            trip.cancel()
+
+        run(scenario())
+    finally:
+        patrol.MOVE_TIMEOUT = was
+
+
+def test_a_compound_way_out_goes_out_as_its_parts_and_is_still_followed():
+    """725 edges in 3kdb's map are compound: "lift grate;d", "push button;s",
+    "unlock west door;open west door;w".  One step of the route, two or three
+    commands on the wire."""
+    s, bots, api = build()
+    store, m, (a, b, c) = corridor(
+        s, [("A", ["n"]), ("B", ["grate"]), ("C", ["u"])])
+    store.link(a, "n", b)
+    store.link(b, "lift grate;d", c)
+    m.here = a
+    m.settled_at = time.time()                     # a room has just arrived
+    s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+    async def scenario():
+        trip = asyncio.ensure_future(api["travel"](c))
+        await asyncio.sleep(0.05)
+        assert s.sent == ["n", "lift grate", "d"], s.sent
+        s._consume(mip("DDD", "grate") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("DDD", "u") + mip("HAB", "noun~sky~sky~exa #N"))
+        s._consume(mip("FFF", "A~100"))
+        assert await asyncio.wait_for(trip, 2) is True
+        assert m.here == c
+
+    run(scenario())
+
+
+def test_a_compound_way_out_does_not_blind_the_check():
+    """A chunk is whole steps, never half of one.  Cut into commands, the map
+    cannot say where "lift grate" alone goes, so a chunk holding one had
+    nothing to check itself against -- and the rest of the walk, forty steps
+    of it, went out without ever being checked again."""
+    import mud.patrol as patrol
+
+    was = patrol.MOVE_TIMEOUT
+    patrol.MOVE_TIMEOUT = 0.05
+    try:
+        s, bots, api = build()
+        names = [(f"Room {i}", ["n", "s"]) for i in range(12)]
+        store, m, rooms = corridor(s, names)
+        for i in range(11):
+            # The third way out is a grate, so the first chunk has to hold a
+            # step that is two commands.
+            store.link(rooms[i], "lift grate;d" if i == 2 else "n", rooms[i + 1])
+        m.here = rooms[0]
+        m.settled_at = time.time()
+        s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+        async def scenario():
+            trip = asyncio.ensure_future(api["travel"](rooms[11], tries=1))
+            await asyncio.sleep(0.05)
+            sent = len(s.sent)
+            assert "lift grate" in s.sent, s.sent
+            assert sent <= patrol.STACK_CHUNK, f"one chunk of commands: {s.sent}"
+            await asyncio.sleep(0.4)               # nothing comes back at all
+            assert len(s.sent) <= sent + 2, \
+                f"the rest of the walk was sent unchecked: {s.sent}"
+            trip.cancel()
+
+        run(scenario())
+    finally:
+        patrol.MOVE_TIMEOUT = was

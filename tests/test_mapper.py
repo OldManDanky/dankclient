@@ -15,7 +15,10 @@ from walk_fixture import WALK  # noqa: E402
 
 
 def fresh():
+    """A map that may grow: the client's own is locked (it is 3kdb's), and
+    this is what /unlock leaves you with -- where the growing is tested."""
     store = Store()
+    store.locked = False
     return store, Mapper(store)
 
 
@@ -288,6 +291,7 @@ def test_a_session_maps_as_the_bytes_arrive():
         def write(self, data): pass
 
     store = Store()
+    store.locked = False                    # so the walking below maps
     s = Session("127.0.0.1", 1, sec_code=12345, store=store)
     s._writer = FakeWriter()
 
@@ -320,6 +324,7 @@ def test_a_room_with_nothing_in_it_is_still_mapped():
         def write(self, data): pass
 
     store = Store()
+    store.locked = False                    # so the walking below maps
     s = Session("127.0.0.1", 1, sec_code=12345, store=store)
     s._writer = FakeWriter()
 
@@ -645,25 +650,35 @@ def test_a_name_that_matches_nothing_still_leaves_you_lost():
     assert m.arrived(["n"], [], name="Nowhere at all", at=0.0) is None
 
 
-def test_a_locked_map_learns_a_room_it_has_never_heard_of():
-    """3K gains rooms.  'The Chapel of the Three Kingdoms' is in no version of
-    Player's map, and a map that can never grow goes stale."""
-    from mud.mapper import NEW
+def test_a_map_is_locked_before_anybody_says_so():
+    """A tester's client put him in the wrong room and then walked him
+    somewhere else entirely.  A map that grows while you walk is how the wrong
+    room gets there, and nobody thinks to lock a map they were not told was
+    open."""
+    store = Store()
+    assert store.locked is True, "a map nobody has touched is 3kdb's"
+    store.locked = False
+    assert store.locked is False, "and /unlock still opens it"
 
+
+def test_a_locked_map_does_not_grow_even_for_a_room_it_has_never_heard_of():
+    """The map is 3kdb's and stays 3kdb's: what 3K has gained comes in
+    through Options -> Updates, not from a guess made while walking.  Not
+    recognising a room is being lost, and being lost resolves itself."""
     store, m = fresh()
     here = store.add_room("Lord's promenade")
     store.observe(here, ["n", "s", "w"], [])
     store.locked = True
     m.arrived(["n", "s", "w"], [], name="Lord's promenade", at=0.0)
+    rooms = store.db.execute("SELECT count(*) FROM room").fetchone()[0]
 
     m.sent("w", at=1.0)
     found = m.arrived(["w"], ["pews"],
                       name="The Chapel of the Three Kingdoms", at=1.1)
 
-    assert found is not None
-    assert store.room(found)["name"] == "The Chapel of the Three Kingdoms"
-    assert [r["id"] for r in store.tagged(NEW)] == [found]
-    assert store.destination(here, "w") == found
+    assert found is None, "lost, rather than a room invented"
+    assert store.db.execute("SELECT count(*) FROM room").fetchone()[0] == rooms
+    assert store.destination(here, "w") is None, "and no edge to it either"
 
 
 def test_a_locked_map_does_not_learn_a_name_it_already_knows():

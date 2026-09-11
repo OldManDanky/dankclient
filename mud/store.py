@@ -257,13 +257,15 @@ class Store:
     def locked(self) -> bool:
         """May the map grow?
 
-        An imported map is somebody's years of walking, complete enough that a
-        room it does not contain is far more likely to be a room we failed to
-        recognise.  Inventing one then is worse than admitting we are lost: it
-        adds a duplicate of a room that is already there, and nothing later
-        joins them up.
+        Locked unless somebody says otherwise.  The map is 3kdb's -- years of
+        somebody's walking, complete enough that a room it does not contain is
+        far more likely to be a room we failed to recognise -- and what 3K has
+        gained since comes in through Options -> Updates.  Inventing a room
+        while walking is worse than admitting we are lost: it adds a duplicate
+        of a room already there, and nothing later joins them up.  `/unlock`
+        is there for anybody mapping somewhere the import does not cover.
         """
-        return self.setting("locked") == "1"
+        return self.setting("locked", "1") == "1"
 
     @locked.setter
     def locked(self, value: bool) -> None:

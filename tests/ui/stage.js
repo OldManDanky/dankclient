@@ -70,7 +70,14 @@ class El {
   }
 
   querySelectorAll(sel) {
-    const want = sel.startsWith('.')
+    // '.cls', 'tag', and 'tag[attr=value]' -- the third because the panels
+    // find their own controls that way ('input[type=checkbox]').
+    const attr = sel.match(/^(\w+)\[(\w+)=([^\]]+)\]$/);
+    const want = attr
+      ? (e) => e.tagName === attr[1]
+               && String(e[attr[2]] !== undefined ? e[attr[2]] : e.attrs[attr[2]])
+                  === attr[3].replace(/^["']|["']$/g, '')
+      : sel.startsWith('.')
       ? (e) => e.className.split(' ').includes(sel.slice(1))
       : (e) => e.tagName === sel;
     const out = [];

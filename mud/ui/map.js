@@ -206,8 +206,12 @@
     }
     if (!state || state.centre == null) {
       ctx.fillStyle = css('--dim', '#7c8598');
-      ctx.fillText(state && state.lost ? 'lost - walk a room or two'
-                                       : 'nothing mapped yet', 10, 20);
+      // A map with no rooms in it will not gain any by being walked: it is
+      // 3kdb's and it is locked, so the answer is to go and fetch it.
+      const empty = state && !state.known_rooms;
+      ctx.fillText(empty ? 'no map yet - Options > Updates'
+                   : state && state.lost ? 'lost - walk a room or two'
+                   : 'nothing mapped yet', 10, 20);
       return;
     }
 
