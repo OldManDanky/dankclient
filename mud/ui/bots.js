@@ -5,6 +5,10 @@
    that left it in; Resume walks back to that room, does what the route does
    there, and carries on from the next step.  Stop forgets all of that.
 
+   Stop also takes the route off the panel, and a route that is not walking
+   -- finished, given up, or only picked -- has Clear in that place instead:
+   the last one used to sit there, note and all, until another was chosen.
+
    Only one route walks at a time from here.  While one is walking the panel
    shows it and nothing else can be started: two routes driving one character
    are two routes each walking from a room the other has just left.
@@ -61,6 +65,20 @@
     draw();
   }
 
+  function forget() {
+    chosen = '';
+    if (store) store.set('bot:route', '');
+    draw();
+  }
+
+  //: Stop while something walks or waits, Clear when all it does is sit there
+  function stopOrClear(clear) {
+    const stop = $('bot-stop');
+    stop.textContent = clear ? 'Clear' : 'Stop';
+    stop.title = clear ? 'Take it off the panel'
+      : 'Stop, forget where it had got to, and take it off the panel';
+  }
+
   function button(text, fn) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -86,6 +104,7 @@
       $('bot-pause').textContent = 'Pause';
       $('bot-pause').disabled = true;
       $('bot-stop').disabled = false;
+      stopOrClear(false);
       return;
     }
     const r = current();
@@ -120,7 +139,8 @@
     const pause = $('bot-pause');
     pause.textContent = r && r.paused ? 'Resume' : 'Pause';
     pause.disabled = !r || (!r.running && !r.paused);
-    $('bot-stop').disabled = !r || (!r.running && !r.paused);
+    $('bot-stop').disabled = !r;
+    stopOrClear(!!r && !r.running && !r.paused);
   }
 
   // --- finding one ------------------------------------------------------------
@@ -194,7 +214,14 @@
       return;
     }
     const r = current();
-    if (r) send({ op: 'stop', id: r.id });
+    if (r && (r.running || r.paused)) {
+      send({ op: 'stop', id: r.id });
+      // Straight away, not when the server says so: until then the route is
+      // still the one walking, and the panel would go on showing it.
+      r.running = false;
+      r.paused = null;
+    }
+    forget();
   };
   $('bot-find').oninput = drawFound;
   $('bot-find').onkeydown = (e) => {

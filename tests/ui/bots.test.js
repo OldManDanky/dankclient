@@ -40,6 +40,8 @@ check('clicking the name picks it without starting it',
   && saved['bot:route'] === 'b2');
 el('bot-start').onclick();
 check('Start starts it', same(last(), { t: 'routes', op: 'start', id: 'b2' }));
+check('picked but not walking: Clear, not Stop',
+  el('bot-stop').textContent === 'Clear' && !el('bot-stop').disabled);
 
 type('sec');
 rows()[0].children[2].onclick();
@@ -49,7 +51,8 @@ renderBotPanel([route({ running: true, steps_taken: 1 }), ROUTES[1]]);
 check('walking: shown, with its step', el('bot-name').textContent === 'Section Z'
   && el('bot-step').textContent === '1 / 3' && el('bot-now').className === 'live');
 check('walking: Pause and Stop, not Start',
-  el('bot-start').disabled && !el('bot-pause').disabled && !el('bot-stop').disabled);
+  el('bot-start').disabled && !el('bot-pause').disabled && !el('bot-stop').disabled
+  && el('bot-stop').textContent === 'Stop');
 type('tree');
 const button = rows()[0].children[2];
 check('nothing else starts while one walks', button.disabled);
@@ -66,8 +69,29 @@ check('paused: Resume, and Start is Start over',
   el('bot-pause').textContent === 'Resume' && el('bot-start').textContent === 'Start over');
 el('bot-pause').onclick();
 check('Resume resumes it', same(last(), { t: 'routes', op: 'resume', id: 'a1' }));
+const beforeStop = sent.length;
 el('bot-stop').onclick();
-check('Stop stops it', same(last(), { t: 'routes', op: 'stop', id: 'a1' }));
+check('Stop stops it', same(last(), { t: 'routes', op: 'stop', id: 'a1' }) && sent.length === beforeStop + 1);
+check('and takes it off the panel', el('bot-name').textContent === 'No bot chosen'
+  && saved['bot:route'] === '' && el('bot-stop').disabled && el('bot-start').disabled,
+  el('bot-name').textContent);
+renderBotPanel([route({ steps_taken: 2, note: 'stopped' }), ROUTES[1]]);
+check('and the server saying it stopped does not bring it back', el('bot-name').textContent === 'No bot chosen');
+
+// A route that ended on its own stays until cleared, so its note can be read.
+type('sec');
+rows()[0].children[0].onclick();
+renderBotPanel([route({ steps_taken: 3, kills: 4, note: 'finished' }), ROUTES[1]]);
+check('a finished route stays, with Clear', el('bot-name').textContent === 'Section Z'
+  && el('bot-note').textContent === 'finished' && el('bot-stop').textContent === 'Clear');
+sent.length = 0;
+el('bot-stop').onclick();
+check('Clear empties the panel and tells the server nothing',
+  el('bot-name').textContent === 'No bot chosen' && sent.length === 0 && saved['bot:route'] === '');
+renderBotPanel([route({ paused: { step: 1, room: 7, room_name: 'A Dark Square' } }), ROUTES[1]]);
+check('a paused route still shows itself, with Stop', el('bot-name').textContent === 'Section Z'
+  && el('bot-stop').textContent === 'Stop');
+renderBotPanel(ROUTES);
 
 sent.length = 0;
 type('tree');
@@ -89,6 +113,7 @@ check('Stop stops the walk', same(last(), { t: 'routes', op: 'stop_walk' }), las
 type('tree');
 check('nothing else starts during a walk', rows()[0].children[2].disabled);
 renderBotPanel(ROUTES, { running: false, goal: 'Center of Town', steps: 23, note: 'finished' });
-check('a finished walk leaves the panel', el('bot-name').textContent !== 'Walking to Center of Town');
+check('a finished walk leaves the panel', el('bot-name').textContent !== 'Walking to Center of Town'
+  && el('bot-stop').textContent !== 'Stop', el('bot-stop').textContent);
 
 finish();

@@ -34,6 +34,7 @@ class El {
     this.selectionEnd = 0;
     const style = {};
     style.setProperty = (k, v) => { style[k] = v; };
+    style.removeProperty = (k) => { delete style[k]; };
     this.style = style;
   }
 
@@ -90,7 +91,7 @@ class El {
   addEventListener() {}
   removeEventListener() {}
   focus() { this.focused = true; }
-  getBoundingClientRect() { return { width: 200, height: 120 }; }
+  getBoundingClientRect() { return this.rect || { top: 0, width: 200, height: 120 }; }
   getContext() { return global.__pen || null; }
 }
 
@@ -128,7 +129,7 @@ function page(ids = {}, saved = {}) {
 function messagesWindow() {
   const root = new El('div');
   for (const [tag, cls] of [['header', ''], ['div', 'cm-body'], ['div', 'cm-filters'],
-    ['span', 'cm-count'], ['span', 'cm-toggle']]) {
+    ['span', 'cm-count'], ['span', 'cm-toggle'], ['div', 'cm-grip']]) {
     const e = new El(tag);
     e.className = cls;
     root.append(e);

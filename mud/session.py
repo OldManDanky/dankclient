@@ -53,6 +53,13 @@ DEFAULT_PORT = 3000
 #: titles 3K had cut off mid-list, which never make a room anyway.
 TITLE_WAIT = 0.25
 
+#: A room block with nothing after it -- no prompt, no other message -- has
+#: finished after this long.  Across 1,283 rooms in the captures a block's
+#: last record trailed its DDD by 0.18s at most, and never came after the
+#: prompt; the prompt normally says so sooner.  This is for a prompt that is
+#: not ">".
+ROOM_QUIET = 0.5
+
 #: How long a quiet connection is trusted, then how often and how many times
 #: the other end is asked whether it is still there.  Dead in about a minute.
 KEEPALIVE = (30, 10, 3)
@@ -272,6 +279,7 @@ class Session:
         #: The last marked room title still waiting to find out whether a DDD
         #: is coming for it: (when, exits, contents so far, scenery so far).
         self._titled: tuple | None = None
+        self._quiet_timer: asyncio.TimerHandle | None = None
         self._title_timer: asyncio.TimerHandle | None = None
 
         # The two signals that expose the 2s server beat: N while fighting,
@@ -609,6 +617,21 @@ class Session:
         self._title_timer = None
         self._room_from_title()
 
+    def _arm_quiet(self) -> None:
+        """Finish an open room block once nothing has followed it for a while."""
+        if self._quiet_timer is not None:
+            self._quiet_timer.cancel()
+            self._quiet_timer = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return                      # replaying: the next message decides
+        self._quiet_timer = loop.call_later(ROOM_QUIET, self._quiet_timeout)
+
+    def _quiet_timeout(self) -> None:
+        self._quiet_timer = None
+        self.world.settle()
+
     def _room_from_title(self, now: bool = False) -> None:
         """No DDD came for the last title: the room is the title's.
 
@@ -783,6 +806,12 @@ class Session:
                 self.marked_titles += 1
             if title and title.get("closed") and title.get("exits"):
                 self._title_arrived(title["exits"])
+            if plain.strip() == ">":
+                # 3K's prompt ends every reply, so the room it answered with
+                # has finished: a brief-mode title will get no DDD now, and a
+                # block waiting for the next message to close it is closed.
+                self._room_from_title(now=True)
+                self.world.settle()
             shown, was = self.hidden.line(plain), plain
             self.bus.emit(events.LINE, self.hidden.line(raw), shown)
             if self.logbook is not None and (shown.strip() or not was.strip()):
@@ -831,6 +860,8 @@ class Session:
         else:
             self._room_from_title()
         self.world.apply(msg.code, msg.data)
+        if self.world._room_open_at is not None:
+            self._arm_quiet()
         self.bus.emit(events.MIP, msg)
         for fn in self.on_message:
             fn(msg)

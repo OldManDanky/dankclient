@@ -346,6 +346,22 @@ def test_the_map_is_not_resent_while_it_has_not_changed():
     assert "rooms" in moved and not moved.get("unchanged")
 
 
+def test_a_page_that_has_just_opened_gets_the_whole_map():
+    """A reload while standing still: the new page has no map to keep."""
+    from mud.session import Session
+    from mud.store import Store
+    from mud.web import WebServer
+
+    session = Session("127.0.0.1", 1, sec_code=12345, store=Store())
+    web = WebServer(session)
+    session.mapper.arrived(["n", "e"], ["sky"], at=0.0)
+    assert "rooms" in web.snapshot()["map"]
+    assert web.snapshot()["map"].get("unchanged") is True
+    hello = web.greeting()["map"]
+    assert "rooms" in hello and not hello.get("unchanged")
+    assert web.snapshot()["map"].get("unchanged") is True, "and quiet again after"
+
+
 def test_the_browser_hears_about_a_route_moving_not_just_starting():
     """The sidebar says which step of how many, and a step counter that only
     moves when a route starts or stops is not a step counter."""

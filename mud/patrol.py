@@ -322,9 +322,20 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         while mapper.here != dest:
             left = deadline - loop.time()
             if left <= 0:
-                return False
+                break
             await bus.wait(events.ROOM, min(left, 0.5))
-        return True
+        else:
+            return True
+        # Silence does not mean the last step went nowhere: a teleport sends
+        # no room.  With the map one step short, look before anything goes out
+        # again -- walking that step again from where it had really taken us
+        # sent "embrace void" a second time, from the temple doorway.
+        if commands and mapper.route(dest) == [commands[-1]]:
+            mapper.expect(commands[-1])
+            await gate()
+            session.queue.put(LOOK, HIGH)
+            await bus.wait(events.ROOM, LOOK_TIMEOUT)
+        return mapper.here == dest
 
     async def travel(dest: int, name: str = "speedwalk", tries: int = 4):
         """Walk to a room, working around ways out that turn out not to work.

@@ -607,7 +607,24 @@ glances, and steps on only when that glance shows the creature gone and no
 other target in the room -- what 3kdb's own bot does after every kill.  The
 next target is picked from the glance, not from the room as it was on
 arrival, and a kill is counted only once the glance shows it gone.  If three
-glances go unanswered the route stops where it is rather than walking off.  There is no cap on that either:
+glances go unanswered the route stops where it is rather than walking off.
+
+A room has arrived when 3K's prompt follows it.  A room block used to count
+as arrived only when the next unrelated message came; walking, that is the
+next room at once, but standing in a quiet room it can be seconds away.
+`embrace void` sends its message and a dungeon banner and no room at all,
+then only the two-second sample naming the temple doorway; the look sent to
+find out where we were was answered straight away, and sat open for six
+seconds more while the walk decided it had not been answered.  A route
+standing at its own start said it could not reach it.  Across 1,283 rooms in
+the captures a block's records never came after its prompt and trailed its
+DDD by 0.18s at most, so the prompt closes the block, and half a second of
+quiet does for a prompt that is not `>`.  A stacked walk that times out one
+step short of where it was going looks before sending anything again: that
+step was a teleport, and walking it again from where it had taken us sent
+`embrace void` a second time from the doorway.  And a room whose DDD lists no
+ways out -- Pure light, left by `w` and `will` -- is the room the edge leads
+to when its own title says so: an empty list is not a contradiction.  There is no cap on that either:
 a fight takes as long as it takes.  The one thing left alone is a creature
 the kill command will not start a fight with at all, which would otherwise
 hold the route in that room for good.

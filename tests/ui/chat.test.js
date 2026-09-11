@@ -75,7 +75,9 @@ say();
 const mine = () => filters().querySelectorAll('button').find((b) => b.textContent === 'mine');
 check('a tell you sent counts as yours before your name is known', !!mine());
 setMe('player');
-check('the mine tag sits last', filters().children[filters().children.length - 1] === mine());
+const tagNames = () => filters().querySelectorAll('button').map((b) => b.textContent);
+check('mine and clear sit last, in that order', same(tagNames().slice(-2), ['mine', 'clear']), tagNames());
+check('pushed to the right from mine', mine().className.split(' ').includes('end'));
 mine().onclick({ stopPropagation() {} });
 check('hides your channel lines, whatever the case, and your sent tell',
   same(texts(), ['[Clan] Friend : ok', 'Other shouts: hey', 'psst']), texts());
@@ -87,8 +89,61 @@ check('clicking again brings them back', texts().length === 6);
 for (const k of Object.keys(saved)) delete saved[k];
 p = open(); setMe('player');
 clan('Player', 'hi');
-check('one channel: no lone tag, but mine is offered',
-  same(filters().querySelectorAll('button').map((b) => b.textContent), ['mine']));
+check('one channel: no lone tag, but mine and clear are offered',
+  same(filters().querySelectorAll('button').map((b) => b.textContent), ['mine', 'clear']));
+
+// --- clear ------------------------------------------------------------------------
+for (const k of Object.keys(saved)) delete saved[k];
+open();
+check('an empty window offers nothing to clear', filters().children.length === 0);
+clan('Friend', 'hi');
+const sent = [];
+global.ws = { readyState: 1, send: (s) => sent.push(JSON.parse(s)) };
+const clearBtn = () => filters().querySelectorAll('button').find((b) => /^clear/.test(b.textContent));
+check('one line is enough to offer clear, on the right', !!clearBtn() && clearBtn().className.includes('end'));
+clearBtn().onclick({ stopPropagation() {} });
+check('the first click only asks', texts().length === 1 && clearBtn().textContent === 'clear?'
+  && clearBtn().className.includes('armed') && sent.length === 0);
+clan('Other', 'still here?');
+check('a new line does not disarm it', clearBtn().textContent === 'clear?');
+clearBtn().onclick({ stopPropagation() {} });
+check('the second click empties the window', rows().length === 0
+  && body().querySelector('.cm-empty').textContent === 'nothing said yet');
+check('and the server copy, or a reload puts it back', same(sent, [{ t: 'messages', op: 'clear' }]), sent);
+check('the count goes and so does the button', root.querySelector('.cm-count').textContent === '' && !clearBtn());
+clan('Friend', 'back');
+check('the next line arrives in an empty window, with clear unarmed',
+  texts().length === 1 && clearBtn().textContent === 'clear');
+delete global.ws;
+
+// --- resize -----------------------------------------------------------------------
+for (const k of Object.keys(saved)) delete saved[k];
+open();
+const grip = root.querySelector('.cm-grip');
+const height = () => root.style['--cm-height'];
+check('the usual size until dragged', height() === undefined);
+root.rect = { top: 40, width: 800, height: 120 };
+let captured = null;
+grip.setPointerCapture = (id) => { captured = id; };
+grip.onpointerdown({ button: 0, pointerId: 7, clientY: 160, preventDefault() {}, stopPropagation() {} });
+check('the grip takes the pointer', captured === 7 && root.classList.contains('sizing'));
+grip.onpointermove({ clientY: 340 });
+check('dragging sets the height from the top of the window', height() === '300px', height());
+grip.onpointermove({ clientY: 50 });
+check('never shorter than a line or two', height() === '64px', height());
+root.rect = { top: 40, width: 800, height: 250 };
+grip.onpointerup({});
+check('letting go keeps what the page allowed', saved['cm:msgmon:height'] === '250' && height() === '250px'
+  && !root.classList.contains('sizing'), [saved['cm:msgmon:height'], height()]);
+grip.onpointermove && grip.onpointermove({ clientY: 700 });
+check('and stops following the pointer', height() === '250px');
+open();
+check('a reload keeps the height', root.style['--cm-height'] === '250px');
+root.querySelector('.cm-grip').ondblclick({ stopPropagation() {} });
+check('double-click goes back to the usual size', root.style['--cm-height'] === undefined && !saved['cm:msgmon:height']);
+const grip2 = root.querySelector('.cm-grip');
+grip2.onpointerdown({ button: 2, pointerId: 1, preventDefault() {}, stopPropagation() {} });
+check('only the main button drags', !grip2.onpointermove && !root.classList.contains('sizing'));
 
 // --- dings --------------------------------------------------------------------------
 for (const k of Object.keys(saved)) delete saved[k];

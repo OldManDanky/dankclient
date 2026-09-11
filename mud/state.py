@@ -157,24 +157,37 @@ class World:
 
     def apply(self, code: str, data: str) -> None:
         # A room block is a DDD plus the run of H** records after it, and it
-        # has settled once anything unrelated arrives.  Waiting for the
-        # records themselves would miss a room that has neither scenery nor
-        # contents -- rare, but one missed room puts dead reckoning off by one
-        # for the rest of the session.
+        # has settled once anything unrelated arrives -- or 3K's prompt, which
+        # the session passes on as settle().  Waiting for the records
+        # themselves would miss a room that has neither scenery nor contents
+        # -- rare, but one missed room puts dead reckoning off by one for the
+        # rest of the session.
         opening = code == "DDD" and self._last_code != "BAD"
-        if self._room_open_at is not None and (
-                opening or code not in codes.ROOM_RECORD_CODES):
+        if opening or code not in codes.ROOM_RECORD_CODES:
             # A new block clears the old room, so tell anyone waiting on the
             # previous one before that happens.
-            self.room.opened_at = self._room_open_at
-            self._room_open_at = None
-            self.bus.emit(events.ROOM, self.room)
+            self.settle()
         try:
             self._apply(code, data)
         finally:
             if opening:
                 self._room_open_at = time.time()
             self._last_code = code
+
+    def settle(self) -> None:
+        """The room block that is open has finished: say so.
+
+        Anything unrelated arriving finishes it, and so does 3K's prompt,
+        which ends every reply.  Walking, the next room comes at once; in a
+        quiet room nothing else may come for seconds -- after `embrace void`
+        the temple doorway sent nothing for six, and a look answered straight
+        away read as unanswered.
+        """
+        if self._room_open_at is None:
+            return
+        self.room.opened_at = self._room_open_at
+        self._room_open_at = None
+        self.bus.emit(events.ROOM, self.room)
 
     def titled_room(self, exits, at: float, contents_from: int = 0,
                     scenery_from: int = 0) -> None:

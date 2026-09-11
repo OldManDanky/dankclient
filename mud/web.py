@@ -781,7 +781,7 @@ class WebServer:
         back = self._scrollback()
         if back is not None:
             writer.write(_frame(json.dumps(back).encode()))
-        writer.write(_frame(json.dumps(self.snapshot()).encode()))
+        writer.write(_frame(json.dumps(self.greeting()).encode()))
 
         log(f"websocket open ({len(self._clients)} client(s))")
         why = "client closed"
@@ -899,6 +899,11 @@ class WebServer:
         if kind == "deadman":
             self._set_deadman(msg.get("minutes"))
             return
+        if kind == "messages":
+            # The window's Clear: the history a reload would seed it with.
+            if msg.get("op") == "clear":
+                self.session.world.messages.clear()
+            return
         if kind == "link":
             # Disconnect, and coming back from it.  Not a game command: the
             # session survives it, which is the point of the button.
@@ -995,6 +1000,17 @@ class WebServer:
             else "reconnecting" if self.session.reconnect
             else "the MUD dropped us"))
         return False
+
+    def greeting(self) -> dict:
+        """The first snapshot a page gets: everything, the map included.
+
+        The map is only sent when it has changed, and a page that has just
+        opened -- a reload, the app's window coming back -- has none to keep.
+        Told "unchanged", it drew "server is older than this page" until you
+        next moved.
+        """
+        self._map_centre = None
+        return self.snapshot()
 
     def _map_state(self) -> dict | None:
         """The map, but only when it has actually changed.

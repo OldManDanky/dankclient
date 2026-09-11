@@ -386,7 +386,8 @@ def test_a_stack_that_does_not_arrive_walks_the_rest():
             ok = await asyncio.wait_for(api["travel"](b, tries=1), 4)
             assert ok is False
             assert s.sent[0] == "n", "the stack went first"
-            assert s.sent[1:] == ["n", "l"], "then a step, looked at"
+            assert s.sent[1] == "l", "then a look, in case it had got there"
+            assert s.sent[2:] == ["n", "l"], "then a step, looked at"
             assert store.exits_from(a)[0]["failed"], "and the bad way marked"
 
         run(scenario())
@@ -435,3 +436,35 @@ def test_a_kill_that_never_starts_a_fight_is_not_a_kill():
         assert run(api["attack"](mob)) is False
     finally:
         patrol.START_TIMEOUT, patrol.FIGHT_POLL = was
+
+
+
+def test_a_stack_ending_in_a_teleport_looks_before_sending_it_again():
+    """A teleport sends no room: `embrace void` puts you in the temple
+    doorway and 3K says nothing more.  The stack timed out, and the walk after
+    it sent `embrace void` again -- from the doorway, where it is nothing.
+    It looks first now, and the look says it got there."""
+    import mud.patrol as patrol
+
+    was = (patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT)
+    patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = 0.05, 1.0
+    try:
+        s, bots, api = build()
+        store, m, (a, b) = corridor(s, [("Eastwick", ["e", "w"]),
+                                        ("Doorway", ["doorway", "leave"])])
+        store.link(a, "embrace void", b)
+        m.here = a
+        s.queue._send = lambda line: (s.sent.append(line), m.sent(line))
+
+        async def scenario():
+            trip = asyncio.ensure_future(api["travel"](b))
+            await asyncio.sleep(0.3)                     # the stack times out
+            assert s.sent == ["embrace void", "l"], "looked, sent nothing again"
+            s._consume(mip("DDD", "doorway~leave") + b"\r\n>\r\n")
+            assert await asyncio.wait_for(trip, 2) is True
+            assert m.here == b
+            assert s.sent.count("embrace void") == 1
+
+        run(scenario())
+    finally:
+        patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was

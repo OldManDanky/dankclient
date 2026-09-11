@@ -116,6 +116,49 @@
   setCollapsed(store.get(`cm:${ID}:collapsed`, '') === '1');
   root.querySelector('header').onclick = () => setCollapsed(!collapsed());
 
+  /* Taller or shorter, by dragging the bottom edge.  The height is kept in
+     pixels and handed to the stylesheet as --cm-height, so the stylesheet
+     still has the last word: a collapsed window ignores it, and it never
+     takes more than three quarters of the output, whatever the window was
+     when it was set.  The terminal underneath refits itself. */
+  const HEIGHT = `cm:${ID}:height`;
+  const gripEl = root.querySelector('.cm-grip');
+
+  function setHeight(px) {
+    if (px) root.style.setProperty('--cm-height', `${Math.round(px)}px`);
+    else root.style.removeProperty('--cm-height');
+  }
+
+  setHeight(parseInt(store.get(HEIGHT, ''), 10) || 0);
+
+  if (gripEl) {
+    gripEl.onpointerdown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const top = root.getBoundingClientRect().top;
+      const stick = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 24;
+      root.classList.add('sizing');
+      if (gripEl.setPointerCapture) gripEl.setPointerCapture(e.pointerId);
+      gripEl.onpointermove = (m) => {
+        setHeight(Math.max(64, m.clientY - top));
+        if (stick) bodyEl.scrollTop = bodyEl.scrollHeight;
+      };
+      gripEl.onpointerup = gripEl.onpointercancel = () => {
+        gripEl.onpointermove = gripEl.onpointerup = gripEl.onpointercancel = null;
+        root.classList.remove('sizing');
+        // What the stylesheet allowed, not where the pointer went.
+        store.set(HEIGHT, String(Math.round(root.getBoundingClientRect().height)));
+        setHeight(parseInt(store.get(HEIGHT, ''), 10));
+      };
+    };
+    gripEl.ondblclick = (e) => {
+      e.stopPropagation();
+      store.set(HEIGHT, '');
+      setHeight(0);
+    };
+  }
+
   // --- reading a line -------------------------------------------------------
 
   // BAB names the other party either way, so the direction has to be shown or
@@ -160,11 +203,31 @@
     return [...new Set(messages.map((m) => m.channel || 'other'))].sort();
   }
 
+  /* Clear empties the window here and the server's copy of it, which is what
+     a reload would otherwise put straight back.  It takes two clicks, the
+     first of which only asks: there is no getting the lines back. */
+  let armed = null;
+
+  function disarm() {
+    if (armed) clearTimeout(armed);
+    armed = null;
+  }
+
+  function clearAll() {
+    disarm();
+    messages = [];
+    if (window.ws && window.ws.readyState === 1) {
+      window.ws.send(JSON.stringify({ t: 'messages', op: 'clear' }));
+    }
+    refresh();
+  }
+
   function renderTags() {
     const all = tags();
     filterEl.replaceChildren();
     const anyMine = hideMine || messages.some(isMine);
-    if (all.length < 2 && !anyMine) return;         // nothing to choose between
+    if (!messages.length) disarm();
+    if (all.length < 2 && !anyMine && !messages.length) return;   // nothing to offer
     for (const tag of all.length >= 2 ? all : []) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -192,13 +255,27 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'mine';
-      b.className = 'mine' + (hideMine ? '' : ' on');
+      b.className = 'mine end' + (hideMine ? '' : ' on');
       b.title = hideMine ? 'show what you said' : 'hide what you said';
       b.onclick = (e) => {
         e.stopPropagation();
         hideMine = !hideMine;
         store.set(`cm:${ID}:hidemine`, hideMine ? '1' : '');
         refresh();
+      };
+      filterEl.append(b);
+    }
+    if (messages.length) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = armed ? 'clear?' : 'clear';
+      b.className = 'clear' + (anyMine ? '' : ' end') + (armed ? ' armed' : '');
+      b.title = armed ? 'click again to clear every message' : 'clear the messages';
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (armed) { clearAll(); return; }
+        armed = setTimeout(() => { armed = null; renderTags(); }, 3000);
+        renderTags();
       };
       filterEl.append(b);
     }

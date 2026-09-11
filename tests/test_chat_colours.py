@@ -8,7 +8,14 @@ channel's.  Kept in the browser, with the rest of the window's preferences.
 from __future__ import annotations
 
 import re
+import sys
+import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from mud.session import Session  # noqa: E402
+from mud.web import WebServer  # noqa: E402
 
 UI = Path(__file__).resolve().parents[1] / "mud" / "ui"
 
@@ -49,3 +56,14 @@ def test_the_menu_can_be_closed_without_choosing():
 
 def test_the_menu_has_its_styles():
     assert ".cm-menu{" in (UI / "index.html").read_text()
+
+
+def test_clear_empties_the_history_a_reload_would_bring_back():
+    s = Session(prefixes_path=str(Path(tempfile.mkdtemp()) / "p.json"))
+    s.world.messages.append({"kind": "tell", "who": "Buddy", "text": "psst"})
+    web = WebServer(s)
+    assert web.snapshot()["messages"]
+    web._on_client_message(b'{"t": "messages", "op": "something else"}')
+    assert web.snapshot()["messages"], "only clear clears"
+    web._on_client_message(b'{"t": "messages", "op": "clear"}')
+    assert web.snapshot()["messages"] == []

@@ -51,7 +51,18 @@
      content box inside it -- and the scrollbar at the edge of that -- lands
      on exactly the same line as the terminal's own. */
   #msgmon{margin:var(--gut) calc(var(--gut) - 1px) 0;
-          height:clamp(96px,17vh,230px)}
+          height:var(--cm-height,clamp(96px,17vh,230px));
+          min-height:64px;max-height:75%;position:relative}
+  #msgmon.collapsed{height:auto;min-height:0}
+  /* Dragged to make the window taller or shorter; the terminal below takes
+     whatever is left and refits itself.  Double-click puts it back. */
+  .cm-grip{position:absolute;left:0;right:0;bottom:0;height:6px;
+           cursor:ns-resize;z-index:2;touch-action:none}
+  .cm-grip::after{content:"";position:absolute;left:50%;bottom:2px;width:28px;
+                  margin-left:-14px;height:2px;border-radius:1px;
+                  background:var(--line)}
+  .cm-grip:hover::after,#msgmon.sizing .cm-grip::after{background:var(--accent)}
+  #msgmon.sizing,#msgmon.sizing *{user-select:none}
   .cm-count{letter-spacing:0;text-transform:none;color:var(--accent)}
   .cm-body{flex:1;min-height:0;overflow-y:scroll;padding:6px 0 6px 8px;
            display:flex;flex-direction:column;gap:3px;
@@ -61,7 +72,9 @@
   .cm-filters:empty{display:none}
   .cm-filters button{padding:1px 6px}
   .cm-filters button.on{color:var(--ink);border-color:var(--accent)}
-  .cm-filters button.mine{margin-left:auto;font-style:italic}
+  .cm-filters button.mine{font-style:italic}
+  .cm-filters button.end{margin-left:auto}
+  .cm-filters button.clear.armed{color:var(--bad);border-color:var(--bad)}
   .cm-msg{display:flex;gap:5px;align-items:baseline;cursor:pointer}
   .cm-msg:hover{background:rgba(111,155,235,.10)}
   .cm-who{flex:none;color:var(--accent)}
@@ -588,6 +601,7 @@
         </header>
         <div class="cm-filters"></div>
         <div class="cm-body"></div>
+        <div class="cm-grip" title="Drag to resize. Double-click for the usual size."></div>
       </aside>
 
       <div id="term"><button id="term-new" type="button" hidden
@@ -674,7 +688,8 @@
                 title="Stop here and remember where; Resume walks back and carries on"
                 >Pause</button>
         <button id="bot-stop" type="button" disabled
-                title="Stop, and forget where it had got to">Stop</button>
+                title="Stop, forget where it had got to, and take it off the panel"
+                >Stop</button>
       </div>
       <input id="bot-find" type="search" autocomplete="off" spellcheck="false"
              placeholder="find a bot: name, step or creature"

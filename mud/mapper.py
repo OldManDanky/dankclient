@@ -257,7 +257,7 @@ class Mapper:
         ways = self._ways_out() if ways is None else ways
         known = self.store.destination(here, cmd)
 
-        if (verifying and (known is None or not self._fits(known, exits, scenery))
+        if (verifying and (known is None or not self._leads_to(known, exits, scenery, name))
                 and self.store.consistent(here, exits, scenery)):
             # The look came back showing the room we were already in, so the
             # step did nothing.  Only safe to conclude while verifying: on a
@@ -266,7 +266,7 @@ class Mapper:
             self._record(here, exits, scenery, name, now, moved=False)
             return here
 
-        if known is not None and self._fits(known, exits, scenery):
+        if known is not None and self._leads_to(known, exits, scenery, name):
             self._record(known, exits, scenery, name, now)
             self._join(here, cmd, known, now, ways)
             self.here = known
@@ -416,6 +416,20 @@ class Mapper:
     def _fits(self, room_id: int, exits: list[str],
               scenery: list[str]) -> bool:
         return self.store.consistent(room_id, exits, scenery)
+
+    def _leads_to(self, room_id: int, exits: list[str], scenery: list[str],
+                  name: str | None) -> bool:
+        """Is this the room the way out we took is known to lead to?
+
+        Its fingerprint says so -- or 3K listed no ways out at all and the
+        room's own title names it.  A DDD that lists nothing says nothing:
+        Pure light, left by `w` and `will`, reports none, and the map lost
+        itself there on every visit.  Only the empty list, and only with the
+        name to confirm it; exits that disagree still disagree.
+        """
+        if self._fits(room_id, exits, scenery):
+            return True
+        return not exits and bool(name) and self._called(room_id, name)
 
     def _called(self, room_id: int, name: str) -> bool:
         row = self.store.room(room_id)
