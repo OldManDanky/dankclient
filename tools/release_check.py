@@ -9,6 +9,9 @@
 4. the installer, built and then taken apart again: every file byte for byte
    what was built, the version, the upgrade code that must never change, and
    the old version removed only after the new one is in
+5. the installer *run*, under wine, over the release before it -- reading the
+   tables says the sequence is right; installing says the interpreter is still
+   there afterwards (tools/wine_check.py, skipped where there is no wine)
 
 Each has caught something real that the others could not.  The installer
 checks are the ones that caught a release with no Python in it.
@@ -126,6 +129,12 @@ def main() -> int:
                  and run("build installer", [PY, "-W", "error::SyntaxWarning", "tools/build_msi.py"], results))
         if built:
             check_installer(results)
+            if shutil.which("wine"):
+                run("installer, installed and upgraded under wine",
+                    [PY, "tools/wine_check.py"], results, quiet=False)
+            else:
+                print("\n=== installer, installed and upgraded under wine")
+                print("wine is not installed -- this check does not run")
 
     print("\n=== summary")
     for label, ok in results:
