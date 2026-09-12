@@ -173,7 +173,8 @@ class Session:
                                # while there is nothing to write to waits for
                                # a socket rather than raising at whoever put
                                # it there.
-                               ready=lambda: self._writer is not None)
+                               ready=lambda: self._writer is not None,
+                               on_stale=self._went_stale)
         self.codes_seen: Counter[str] = Counter()
         self.mismatched = 0
         self.jumpstarted = False
@@ -578,6 +579,18 @@ class Session:
                 self.bus.emit(events.PROMPT)
                 for fn in self.on_prompt:
                     fn()
+
+    def _went_stale(self, many: int) -> None:
+        """The queue threw away commands that had waited too long.
+
+        Worth a line on screen either way.  After a disconnection it explains
+        the gap; at any other time it means the APM budget could not fit a
+        minute's backlog, which is worth knowing about the script that made it.
+        """
+        self.bus.emit(events.TEXT,
+                      f"\r\n\x1b[33m[client] dropped {many} queued command(s) "
+                      f"that had waited more than a minute -- too old to mean "
+                      f"anything now.\x1b[0m\r\n".encode("latin-1"))
 
     # --- the deadman ---------------------------------------------------------
 

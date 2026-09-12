@@ -12,7 +12,21 @@ A route is a walk: a path, and optionally creatures to kill along it. Running on
 - **Attack on sight**: names, or any word from their long description, separated by commas. Blank walks without fighting.
 - **Repeat**, **Other players** (wait rather than take their kill), and **Rest** (seconds in each room).
 
+- **Folder**: optional, and it changes nothing about the walk. A `/` makes
+  another level, so `chaos/dungeon` puts the route in **dungeon** inside
+  **chaos**, and the triangle on a folder's heading folds it away. Naming a
+  folder is how you make one, and it exists only while something is in it.
+  **Rename** renames the folders under it too; clearing the name puts them
+  back at the top. Up to five levels.
+
+A folder is shared with your triggers and aliases: give this route and that
+area's rules the same folder name and [Options → Folders](options:folders)
+shows them together, with one switch. A route in a folder that is switched off
+will not walk until it is switched back on.
+
 3kdb's hundred-odd routes come in through [Options → Updates](options:updates).
+Those arrive filed under 3kdb's own tags, so 67 of them start in **chaos** and
+**chaos/dungeon** and the rest at the top, for you to file as you like.
 
 ## Running one
 

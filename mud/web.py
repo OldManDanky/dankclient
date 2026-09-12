@@ -716,6 +716,15 @@ class WebServer:
                 self.note(line)
         except Exception:
             log("after an update:\n" + traceback.format_exc())
+        # Outside that, and for the same reason the push below is: the screen
+        # used to get the progress lines and then nothing, so the one thing
+        # somebody watching wanted -- whether it worked -- was the one thing
+        # missing.  Anything raised while tidying up above must not take the
+        # last word with it.
+        try:
+            self.note(update.summary(got, fresh))
+        except Exception:
+            log("saying what an update did:\n" + traceback.format_exc())
         self.push({"t": "update", "op": "done", **got})
 
     def _reply_login(self, error: str) -> None:
@@ -899,6 +908,9 @@ class WebServer:
             return
         if kind == "routes":
             self._routes_op(msg)
+            return
+        if kind == "folders":
+            self._folders_op(msg)
             return
         if kind == "login":
             self._login_op(msg)
@@ -1261,7 +1273,42 @@ class WebServer:
 
     def _routes_msg(self, store) -> dict:
         return {"t": "routes", "op": "list", "routes": store.status(),
+                # Every folder there is, so the page can offer one to file a
+                # route in without having to derive them from the routes.
+                "folders": store.folders(),
                 "walk": self._walk_state(), "autocollect": store.autocollect}
+
+    def _folders_op(self, msg: dict) -> None:
+        """A folder spans both stores, so the ops that act on one live here.
+
+        The pane draws itself from the rules and routes the page already has,
+        which is why there is no listing op: two caches and one census built
+        from them cannot disagree with each other.  What it cannot do in the
+        page is write, and both writes have to reach both stores at once.
+        """
+        if self.scripts is None:
+            self.push({"t": "folders", "op": "error",
+                       "error": "scripting is disabled"})
+            return
+        op = msg.get("op")
+        if op == "set":
+            self.scripts.set_folder(str(msg.get("name") or ""),
+                                    bool(msg.get("on")))
+        elif op == "rename":
+            self.scripts.rename_folder(str(msg.get("from") or ""),
+                                       str(msg.get("to") or ""))
+        else:
+            return
+        # Both panes are looking at what just changed.
+        rules = getattr(self.scripts, "rules", None)
+        routes = getattr(self.scripts, "routes", None)
+        if rules is not None:
+            payload = rules.listing()
+            payload.update({"t": "rules", "op": "list"})
+            self._rules_seen = rules.version
+            self.push(payload)
+        if routes is not None:
+            self.push(self._routes_msg(routes))
 
     def _routes_op(self, msg: dict) -> None:
         store = getattr(self.scripts, "routes", None) if self.scripts else None
@@ -1278,6 +1325,11 @@ class WebServer:
                 return
         elif op == "delete":
             store.delete(msg.get("id", ""))
+        elif op == "file_in":
+            store.file_in(msg.get("id", ""), str(msg.get("group") or ""))
+        elif op == "rename_folder":
+            store.rename_folder(str(msg.get("from") or ""),
+                                str(msg.get("to") or ""))
         elif op == "start":
             self._touched()
             problem = store.start(msg.get("id", ""))
@@ -1324,8 +1376,12 @@ class WebServer:
                 self.push({"t": "rules", "op": "error", "error": problem})
                 return
         elif op == "group":
-            # A group's heading in the panel: every rule in it on or off.
+            # A group's heading in the panel: every rule in it on or off,
+            # and in the folders under it.
             store.set_group(str(msg.get("name", "")), bool(msg.get("on")))
+        elif op == "rename_group":
+            store.rename_group(str(msg.get("from") or ""),
+                               str(msg.get("to") or ""))
         elif op == "delete":
             store.delete(msg.get("id", ""))
         elif op == "test":

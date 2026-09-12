@@ -246,3 +246,50 @@ def test_a_fresh_copy_of_something_the_repository_lost_drops_nothing():
 
     assert got.get("nothing") is True, got
     assert store.room(1) is not None, "the map we had is still here"
+
+
+# --- saying it worked --------------------------------------------------------
+
+def test_the_summary_says_what_was_taken():
+    said = update.summary({"did": {
+        "map": {"rooms": 51720, "edges": 71394, "refiled": 28672, "unfiled": 152},
+        "speedruns": {"added": 1247},
+        "bots": {"added": 145, "kept": 3},
+        "gags": {"gags": 88}}}, fresh=True)
+    assert said.startswith("fresh copy finished: ")
+    for want in ("51,720 rooms", "71,394 exits", "152 of your logged lines",
+                 "1,247 destinations", "145 routes", "3 of yours left alone",
+                 "88 gags"):
+        assert want in said, (want, said)
+
+
+def test_the_summary_says_so_when_there_was_nothing_to_take():
+    assert update.summary({"nothing": True}) == "already up to date -- nothing to take."
+
+
+def test_the_summary_says_so_when_it_failed():
+    """The worst version of the missing line: progress, then silence."""
+    assert update.summary({"error": "URLError: timed out"}) == \
+        "update failed: URLError: timed out"
+    assert update.summary({"did": {}}) == "update finished, but it took nothing."
+
+
+def test_the_screen_is_told_when_an_update_finishes():
+    """Driving the real web op: the panel always knew, the screen never did."""
+    import asyncio
+    from mud.session import Session
+    from mud.web import WebServer
+
+    store, root, _mine = played_on()
+    session = Session(jumpstart=False, sec_code=1, store=store)
+    web = WebServer(session)
+    out: list[str] = []
+    web.push = lambda msg: out.append(msg.get("d", "")) if msg.get("t") == "text" else None
+    # The whole op, not just the pull: `sync` asks GitHub what it has before
+    # taking anything, and that goes down the same `_get`.
+    with instead_of_the_network(root, tree_of("map")):
+        asyncio.new_event_loop().run_until_complete(
+            web._update_op({"op": "pull", "want": ["map"], "fresh": True}))
+    screen = "".join(out)
+    assert "fresh copy finished:" in screen, screen
+    assert "rooms" in screen and "exits" in screen, screen

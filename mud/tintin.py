@@ -411,6 +411,115 @@ def read_add_bot(line: str) -> dict | None:
     got += [""] * (len(BOT_FIELDS) - len(got))
     return dict(zip(BOT_FIELDS, got))
 BOT_PATH = re.compile(r"#var\s*\{?bot\[path\]\}?\s*\{")
+#: An alias defined in the bot's own file, which its path then uses.  seal.tin
+#: writes `.check_sarcophagus` thirteen times and defines it at the top.
+BOT_OWN_ALIAS = re.compile(r"#alias\s*\{([.\w-]+)\}\s*\{(.*?)\n?\};", re.S)
+#: tt++ inside a path.  Braced or bare -- 3kdb writes both: "#send {ptell
+#: nofollow: pull brick;east}" and "#send !fly bike".
+TT_SEND = re.compile(r"#send\s*(?:\{(.*?)\}|(\S.*?))\s*$", re.S)
+TT_DELAY = re.compile(r"#delay\s+([\d.]+)\s*(?:\{(.*?)\}|(\S.*?))\s*$", re.S)
+TT_REPEAT = re.compile(r"#(\d+)\s+(?:\{(.*?)\}|(\S.*?))\s*$", re.S)
+
+
+def _own_aliases(text: str) -> dict[str, str]:
+    """The aliases a bot file defines for its own path to use."""
+    out = {}
+    for name, body in BOT_OWN_ALIAS.findall(text):
+        commands = [c.strip() for c in body.replace("\n", ";").split(";") if c.strip()]
+        if commands and not any(c.startswith(("#", "$")) for c in commands):
+            out[name.lower()] = ";".join(commands)
+    return out
+
+
+def translate_step(step: str, aliases: dict[str, str]) -> tuple[str, str]:
+    """One path step as this client can run it, and what was left out.
+
+    3kdb's paths are tt++ scripts, and four things in them are not commands
+    the MUD would understand:
+
+    * an alias the bot file defines itself -- put in where it is used;
+    * `#send {x}`, which is tt++ for "send x without reading it as a
+      command" -- so x, unwrapped;
+    * `#delay N {x}`, which waits N seconds and then does x.  In a path,
+      read in order, that is a wait followed by the commands -- and `wait N`
+      is a step this client's walker honours;
+    * `#N {x}`, tt++ for x N times.
+
+    `.pause` is the fifth and has no equivalent: it is 3kdb stopping its own
+    bot so you can do something by hand.  It comes out, and is reported, so
+    a route that wanted you to step in does not look as though it ran clean.
+    """
+    from .botstore import Route
+    parts, left_out = [], []
+    # Brace-aware: the `;` in "#send {ptell nofollow: pull brick;east}" is part
+    # of the party-tell message, not a break between two commands.  Splitting
+    # through it sent "{ptell nofollow: pull brick" and then "east}".
+    for part in (p.strip() for p in Route._split(step)):
+        if not part:
+            continue
+        low = part.lower()
+        if low in aliases:
+            parts.append(aliases[low])
+            continue
+        if low.startswith(".pause"):
+            left_out.append(part)
+            continue
+        got = TT_DELAY.match(part)
+        if got:
+            body = got.group(2) if got.group(2) is not None else (got.group(3) or "")
+            parts.append(f"wait {float(got.group(1)):g}")
+            if body.strip():
+                parts.append(body.strip())
+            continue
+        got = TT_SEND.match(part)
+        if got:
+            body = (got.group(1) if got.group(1) is not None
+                    else (got.group(2) or "")).strip()
+            # A path step's semicolons always separate commands, so one
+            # command that contains a semicolon cannot be written here:
+            # sopem's "#send {ptell nofollow: pull brick;east}" is a single
+            # party tell whose text has a semicolon in it.  Left out whole
+            # rather than broken in half -- it is courtesy to a party, and
+            # the walk does not depend on it.
+            if ";" in body:
+                left_out.append(part)
+            elif body:
+                parts.append(body)
+            continue
+        got = TT_REPEAT.match(part)
+        if got:
+            body = got.group(2) if got.group(2) is not None else (got.group(3) or "")
+            if body.strip():
+                parts.extend([body.strip()] * min(int(got.group(1)), 99))
+            continue
+        # 3kdb's own typo: seal.tin writes "e.check_sarcophagus" where it
+        # means "e;.check_sarcophagus", and a direction glued to an alias is
+        # neither.  Only split where the tail really is an alias this file
+        # defines, so an ordinary command with a dot in it is left alone.
+        head, dot, tail = part.partition(".")
+        if dot and head and ("." + tail).lower() in aliases:
+            parts.append(head)
+            parts.append(aliases["." + tail.lower()])
+            continue
+        if part.startswith((".", "#")):
+            left_out.append(part)          # a 3kdb alias this file does not define
+            continue
+        parts.append(part)
+    return ";".join(parts), ";".join(left_out)
+
+
+def translate_path(walk: str, text: str) -> tuple[str, list[str]]:
+    """A whole `bot[path]` as this client can walk it, and what came out."""
+    from .botstore import Route
+    aliases = _own_aliases(text)
+    out, left_out = [], []
+    for step in Route(name="x", path=walk).steps():
+        done, gone = translate_step(step, aliases)
+        if done:
+            out.append("{" + done + "}" if ";" in done else done)
+        if gone:
+            left_out.append(gone)
+    return ";".join(out), left_out
 BOT_MOB = re.compile(r"\{long\}\s*\{(.*?)\}\s*\{target\}\s*\{(.*?)\}")
 BOT_SETUP = re.compile(r"^\s*(?!#|\.)([a-z][\w ]*)\s*;\s*$")
 
@@ -433,11 +542,15 @@ def read_bot(path: str | Path) -> dict:
                     break
             out.append(ch)
         walk = "".join(out).strip()
+    # 3kdb's path is a tt++ script; this is the walkable reading of it.
+    walk, left_out = translate_path(walk, text)
     mobs = BOT_MOB.findall(text)
     setup = [m.group(1).strip() for line in text.splitlines()
              if (m := BOT_SETUP.match(line)) and m.group(1).strip() != "close"]
     return {
         "path": walk,
+        #: steps 3kdb meant for itself, which are not in the path above
+        "left_out": left_out,
         # The short name is what you type; the long one is how MIP describes
         # it.  Either matches, so keeping both costs nothing and the long one
         # is what makes "archangel" stand for all ten of them.
@@ -462,6 +575,8 @@ def import_bots(routes, root: str | Path, note=None) -> dict:
 
     known = {r.name for r in routes.routes}
     added = kept = skipped = 0
+    #: routes that walk, but with a step of 3kdb's own left out of them
+    partial: dict[str, list[str]] = {}
     for line in listing.read_text(encoding="latin-1").splitlines():
         got = read_add_bot(line)
         if got is None:
@@ -482,6 +597,11 @@ def import_bots(routes, root: str | Path, note=None) -> dict:
             continue
         route, problem = routes.upsert({
             "name": name,
+            # 3kdb's own tags, as a folder: "chaos, dungeon" files 21 of its
+            # bots under chaos/dungeon and 46 more under chaos.  The other 78
+            # have no tags and start at the top, for the player to file.
+            "group": "/".join(p.strip() for p in got["tags"].split(",")
+                              if p.strip()),
             "path": data["path"],
             "targets": data["targets"],
             "setup": data["setup"],
@@ -493,11 +613,21 @@ def import_bots(routes, root: str | Path, note=None) -> dict:
             skipped += 1
             continue
         added += 1
+        if data["left_out"]:
+            partial[name] = data["left_out"]
         if note:
             note(f"  {name:<22} {len(route.steps()):>4} steps  "
                  f"{len(route.targets):>2} targets  start #{route.start}"
                  f"  {desc[:36]}")
-    return {"added": added, "kept": kept, "skipped": skipped, "missing": ""}
+    if note and partial:
+        # Said rather than counted.  These routes walk, but somewhere in each
+        # of them 3kdb stopped its own bot for the player to do something,
+        # and a route that quietly walks past that is worth a warning.
+        note(f"{len(partial)} route(s) have a step of 3kdb's own left out:")
+        for name in sorted(partial):
+            note(f"  {name:<22} {', '.join(partial[name])[:60]}")
+    return {"added": added, "kept": kept, "skipped": skipped, "missing": "",
+            "partial": {k: list(v) for k, v in partial.items()}}
 
 
 def import_speedruns(store, path: str | Path) -> tuple[int, list[str]]:

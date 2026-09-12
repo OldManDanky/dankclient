@@ -199,14 +199,18 @@ class Rule:
     edge: bool = True
     #: kind == "timer" -- seconds between firings
     every: float = 60.0
-    #: A name shared by rules switched on and off together: `/group party on`.
+    #: A name shared by rules switched on and off together: `/group party on`
+    #: -- and the folder the panel files it under, since 0.2.18.  A `/` makes
+    #: another level, which the CMUD importer has written here all along
+    #: ("areas/zombies"), and switching a folder switches what is under it.
     #: Blank for a rule that belongs to none.
     group: str = ""
 
     def __post_init__(self) -> None:
         if self.pace not in PACES:
             self.pace = PACED
-        self.group = " ".join(str(self.group or "").split())
+        from .botstore import folder
+        self.group = folder(self.group)
         if not self.id:
             self.id = uuid.uuid4().hex[:12]
         if self.mode not in MODES:
@@ -474,8 +478,19 @@ class RuleStore:
         flowing: the beat free-runs when there is no signal to lock onto, and
         that includes sitting at the login prompt, where sending "xp" every
         290 seconds types it into the password box.
+
+        And nothing fires when there is no socket at all.  The beat is the
+        game's, and with no connection there is no game -- but the beat goes
+        on free-running, so a session left disconnected overnight fired every
+        timer it had into a queue with nowhere to send them: 86 commands were
+        found waiting in the morning.  The queue drops what has gone stale
+        now, but not producing it is better than dropping it.
         """
-        if not getattr(self.host.session, "mip_seen", False):
+        session = self.host.session
+        if not getattr(session, "mip_seen", False):
+            return
+        queue = getattr(session, "queue", None)
+        if queue is not None and not queue.ready():
             return
         now = time.monotonic()
         for pair in self._timers:
@@ -587,14 +602,19 @@ class RuleStore:
     def set_group(self, name: str, on: bool) -> list[Rule]:
         """Switch every rule in a group on or off.  The rules it touched.
 
-        By name, whatever the case.  Switching is the rule's own `enabled`,
-        so the panel shows it, it is kept, and a single rule can still be
-        switched by itself afterwards.
+        By name, whatever the case, and everything under it: a group is a
+        folder path, so switching "chaos" off switches "chaos/dungeon" off
+        too.  Anything else would leave a folded-away folder still firing
+        with its parent showing as off.  Switching is the rule's own
+        `enabled`, so the panel shows it, it is kept, and a single rule can
+        still be switched by itself afterwards.
         """
-        want = " ".join(name.split()).lower()
+        from .botstore import folder
+        want = folder(name).lower()
         hit = []
         for i, rule in enumerate(self.rules):
-            if rule.group.lower() == want:
+            here = rule.group.lower()
+            if want and (here == want or here.startswith(want + "/")):
                 if rule.enabled != on:
                     self.rules[i] = replace(rule, enabled=on)
                 hit.append(self.rules[i])
@@ -602,6 +622,31 @@ class RuleStore:
             self.save()
             self.register()
         return hit
+
+    def rename_group(self, old: str, new: str) -> int:
+        """Rename a group, and the groups under it.  How many rules moved.
+
+        As with a route's folder: the group is only the path its rules carry,
+        so this rewrites that prefix wherever it starts one.  An empty `new`
+        puts them at the top rather than dropping the rules.
+        """
+        from .botstore import folder
+        was, want = folder(old), folder(new)
+        if not was:
+            return 0
+        low = was.lower()
+        moved = 0
+        for i, rule in enumerate(self.rules):
+            here = rule.group.lower()
+            if here == low or here.startswith(low + "/"):
+                rest = rule.group[len(was):].lstrip("/")
+                self.rules[i] = replace(
+                    rule, group=folder("/".join(p for p in (want, rest) if p)))
+                moved += 1
+        if moved:
+            self.save()
+            self.register()
+        return moved
 
     def cancel_waits(self) -> int:
         """Drop every rule held by a wait.  How many there were."""

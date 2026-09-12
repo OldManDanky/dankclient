@@ -35,6 +35,10 @@ class El {
     const style = {};
     style.setProperty = (k, v) => { style[k] = v; };
     style.removeProperty = (k) => { delete style[k]; };
+    // Custom properties are read back as well as written: folders.js puts the
+    // nesting depth in --depth, and a test that cannot read it can only check
+    // that setting it did not throw.
+    style.getPropertyValue = (k) => (k in style ? String(style[k]) : '');
     this.style = style;
   }
 

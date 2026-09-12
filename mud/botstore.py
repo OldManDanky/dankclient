@@ -35,6 +35,22 @@ COLLECT = "get all"
 MAX_REPEAT = 99
 
 
+#: How deep folders may nest.  Not a technical limit -- a list that needs
+#: eight levels is not being helped by them.
+MOST_DEPTH = 5
+
+
+def folder(path: str) -> str:
+    """A folder path, tidied: "  Chaos // Dungeon / " -> "Chaos/Dungeon".
+
+    Kept as typed apart from the whitespace, because a folder is a label and
+    capitals are the player's business; compared case-insensitively, because
+    "Chaos" and "chaos" being two folders side by side is nobody's intent.
+    """
+    parts = [" ".join(p.split()) for p in str(path or "").split("/")]
+    return "/".join([p for p in parts if p][:MOST_DEPTH])
+
+
 @dataclass
 class Route:
     id: str = ""
@@ -59,11 +75,18 @@ class Route:
     #: their kill taken by somebody else's script.
     polite: bool = False
     enabled: bool = True
+    #: Which folder it is filed in, as a path: "chaos/dungeon".  A folder is
+    #: nothing but the prefix of the routes in it -- there is no folder to
+    #: create or destroy apart from what is filed there, which is why an
+    #: empty one cannot exist and a rename is a rewrite of this field.  Same
+    #: field, same meaning, as a Rule's `group`.
+    group: str = ""
 
     def __post_init__(self) -> None:
         self.id = self.id or uuid.uuid4().hex[:8]
         if isinstance(self.targets, str):
             self.targets = [t.strip() for t in self.targets.split(",") if t.strip()]
+        self.group = folder(self.group)
 
     @staticmethod
     def _split(path: str) -> list[str]:
@@ -257,6 +280,70 @@ class RouteStore:
         self.save()
         return route, None
 
+    def folders(self) -> list[str]:
+        """Every folder that exists, which is every prefix of every group."""
+        out = set()
+        for route in self.routes:
+            parts = route.group.split("/") if route.group else []
+            for n in range(1, len(parts) + 1):
+                out.add("/".join(parts[:n]))
+        return sorted(out, key=str.lower)
+
+    def file_in(self, route_id: str, group: str) -> Route | None:
+        """Move one route into a folder ("" for none)."""
+        for route in self.routes:
+            if route.id == route_id:
+                route.group = folder(group)
+                self.save()
+                return route
+        return None
+
+    def set_folder(self, name: str, on: bool) -> list[Route]:
+        """Switch every route in a folder, and the folders under it.
+
+        `Route.enabled` existed from the first version of this file and
+        nothing ever read it; a folder that switches its triggers off and
+        leaves its route walking is not a folder, so now `start` does.
+        """
+        want = folder(name).lower()
+        if not want:
+            return []
+        hit = []
+        for route in self.routes:
+            here = route.group.lower()
+            if here == want or here.startswith(want + "/"):
+                route.enabled = on
+                hit.append(route)
+                if not on:
+                    self.stop(route.id)     # and it stops walking now
+        if hit:
+            self.save()
+        return hit
+
+    def rename_folder(self, old: str, new: str) -> int:
+        """Rename a folder and everything under it.  How many moved.
+
+        A folder is only the prefix its routes carry, so renaming one means
+        rewriting that prefix wherever it appears -- and the folders beneath
+        it come along because their paths start with it too.  An empty `new`
+        files them at the top rather than deleting them: nothing here should
+        be able to lose a route.
+        """
+        was, want = folder(old), folder(new)
+        if not was:
+            return 0
+        low = was.lower()
+        moved = 0
+        for route in self.routes:
+            here = route.group.lower()
+            if here == low or here.startswith(low + "/"):
+                rest = route.group[len(was):].lstrip("/")
+                route.group = folder("/".join(p for p in (want, rest) if p))
+                moved += 1
+        if moved:
+            self.save()
+        return moved
+
     def delete(self, route_id: str) -> None:
         # Deleting a route that is walking should stop it walking.
         self.stop(route_id)
@@ -270,6 +357,12 @@ class RouteStore:
         route = self.get(route_id)
         if route is None:
             return "no such route"
+        if not route.enabled:
+            # Switched off with its folder.  Refusing here rather than in the
+            # panel is the point: a folder switched off has to mean the route
+            # does not walk, however it was asked for -- the Bot panel, a
+            # script, or a rule whose action starts it.
+            return f"{route.name} is switched off"
         bots = self.host.bots
         api = self.host.route_api()
         import asyncio

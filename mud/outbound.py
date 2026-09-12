@@ -35,6 +35,14 @@ PACED = "paced"      # send at once unless the minute is tight  (default)
 ROUND = "round"      # at most one per combat round, always queued
 PACES = (NOW, PACED, ROUND)
 
+#: How long a queued command may wait before it has lost its moment.  Tied to
+#: the APM window on purpose: the budget is what makes a backlog wait at all,
+#: so a line the budget could not fit inside a whole minute was never going to
+#: arrive in time to mean anything.  It is the deadman's rule, applied to the
+#: clock instead of the keyboard -- and it is what stops a disconnection from
+#: keeping a night of timers and firing them all when the socket comes back.
+STALE = 60.0
+
 #: Movement, which 3k.org does not count.  Room exits are added at runtime.
 DIRECTIONS = {
     "n", "s", "e", "w", "ne", "nw", "se", "sw", "u", "d",
@@ -84,7 +92,8 @@ class SendQueue:
                  apm: APMMeter | None = None,
                  exits: Callable[[], Iterable[str]] = tuple,
                  per_tick: int = 3, panic_immediate: bool = True,
-                 ready=None, held=None):
+                 ready=None, held=None, stale: float = STALE, now=None,
+                 on_stale=None):
         self._send = send
         #: Is there a socket to send down?  Anything put while there is not
         #: waits in the heap for one, rather than raising at the caller.
@@ -98,18 +107,29 @@ class SendQueue:
         #: most a backlog may drain per tick, still subject to the budget
         self.per_tick = per_tick
         self.panic_immediate = panic_immediate
-        self._heap: list[tuple[int, int, str]] = []
+        #: how long a line may wait before it is dropped instead of sent
+        self.stale = stale
+        self._now = now or time.monotonic
+        #: (priority, seq, queued at, line).  The time sits before the line so
+        #: that reading the line as the last field goes on working; seq already
+        #: makes every entry unique, so nothing is ever compared past it.
+        self._heap: list[tuple[int, int, float, str]] = []
         self._seq = itertools.count()
         self._task: asyncio.Task | None = None
         self.sent = 0
         self.dropped = 0
+        #: dropped for having waited too long, counted apart from the rest
+        self.went_stale = 0
+        #: told how many, when it happens.  Commands disappearing without a
+        #: word is its own puzzle -- "my ticks stopped working".
+        self.on_stale = on_stale
 
     def __len__(self) -> int:
         return len(self._heap)
 
     @property
     def pending(self) -> list[str]:
-        return [line for _, _, line in sorted(self._heap)]
+        return [line for *_, line in sorted(self._heap)]
 
     # --- sending ------------------------------------------------------------
 
@@ -138,7 +158,7 @@ class SendQueue:
         # the rule would look broken rather than pending.  Coming back is
         # exactly when "send this" should happen.
         if not self.ready():
-            heapq.heappush(self._heap, (priority, next(self._seq), line))
+            self._hold(priority, line)
             return
         if pace == NOW or (self.panic_immediate and priority <= PANIC):
             self.now(line)
@@ -146,7 +166,10 @@ class SendQueue:
         if pace != ROUND and not self._heap and self.apm.headroom() > 0:
             self.now(line)
             return
-        heapq.heappush(self._heap, (priority, next(self._seq), line))
+        self._hold(priority, line)
+
+    def _hold(self, priority: int, line: str) -> None:
+        heapq.heappush(self._heap, (priority, next(self._seq), self._now(), line))
 
     def flush(self) -> int:
         n = len(self._heap)
@@ -156,16 +179,39 @@ class SendQueue:
 
     # --- draining -----------------------------------------------------------
 
+    def drop_stale(self) -> int:
+        """Throw away what has waited longer than it was worth.
+
+        Everything, not just the head: a backlog drains in priority order, so
+        the stale lines are not necessarily the ones in the way.
+        """
+        cutoff = self._now() - self.stale
+        keep = [item for item in self._heap if item[2] >= cutoff]
+        gone = len(self._heap) - len(keep)
+        if gone:
+            self._heap[:] = keep
+            heapq.heapify(self._heap)
+            self.dropped += gone
+            self.went_stale += gone
+            if self.on_stale is not None:
+                self.on_stale(gone)
+        return gone
+
+    def drain_once(self) -> None:
+        """One beat's worth: drop what went stale, then send what fits."""
+        self.drop_stale()
+        for _ in range(self.per_tick):
+            if not self._heap or self.apm.headroom() <= 0:
+                break
+            if not self.ready() or self.held():
+                break
+            *_, line = heapq.heappop(self._heap)
+            self.now(line)
+
     async def run(self) -> None:
         while True:
             await self._clock.wait()
-            for _ in range(self.per_tick):
-                if not self._heap or self.apm.headroom() <= 0:
-                    break
-                if not self.ready() or self.held():
-                    break
-                _, _, line = heapq.heappop(self._heap)
-                self.now(line)
+            self.drain_once()
 
     def start(self) -> None:
         if self._task is None:

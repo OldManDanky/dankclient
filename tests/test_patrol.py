@@ -630,3 +630,33 @@ def test_a_compound_way_out_does_not_blind_the_check():
         run(scenario())
     finally:
         patrol.MOVE_TIMEOUT = was
+
+
+def test_a_wait_step_holds_the_step_up_rather_than_going_out():
+    """3kdb writes `#delay 4 {pull brick;e}`: the brick needs a moment before
+    the door it opens can be walked through.  The importer turns that into
+    "wait 4;pull brick;e", and "wait 4" must not reach the MUD."""
+    s, bots, api = build()
+
+    async def scenario():
+        began = time.monotonic()
+        step = asyncio.ensure_future(api["walk"]("wait 0.05;pull brick;e"))
+        await asyncio.sleep(0)
+        assert s.sent == [], "it went out before the wait was over"
+        await asyncio.sleep(0.12)
+        assert s.sent == ["pull brick", "e"], s.sent
+        s._consume(mip("DDD", "w") + mip("HAB", "noun~sky~sky~exa #N"))
+        await step
+        assert time.monotonic() - began >= 0.05
+    run(scenario())
+
+
+def test_a_step_that_is_only_a_wait_expects_no_room():
+    """Nothing was sent, so nothing can arrive: it must not sit out the move
+    timeout and then send a look."""
+    s, bots, api = build()
+
+    async def scenario():
+        got = await asyncio.wait_for(api["walk"]("wait 0.01"), 0.5)
+        assert got is None and s.sent == [], s.sent
+    run(scenario())

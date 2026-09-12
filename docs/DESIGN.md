@@ -785,6 +785,65 @@ would be, never sent to 3K -- so an alias `partymode` whose actions are
 switch it did not make through the rule store's version, which goes up on
 every save.
 
+### A folder is only the prefix its items carry
+
+The routes list had no grouping at all and 3kdb gives you 141 of them; rules
+had had one flat level of groups since 0.2.14, and the CMUD importer had been
+writing `areas/zombies` into that field since 0.2.16.  So folders are that
+same field, read as a `/`-separated path, for both lists -- one field, one
+meaning, and one component drawing it (`folders.js`), so the two panels
+cannot drift apart.
+
+There is deliberately no folder object.  A folder exists exactly as long as
+something is filed there, which removes every question a folder object would
+have raised: none to create before filing the first item, none left empty to
+tidy up, no orphans when the last item leaves, and nothing to keep in step
+between two stores.  Renaming one is a rewrite of that prefix wherever it
+starts one, which is why the folders beneath come along; renaming to nothing
+files them at the top, because nothing here should be able to lose an item.
+Five levels, not because deeper is hard but because a list that needs eight
+is not being helped.
+
+Switching a folder reaches everything under it.  The first version matched
+the exact name only, which would leave a folded-away `areas/zombies` still
+firing under an `areas` heading showing "off" -- a lie the fold makes
+invisible.  Imported routes start filed under 3kdb's own tags, which is 46 in
+`chaos`, 21 in `chaos/dungeon` and 78 at the top: not much of a filing
+system, but better than 141 in one list, and it costs nothing to read a field
+that is already there.
+
+### One folder, two stores, one page for it
+
+A rule's group has always been on every *kind* of rule, so `/group zodiacs
+off` has switched an area's triggers, aliases, timers and stat watches
+together since groups existed.  Two things were missing, and both showed up
+the moment somebody described filing an area: the five rule panes are five
+filtered views of one store, so an area's triggers were in one pane and its
+aliases in another with nowhere showing the area itself; and a route with the
+same folder name was a coincidence rather than a link, because routes are a
+store of their own.
+
+So the Folders pane, and `/folders`.  Two screens rather than two columns --
+the folders, then one folder -- because Options already has a rail and a tree
+beside it would be a third column that has to become something else on a
+phone anyway.  It owns no data: the census is built in the page from the rules
+and routes it already holds, so the pane and the lists it summarises cannot
+disagree.  What it cannot do in the page is write, and both writes have to
+reach both stores at once, so switching and renaming go to `ScriptHost`, which
+is the only thing that holds both.
+
+`Route.enabled` was in the dataclass from the first version of that file and
+nothing ever read it.  A folder that switches an area's triggers off and
+leaves its route walking is not a folder, so `RouteStore.start` refuses a
+route that is off -- in the store rather than the panel, because it has to
+hold however the route was asked for: the Bot panel, a script, or a rule whose
+action starts it.
+
+Which folders are folded is per-viewer and per-list, held in memory for the
+life of the page and mirrored to `localStorage` only so it survives a reload.
+It was the store itself at first -- and then folding did nothing whatever
+where site data is blocked, because every redraw read an empty set back.
+
 `/alias <word> <cmd;cmd>` makes an alias from the input line, as tt++'s
 `#alias` does: an ordinary alias rule, matched as a command, so `{args}` is
 everything after the word and `{1}` the first of it; `/wait 2` between two

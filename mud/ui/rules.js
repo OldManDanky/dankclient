@@ -372,6 +372,8 @@
   function render() {
     const q = window.options ? window.options.query() : '';
     if (window.renderOwnGags) window.renderOwnGags(cache.rules.filter(plainGag));
+    // The Folders pane is a view of these same rules.
+    if (window.renderFolders) window.renderFolders();
     for (const kind of KINDS) {
       const list = $(LIST[kind]);
       list.replaceChildren();
@@ -391,52 +393,51 @@
 
   //: redraw from what we already have -- searching asks the server nothing
   window.renderRules = render;
+  //: the Folders pane draws its census from these rather than from a second
+  //: listing of its own, so the two cannot disagree
+  window.allRules = () => cache.rules || [];
 
-  /* By group, when there are any: each under a heading that says how many
-     are on and switches the lot, as `/group party on` does; then the rules
-     with no group.  With no groups at all the list is as it always was. */
-  function appendGrouped(list, rules) {
-    const byName = new Map();
-    const loose = [];
-    for (const r of rules) {
-      if (!r.group) { loose.push(r); continue; }
-      const key = r.group.toLowerCase();
-      if (!byName.has(key)) byName.set(key, { name: r.group, rules: [] });
-      byName.get(key).rules.push(r);
-    }
-    if (!byName.size) {
-      for (const r of rules) list.append(card(r));
-      return;
-    }
-    const groups = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-    for (const g of groups) {
-      list.append(groupHead(g.name, g.rules));
-      for (const r of g.rules) list.append(card(r));
-    }
-    if (loose.length) {
-      list.append(groupHead('', loose));
-      for (const r of loose) list.append(card(r));
-    }
+  /* A rule's group is its folder, and always was -- the CMUD importer has
+     been writing "areas/zombies" into it since 0.2.16.  The same component
+     draws it as the routes list, so the two panels cannot drift apart; what
+     is particular to rules is the folder-wide switch, which is `/group party
+     on` under a different hat. */
+  function within(path) {
+    const low = path.toLowerCase();
+    return cache.rules.filter((r) => {
+      const g = (r.group || '').toLowerCase();
+      return g === low || g.startsWith(low + '/');
+    });
   }
 
-  function groupHead(name, rules) {
-    const head = document.createElement('div');
-    head.className = 'rule-group' + (name ? '' : ' loose');
-    const title = document.createElement('b');
-    title.textContent = name || 'no group';
-    const count = document.createElement('span');
-    const on = rules.filter((r) => r.enabled).length;
-    count.textContent = on === rules.length ? `${on} on`
-      : on ? `${on} of ${rules.length} on` : `${rules.length} off`;
-    head.append(title, count);
-    if (name) {
-      // Switches the whole group, not only what a search is showing.
-      const all = cache.rules.filter((r) => (r.group || '').toLowerCase() === name.toLowerCase());
-      const allOn = all.every((r) => r.enabled);
-      head.append(button(allOn ? 'turn off' : 'turn on', () => rq('group', { name, on: !allOn })));
-      head.title = `/group ${name} ${allOn ? 'off' : 'on'} does the same from the input line`;
-    }
-    return head;
+  function appendGrouped(list, rules) {
+    list.append(...window.folderTree({
+      key: 'rules',
+      items: rules,
+      folderOf: (r) => r.group || '',
+      card: card,
+      redraw: render,
+      onRename: (from, to) => rq('rename_group', { from, to }),
+      // Everything at or under this folder, not only what a search shows:
+      // switching half a group off because the other half is hidden is not
+      // what the button says it does.
+      count: (node) => {
+        const all = within(node.path);
+        const on = all.filter((r) => r.enabled).length;
+        return on === all.length ? `${on} on`
+          : on ? `${on} of ${all.length} on` : `${all.length} off`;
+      },
+      actions: (node) => {
+        const all = within(node.path);
+        if (!all.length) return [];
+        const allOn = all.every((r) => r.enabled);
+        const b = button(allOn ? 'turn off' : 'turn on',
+                         () => rq('group', { name: node.path, on: !allOn }));
+        b.title = `/group ${node.path} ${allOn ? 'off' : 'on'} does the same `
+          + 'from the input line';
+        return [b];
+      },
+    }));
   }
 
   function card(r) {

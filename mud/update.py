@@ -486,6 +486,48 @@ def sync(store, routes, want=None, note=None, fresh: bool = False) -> dict:
             "changed": after.get("changed", []), "nothing": False}
 
 
+def summary(got: dict, fresh: bool = False) -> str:
+    """One line for the screen, saying what the update actually did.
+
+    The panel has always shown the counts and the main screen never did: it
+    got "fetching 3kdb..." and "merging the map (25000k)..." and then nothing
+    at all, so the one thing somebody watching wanted to know -- did it work
+    -- was the one thing missing.  A failure was worse: the progress lines,
+    then silence.
+
+    The wording here is not the panel's.  `did()` in updates.js writes for a
+    pane that can afford a hint about where to switch gags on; this is a line
+    in a stream of game text and says what happened, once.
+    """
+    if got.get("error"):
+        return f"update failed: {got['error']}"
+    if got.get("nothing"):
+        return "already up to date -- nothing to take."
+    done = got.get("did") or {}
+    if not done:
+        return "update finished, but it took nothing."
+    parts = []
+    if "map" in done:
+        it = done["map"]
+        said = f"map {it.get('rooms', 0):,} rooms, {it.get('edges', 0):,} exits"
+        if it.get("unfiled"):
+            said += (f" ({it['unfiled']:,} of your logged lines were in rooms "
+                     f"3kdb does not have)")
+        parts.append(said)
+    if "speedruns" in done:
+        parts.append(f"{done['speedruns'].get('added', 0):,} destinations")
+    if "bots" in done:
+        it = done["bots"]
+        said = f"{it.get('added', 0):,} routes"
+        if it.get("kept"):
+            said += f" ({it['kept']:,} of yours left alone)"
+        parts.append(said)
+    if "gags" in done:
+        parts.append(f"{done['gags'].get('gags', 0):,} gags")
+    head = "fresh copy finished" if fresh else "update finished"
+    return f"{head}: " + ", ".join(parts) + "."
+
+
 def never_run(store) -> bool:
     """Is this a client that has never had a map?
 

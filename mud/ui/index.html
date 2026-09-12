@@ -607,6 +607,31 @@
   .rule-group span{flex:1;letter-spacing:0;text-transform:none}
   .rule-group button{padding:1px 7px;font-size:10.5px;letter-spacing:0;text-transform:none}
   .rule-group.loose b{color:var(--dim)}
+  /* The Folders pane: a row per folder, then a row per thing in one. */
+  .fold-row,.fold-item{display:flex;align-items:center;gap:10px;padding:8px 11px;
+                       border:1px solid var(--line);border-radius:4px;background:var(--sunk)}
+  .fold-row{cursor:pointer}
+  .fold-row:hover,.fold-row:focus-visible{border-color:var(--dim)}
+  .fold-row b,.fold-item b{font-weight:600;font-size:12.5px}
+  .fold-row .meta,.fold-item .meta{flex:1;color:var(--dim);font-size:11.5px}
+  .fold-item{background:none;border-style:dashed}
+  .fold-item.off b{color:var(--dim);text-decoration:line-through}
+  /* Folders.  Deliberately the same look as a rule group heading -- one of
+     them grew into the other -- with the depth as an indent on both the
+     heading and what is filed under it. */
+  .folder{display:flex;align-items:center;gap:8px;margin-top:8px;padding:0 2px;
+          font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+          margin-left:calc(var(--depth, 0) * 14px)}
+  .folder:first-child{margin-top:0}
+  .folder b{color:var(--ink);font-weight:600;letter-spacing:.06em}
+  .folder .n{flex:1;letter-spacing:0;text-transform:none}
+  .folder button{padding:1px 7px;font-size:10.5px;letter-spacing:0;text-transform:none}
+  .folder .twist{padding:0 4px;border:0;background:none;color:var(--dim);font-size:11px;
+                 line-height:1;cursor:pointer}
+  .folder .twist:hover{color:var(--ink)}
+  .folder[data-closed="1"] b{color:var(--dim)}
+  /* Filed under a folder: indented one level further than its heading. */
+  .rule.filed,.route.filed{margin-left:calc((var(--depth, 0) + 1) * 14px)}
   .rule .acts,.route .acts,.route .top>button{flex:none}
   .rule .acts{display:flex;gap:4px;flex:none}
   .route .go{color:var(--good)}
@@ -874,6 +899,7 @@
              placeholder="Find a setting" aria-label="Find a setting">
       <button type="button" data-tab="start">Getting started<span class="n"></span></button>
       <div class="opt-group">Automation</div>
+      <button type="button" data-tab="folders">Folders<span class="n"></span></button>
       <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
       <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
       <button type="button" data-tab="gaglib">Gags<span class="n"></span></button>
@@ -986,6 +1012,27 @@
           </div>
           <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
                data-none="No routes yet. Paste a path into a new one."></div>
+        </section>
+
+        <!-- folders ------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="folders" hidden>
+          <div class="opt-head">
+            <div>
+              <h4 id="fold-title">Folders</h4>
+              <p id="fold-blurb">Everything you have filed under one name,
+                whatever kind it is. Put a folder name on a trigger, an alias,
+                a timer or a route and it appears here.</p>
+            </div>
+            <div class="acts">
+              <button id="fold-back" type="button" hidden>&larr; All folders</button>
+              <button id="fold-switch" type="button" hidden></button>
+              <button id="fold-rename" type="button" hidden>Rename</button>
+            </div>
+          </div>
+          <div id="fold-list" class="card-list"
+               data-empty="Nothing is in a folder yet."
+               data-none="Nothing is in a folder yet. Type a name in the Folder
+                          box of any trigger, alias, timer or route."></div>
         </section>
 
         <!-- triggers ----------------------------------------------------- -->
@@ -1545,6 +1592,16 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                   class="guide-link" data-guide="routes">How routes work</button></p>
               </div>
               <div class="frow">
+                <label for="r-group">Folder</label>
+                <input id="r-group" type="text" spellcheck="false"
+                       list="r-folders" placeholder="chaos/dungeon">
+                <datalist id="r-folders"></datalist>
+                <p class="fhint">Optional, and only for keeping the list
+                  tidy &mdash; it changes nothing about how the route walks. A
+                  <code>/</code> makes another level. The folder exists as long
+                  as something is in it, so naming one here is how you make it.</p>
+              </div>
+              <div class="frow">
                 <label for="r-start">Start room</label>
                 <input id="r-start" type="text" spellcheck="false" placeholder="25462">
                 <p class="fhint">A room number. The client walks you there first
@@ -1717,13 +1774,18 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                 <input id="f-name" type="text" placeholder="optional, for the list">
               </div>
               <div class="frow">
-                <label for="f-group">Group</label>
+                <label for="f-group">Folder</label>
                 <input id="f-group" type="text" list="f-groups" spellcheck="false"
-                       placeholder="optional, e.g. party">
+                       placeholder="optional, e.g. zodiacs">
                 <datalist id="f-groups"></datalist>
-                <p class="fhint">Rules with the same group are switched together:
-                  type <code>/group party on</code> or <code>/group party off</code>,
-                  or give an alias those as its actions.</p>
+                <p class="fhint">Files it with everything else of that name
+                  &mdash; triggers, aliases, timers and routes alike &mdash; and
+                  they switch together: <code>/group zodiacs on</code> or
+                  <code>/group zodiacs off</code>, or the switch on the folder in
+                  <button type="button" class="guide-link"
+                  data-guide="groups">Options &rarr; Folders</button>. A
+                  <code>/</code> makes another level, as in
+                  <code>zodiacs/hunting</code>.</p>
               </div>
               <div class="frow">
                 <label for="f-pace">Speed</label>
@@ -1768,6 +1830,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="rules.js"></script>
   <script src="chat.js"></script>
   <script src="map.js"></script>
+  <script src="folders.js"></script>
+  <script src="folderpane.js"></script>
   <script src="routes.js"></script>
   <script src="bots.js"></script>
   <script src="marks.js"></script>

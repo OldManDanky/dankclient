@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mud.mapper import Mapper  # noqa: E402
 from mud.store import Store  # noqa: E402
+from mud.botstore import Route  # noqa: E402
 from mud.tintin import fields, import_map, import_speedruns  # noqa: E402
 
 # Lifted verbatim from 3k_shared.map, trimmed to fit.
@@ -389,3 +390,66 @@ def test_a_line_that_is_not_a_bot_definition_is_not_read_as_one():
     for line in ("#alias .add_bot {", "  #var bot[path] {n;s};",
                  ".add_bot {only} {three} {fields};", "", "kill orc"):
         assert read_add_bot(line) is None, line
+
+
+# --- 3kdb's paths are tt++ scripts -------------------------------------------
+
+BOT = """#var {bot[path]} {n;{#send !fly bike};e;{.pause;challenge alone};u;
+ {#delay 4 {pull brick;e}};{#10 disbelieve illusion;n};.look_about;
+ e.look_about;{#send {ptell nofollow: pull brick;east}};s};
+
+#alias {.look_about} {
+    examine sarcophagus;
+    search sarcophagus;
+    glance
+};
+"""
+
+
+def bot_path(tmp) -> dict:
+    from mud.tintin import read_bot
+    f = Path(tmp) / "b.tin"
+    f.write_text(BOT)
+    return read_bot(f)
+
+
+def test_a_bots_own_alias_is_put_in_where_it_is_used():
+    """seal.tin writes `.check_sarcophagus` thirteen times and defines it at
+    the top of the same file."""
+    got = bot_path(tempfile.mkdtemp())
+    steps = Route(name="b", path=got["path"]).steps()
+    assert "examine sarcophagus;search sarcophagus;glance" in steps
+
+
+def test_a_direction_glued_to_an_alias_is_read_as_both():
+    """3kdb's own typo: seal.tin has "e.check_sarcophagus" where it means
+    "e;.check_sarcophagus"."""
+    steps = Route(name="b", path=bot_path(tempfile.mkdtemp())["path"]).steps()
+    assert "e;examine sarcophagus;search sarcophagus;glance" in steps
+
+
+def test_a_delay_becomes_a_wait_the_walker_honours():
+    steps = Route(name="b", path=bot_path(tempfile.mkdtemp())["path"]).steps()
+    assert "wait 4;pull brick;e" in steps
+
+
+def test_a_repeat_is_written_out():
+    steps = Route(name="b", path=bot_path(tempfile.mkdtemp())["path"]).steps()
+    assert "disbelieve illusion;" * 9 + "disbelieve illusion;n" in steps
+
+
+def test_a_send_is_unwrapped():
+    steps = Route(name="b", path=bot_path(tempfile.mkdtemp())["path"]).steps()
+    assert "!fly bike" in steps
+
+
+def test_what_has_no_equivalent_is_left_out_and_said_so():
+    """`.pause` is 3kdb stopping its own bot so you can act; a party tell whose
+    text contains a semicolon cannot be written as a step at all."""
+    got = bot_path(tempfile.mkdtemp())
+    left = ";".join(got["left_out"])
+    assert ".pause" in left
+    assert "ptell nofollow" in left
+    steps = Route(name="b", path=got["path"]).steps()
+    assert "challenge alone" in steps, "the rest of the step still walks"
+    assert not [s for s in steps if s.startswith((".", "#")) or "{" in s]

@@ -98,6 +98,83 @@ class ScriptHost:
         """
         return patrol.make_api(self.session, self.bots, "route")
 
+    # --- folders ------------------------------------------------------------
+    #
+    # A folder is one name across two stores.  "zodiacs" holding three
+    # triggers, two aliases and a route is the way somebody actually thinks
+    # about an area, and switching a group has covered every *kind* of rule
+    # since groups existed -- it was only the routes, in their own store,
+    # that the name did not reach.  Both live here, so this is where the two
+    # are put together rather than in either store or in the page.
+
+    def folders(self) -> list[dict]:
+        """Every folder there is, with what is in it and how much is on."""
+        rules = getattr(self, "rules", None)
+        routes = getattr(self, "routes", None)
+        found: dict[str, dict] = {}
+
+        def seen(path: str) -> dict:
+            # Every prefix is a folder, so "a/b" makes "a" exist as well.
+            parts = path.split("/")
+            for n in range(1, len(parts) + 1):
+                at = "/".join(parts[:n])
+                found.setdefault(at.lower(), {"path": at, "kinds": {}, "on": 0,
+                                              "count": 0})
+            return found[path.lower()]
+
+        for rule in (rules.rules if rules is not None else []):
+            if not rule.group:
+                continue
+            row = seen(rule.group)
+            row["kinds"][rule.kind] = row["kinds"].get(rule.kind, 0) + 1
+            row["count"] += 1
+            row["on"] += 1 if rule.enabled else 0
+        for route in (routes.routes if routes is not None else []):
+            if not route.group:
+                continue
+            row = seen(route.group)
+            row["kinds"]["route"] = row["kinds"].get("route", 0) + 1
+            row["count"] += 1
+            row["on"] += 1 if route.enabled else 0
+
+        # A parent counts what is under it as well: the list is read as "what
+        # do I have for this area", and the nested folders are part of that.
+        out = []
+        for row in found.values():
+            low = row["path"].lower() + "/"
+            deep = {"count": row["count"], "on": row["on"],
+                    "kinds": dict(row["kinds"])}
+            for other in found.values():
+                if other["path"].lower().startswith(low):
+                    deep["count"] += other["count"]
+                    deep["on"] += other["on"]
+                    for kind, n in other["kinds"].items():
+                        deep["kinds"][kind] = deep["kinds"].get(kind, 0) + n
+            out.append({"path": row["path"], "here": row["count"],
+                        "count": deep["count"], "on": deep["on"],
+                        "kinds": deep["kinds"]})
+        return sorted(out, key=lambda r: r["path"].lower())
+
+    def set_folder(self, name: str, on: bool) -> dict:
+        """Switch a folder: every kind of rule in it, and its routes."""
+        rules = getattr(self, "rules", None)
+        routes = getattr(self, "routes", None)
+        did = {"rules": 0, "routes": 0}
+        if rules is not None:
+            did["rules"] = len(rules.set_group(name, on))
+        if routes is not None:
+            did["routes"] = len(routes.set_folder(name, on))
+        return did
+
+    def rename_folder(self, old: str, new: str) -> dict:
+        """Rename a folder in both stores at once, so the name stays one name."""
+        rules = getattr(self, "rules", None)
+        routes = getattr(self, "routes", None)
+        return {
+            "rules": rules.rename_group(old, new) if rules is not None else 0,
+            "routes": routes.rename_folder(old, new) if routes is not None else 0,
+        }
+
     # --- lifecycle ----------------------------------------------------------
 
     def load_all(self) -> None:

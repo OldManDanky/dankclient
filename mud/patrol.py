@@ -40,9 +40,15 @@ from typing import Callable, Iterable
 
 from . import events
 from .outbound import HIGH, NORMAL
+from .rules import MOST_WAIT
 
 #: Below this, stop.  A percentage, because max hp changes with the character.
 HEALTH_FLOOR = 40.0
+
+#: A path step that waits rather than moves: "wait 4", as 3kdb's own paths
+#: mean it when they say `#delay 4 {pull brick;e}`.  A number is required --
+#: bare "wait" is a real exit in one room of 3K, and this must not shadow it.
+WAIT_STEP = re.compile(r"wait\s+([\d.]+)\s*$", re.I)
 
 #: How long to wait for a room block before deciding a move failed.  Generous
 #: next to the 0.67s worst case measured across a town walk.
@@ -243,7 +249,15 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         """
         check()
         parts = [p.strip() for p in direction.split(";") if p.strip()]
+        sent = []
         for part in parts:
+            # "wait 4" holds the step up rather than going out.  3kdb writes
+            # it as `#delay 4 {pull brick;e}`: the brick needs a moment
+            # before the door it opens can be walked through.
+            held = WAIT_STEP.fullmatch(part)
+            if held:
+                await asyncio.sleep(min(float(held.group(1)), MOST_WAIT))
+                continue
             await gate()
             # Directions do not count against APM, so they go straight out;
             # the queue still meters anything that is not one.
@@ -251,6 +265,10 @@ def make_api(session, bots: Bots, owner: str) -> dict:
                 session.queue.now(part)
             else:
                 session.queue.put(part, HIGH)
+            sent.append(part)
+        if not sent:
+            return None                   # nothing but a wait: nowhere to arrive
+        parts = sent
         room = await bus.wait(events.ROOM, timeout)
         if room is not None:
             return room

@@ -48,6 +48,7 @@
     $('r-loop').checked = route ? !!route.loop : false;
     $('r-polite').checked = route ? !!route.polite : false;
     $('r-start').value = route && route.start ? String(route.start) : '';
+    $('r-group').value = route ? (route.group || '') : '';
     $('r-rest').value = route ? String(route.rest || 0) : '0';
     $('route-error').textContent = '';
     $('r-name').focus();
@@ -74,6 +75,7 @@
         targets: $('r-targets').value,
         loop: $('r-loop').checked,
         polite: $('r-polite').checked,
+        group: $('r-group').value,
         start: parseInt($('r-start').value, 10) || 0,
         rest: parseFloat($('r-rest').value) || 0,
       },
@@ -100,7 +102,8 @@
     list.dataset.empty = q
       ? `No route matches “${q}”.`
       : list.dataset.none || 'No routes yet.';
-    for (const r of routes.filter(matches)) {
+    const shown = routes.filter(matches);
+    const card = function (r) {
       const row = document.createElement('div');
       row.className = 'route' + (r.running ? ' running' : '');
 
@@ -132,7 +135,22 @@
       meta.textContent = bits.join('  ·  ');
 
       row.append(top, meta);
-      list.append(row);
+      return row;
+    };
+
+    // A search flattens the folders: what you are looking for should not be
+    // behind one that happens to be folded away.
+    if (q) {
+      list.append(...shown.map(card));
+    } else {
+      list.append(...window.folderTree({
+        key: 'routes',
+        items: shown,
+        folderOf: (r) => r.group || '',
+        card: card,
+        onRename: (from, to) => send({ op: 'rename_folder', from, to }),
+        redraw: render,
+      }));
     }
 
     // What is walking, and what is paused, in the sidebar's Bot panel.
@@ -143,6 +161,7 @@
     btn.classList.toggle('live', walking.length > 0);
     btn.textContent = walking.length
       ? `Options \u00b7 ${walking.length} walking` : 'Options';
+    if (window.renderFolders) window.renderFolders();
     if (window.options) {
       window.options.count('routes', routes.length);
       window.options.note(walking.map((r) => r.name).join(', '));
@@ -151,6 +170,7 @@
 
   //: redraw from what we already have -- searching asks the server nothing
   window.renderRoutes = render;
+  window.allRoutes = () => routes || [];
 
   window.handleRoutes = function (m) {
     if (m.op === 'error') {
@@ -161,6 +181,13 @@
     if (m.op === 'list') {
       routes = m.routes || [];
       walk = m.walk || null;
+      // The folders there are, to pick from rather than retype -- and typing
+      // a new one is still how a new folder is made.
+      $('r-folders').replaceChildren(...(m.folders || []).map((f) => {
+        const o = document.createElement('option');
+        o.value = f;
+        return o;
+      }));
       if (window.setAutoCollect) window.setAutoCollect(!!m.autocollect);
       // The form closes only once the server has taken the save: an error
       // comes back on the same channel, and closing on the click would throw

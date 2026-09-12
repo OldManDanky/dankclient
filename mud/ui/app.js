@@ -299,6 +299,8 @@ function handle(m) {
     window.handleMarks(m);
   } else if (m.t === 'routes' && window.handleRoutes) {
     window.handleRoutes(m);
+  } else if (m.t === 'folders' && window.handleFolders) {
+    window.handleFolders(m);
   } else if (m.t === 'login' && window.handleLogin) {
     window.handleLogin(m);
   } else if (m.t === 'update' && window.handleUpdate) {

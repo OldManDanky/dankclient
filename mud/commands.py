@@ -38,7 +38,8 @@ HELP = [
         ('/ticks', 'the ones that are running'),
         ('/untick <name|all>', 'stop one, or all of them'),
         ('/delay <secs> <command>', 'send it once, later'),
-        ('/group <name> on|off', 'switch a group of rules on or off; /groups lists them'),
+        ('/group <name> on|off', 'switch a folder on or off, rules and routes; /groups lists them'),
+        ('/folders', 'every folder, and what is filed in it'),
         ('/alias <word> <cmd;cmd>', 'make an alias; {args} or {1} for what follows it'),
         ('/alias', 'the aliases you have made; /alias <word> shows one'),
         ('/unalias <word>', 'remove one'),
@@ -305,6 +306,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb in ("group", "groups"):
         _group(rest, scripts, note)
+
+    elif verb in ("folder", "folders"):
+        _folders(rest, scripts, note)
 
     elif verb in ("alias", "unalias"):
         _alias(verb, rest, scripts, note)
@@ -748,8 +752,42 @@ def _group(rest: str, scripts, note) -> None:
         note(f"{name}: {state(groups[name])}\n"
              + "\n".join(what(r) for r in groups[name]))
         return
-    hit = store.set_group(name, switch == "on")
-    note(f"{name}: {len(hit)} rule(s) {switch}")
+    # A folder is one name across both stores, so switching it here switches
+    # its routes too -- otherwise `/group zodiacs off` leaves the area's route
+    # still walking, which is not what anybody means by it.
+    did = scripts.set_folder(name, switch == "on")
+    said = f"{did['rules']} rule(s)"
+    if did.get("routes"):
+        said += f" and {did['routes']} route(s)"
+    note(f"{name}: {said} {switch}")
+
+
+def _folders(rest: str, scripts, note) -> None:
+    """Every folder, with what is filed in it across both stores.
+
+    `/groups` lists the rule groups; this is the same names read as folders,
+    counting the routes as well, which is the whole point of a folder over a
+    group.  `/folders <name>` is `/group <name>`, which already lists one.
+    """
+    if scripts is None:
+        note("scripting is disabled (--no-scripts)")
+        return
+    if rest.strip():
+        _group(rest, scripts, note)
+        return
+    rows = scripts.folders()
+    if not rows:
+        note("no folders.  Put a name in the Folder box of a trigger, an "
+             "alias, a timer or a route, and it is one.")
+        return
+    order = ("trigger", "alias", "event", "watch", "timer", "route")
+
+    def what(kinds: dict) -> str:
+        return ", ".join(f"{kinds[k]} {k}" + ("" if kinds[k] == 1 else "s")
+                         for k in order if kinds.get(k))
+    note("\n".join(
+        f"  {row['path']:<22} {('on' if row['on'] == row['count'] else 'off' if not row['on'] else str(row['on']) + ' of ' + str(row['count']) + ' on'):<12} {what(row['kinds'])}"
+        for row in rows))
 
 
 def _gag(verb: str, rest: str, scripts, note) -> None:
