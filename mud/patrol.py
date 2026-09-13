@@ -85,7 +85,10 @@ FIGHT_POLL = 5.0
 #: you.  Filtered from the pending queue like any look, so the room block it
 #: produces is uncaused -- which is exactly right: if it shows somewhere new,
 #: the mapper relocates rather than crediting the step.
-LOOK = "l"
+#: The word, not `l`: players alias single letters, and a tester's `l` answered
+#: "That does not seem to be here." -- so after `embrace void` the look never
+#: showed the doorway, and his bot stood at its own start and gave up.
+LOOK = "look"
 LOOK_TIMEOUT = 2.0
 
 #: 3K's own word that a way out is not there, the one refusal it is

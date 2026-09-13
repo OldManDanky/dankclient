@@ -63,7 +63,7 @@ def test_go_looks_before_it_gives_up():
     async def scenario():
         commands.handle("/go bank", s, None, note)
         await asyncio.sleep(0)
-        assert s.sent == ["l"], f"a look, not a refusal: {s.sent} {notes}"
+        assert s.sent == ["look"], f"a look, not a refusal: {s.sent} {notes}"
         # The square answers, and it is the only room shaped like that.
         s._consume(mip("DDD", "n~e") + mip("HAB", "noun~fountain~fountain~exa #N"))
         s._consume(mip("FFF", "A~100"))
@@ -82,7 +82,7 @@ def test_a_look_that_does_not_find_us_says_so():
     async def scenario():
         commands.handle("/go bank", s, None, note)
         await asyncio.sleep(0)
-        assert s.sent == ["l"]
+        assert s.sent == ["look"]
         await asyncio.sleep(2.1)                # nothing comes back
         assert any("still lost" in n for n in notes), notes
 

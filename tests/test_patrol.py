@@ -174,7 +174,7 @@ def test_a_speedwalk_stops_where_the_path_stops_working():
             await asyncio.sleep(0.4)
             assert await walk is False
             # It looked to find out whether "n" had moved us, then stopped.
-            assert s2.sent == ["n", "l"]
+            assert s2.sent == ["n", "look"]
 
         run(scenario())
     finally:
@@ -272,7 +272,7 @@ def test_silence_is_not_taken_to_mean_you_did_not_move():
         async def scenario():
             step = asyncio.ensure_future(api["walk"]("embrace void"))
             await asyncio.sleep(0.15)
-            assert s.sent == ["embrace void", "l"]      # it looked
+            assert s.sent == ["embrace void", "look"]      # it looked
             # and the look shows somewhere new, so the step did move us
             s._consume(mip("DDD", "doorway~leave")
                        + mip("HAB", "noun~portal~portal~exa #N"))
@@ -319,7 +319,7 @@ def test_travel_sends_the_whole_way_at_once_and_the_map_follows():
     async def scenario():
         trip = asyncio.ensure_future(api["travel"](d))
         await asyncio.sleep(0)
-        assert s.sent == ["l"], "a look first: the map must be sure where it is"
+        assert s.sent == ["look"], "a look first: the map must be sure where it is"
         s._consume(mip("DDD", "n") + mip("HAB", "noun~sky~sky~exa #N"))
         s._consume(mip("FFF", "A~100"))
         await asyncio.sleep(0.05)
@@ -398,10 +398,10 @@ def test_a_stack_that_does_not_arrive_walks_the_rest():
         async def scenario():
             ok = await asyncio.wait_for(api["travel"](b, tries=1), 4)
             assert ok is False
-            assert s.sent[0] == "l", "a look first, to be sure where it is"
+            assert s.sent[0] == "look", "a look first, to be sure where it is"
             assert s.sent[1] == "n", "then the stack"
-            assert s.sent[2] == "l", "then a look, in case it had got there"
-            assert s.sent[3:] == ["n", "l"], "then a step, looked at"
+            assert s.sent[2] == "look", "then a look, in case it had got there"
+            assert s.sent[3:] == ["n", "look"], "then a step, looked at"
             assert not store.exits_from(a)[0]["failed"], "silence marks nothing"
 
         run(scenario())
@@ -473,10 +473,10 @@ def test_a_stack_ending_in_a_teleport_looks_before_sending_it_again():
         async def scenario():
             trip = asyncio.ensure_future(api["travel"](b))
             await asyncio.sleep(0)
-            assert s.sent == ["l"], "a look first: the map must be sure where it is"
+            assert s.sent == ["look"], "a look first: the map must be sure where it is"
             s._consume(mip("DDD", "e~w") + b"\r\n>\r\n")      # still in Eastwick
             await asyncio.sleep(0.3)                     # the stack times out
-            assert s.sent[1:] == ["embrace void", "l"], "looked, sent nothing again"
+            assert s.sent[1:] == ["embrace void", "look"], "looked, sent nothing again"
             s._consume(mip("DDD", "doorway~leave") + b"\r\n>\r\n")
             assert await asyncio.wait_for(trip, 2) is True
             assert m.here == b
@@ -504,7 +504,7 @@ def test_a_walk_looks_first_and_routes_from_where_the_look_puts_it():
     async def scenario():
         trip = asyncio.ensure_future(api["travel"](bank))
         await asyncio.sleep(0)
-        assert s.sent == ["l"], "a look before anything is sent"
+        assert s.sent == ["look"], "a look before anything is sent"
         s._consume(mip("DDD", "n~e") + mip("HAB", "noun~sky~sky~exa #N"))
         s._consume(mip("FFF", "A~100"))            # the square, where he really is
         await asyncio.sleep(0.05)

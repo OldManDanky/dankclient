@@ -126,7 +126,7 @@ def test_a_slow_step_is_not_a_broken_one():
         looks = []
 
         def answer(line, where):
-            if line == "l":
+            if line == "look":
                 looks.append(line)
                 # The first look, before setting off, is answered; after
                 # that 3K has gone quiet.
@@ -154,7 +154,7 @@ def test_a_step_3k_refuses_is_marked_and_routed_around():
         name_of = {v: k for k, v in room.items()}
 
         def answer(line, where):
-            if line == "l":
+            if line == "look":
                 return block(store, where[0])
             if line == "w" and where[0] == road:
                 return b"You cannot go west.\r\n>\r\n"
@@ -243,7 +243,7 @@ def test_the_look_after_a_quiet_step_goes_out_at_once():
         async def scenario():
             step = asyncio.ensure_future(api["walk"]("n"))
             await asyncio.sleep(0.15)
-            assert "l" in s.sent, "the look sat behind the queue"
+            assert "look" in s.sent, "the look sat behind the queue"
             step.cancel()
 
         run(scenario())
@@ -262,7 +262,7 @@ def test_a_look_that_shows_the_same_room_marks_the_way_out():
         assert m.route(wick) == ["efor"]
 
         def answer(line, where):
-            if line == "l":
+            if line == "look":
                 return block(store, road)
             if line == "efor":
                 return b"There is no reason to efor.\r\n>\r\n"

@@ -149,6 +149,13 @@ def personal(command: str) -> bool:
     return c == "home" or (c.startswith("home ") and c[5:].isdigit())
 
 
+#: Ways out that are directions.  An extra one of these in a room's exits is
+#: a different room; an extra anything else may be something lying there.
+COMPASS = frozenset(
+    "n s e w ne nw se sw u d north south east west northeast northwest "
+    "southeast southwest up down".split())
+
+
 #: Applied in order to bring an older file up to date.  A map is months of
 #: walking, so it is upgraded rather than thrown away.
 _UPGRADES = {
@@ -764,7 +771,7 @@ class Store:
             "LIKE ? ORDER BY LENGTH(name), name LIMIT ?", (like, like, limit)))
 
     def consistent(self, room_id: int, exits: Iterable[str],
-                   scenery: Iterable[str]) -> bool:
+                   scenery: Iterable[str], name: str | None = None) -> bool:
         """Could this be that room?
 
         Weaker than :meth:`candidates`, and deliberately so.  Identifying a
@@ -795,7 +802,48 @@ class Store:
         if not mine:
             return False
         known = {str(e["command"]).lower() for e in self.exits_from(room_id)}
-        return mine <= known
+        if mine <= known:
+            return True
+
+        # A way out that comes and goes.  A puddle wanders Chaos, and 3K lists
+        # it as an exit in whichever room it lies in: `e~w~puddle` in the room
+        # with the void, `e~w~s~n~vortex~puddle` at the centre.  The map had
+        # `e,w` for the first, so the room it predicted was "contradicted",
+        # the map went lost there, and from lost the two temple doorways
+        # beyond -- identical rooms, one per Angels -- could not be told
+        # apart: a bot stood at its own start saying it could not reach it.
+        # So also accept every recorded exit being present with extras that
+        # are not a way out anywhere -- and only with 3K's title for the room
+        # agreeing.  Without that, `e~w~s~n~puddle` at Eastwick Road passed for
+        # the Eastwick next door, and a `vortex` (a real way out, eleven times
+        # over) made the centre of Chaos pass for one too.
+        if not name or not self._named(room_id, name):
+            return False
+        for row in self.db.execute(
+            "SELECT exits, scenery FROM fingerprint WHERE room_id = ?", (room_id,)
+        ):
+            recorded = set(row["exits"].split(",")) - {""}
+            extra = mine - recorded
+            if (not recorded or not recorded <= mine or extra & COMPASS
+                    or self._a_way_out(extra)):
+                continue
+            have = set(row["scenery"].split(",")) - {""}
+            if not want or not have or (want & have):
+                return True
+        return False
+
+    def _named(self, room_id: int, name: str) -> bool:
+        """Does 3K's title for a room agree with the name the map has?"""
+        row = self.db.execute("SELECT name FROM room WHERE id = ?",
+                              (room_id,)).fetchone()
+        return bool(row and row["name"]
+                    and row["name"].strip().lower() == name.strip().lower())
+
+    def _a_way_out(self, words: set[str]) -> bool:
+        """Is any of these a way out of some room on the map?"""
+        return any(self.db.execute(
+            "SELECT 1 FROM edge WHERE command = ? LIMIT 1", (w,)).fetchone()
+            for w in words)
 
     # --- edges --------------------------------------------------------------
 

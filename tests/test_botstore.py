@@ -136,7 +136,7 @@ def test_a_route_that_walks_into_a_wall_stops_rather_than_carrying_on():
             s._consume(mip("DDD", "s") + mip("HAB", "noun~sky~sky~exa #N"))
             s._consume(mip("FFF", "A~100"))
             await asyncio.sleep(0.9)             # the second step times out
-            assert s.sent == ["n", "e", "l"]     # and it looked, to be sure
+            assert s.sent == ["n", "e", "look"]     # and it looked, to be sure
             assert "did not go anywhere" in host.bots.bots["blocked"].note
 
         try:
@@ -265,7 +265,7 @@ def test_a_route_walks_to_its_start_before_it_begins():
         async def scenario():
             host.routes.start(route.id)
             await asyncio.sleep(0)
-            assert s.sent == ["l"], "a look first, to be sure where it is"
+            assert s.sent == ["look"], "a look first, to be sure where it is"
             arrive(s, m, away)
             await asyncio.sleep(0.01)
             assert s.sent[1:] == ["s"]      # walking to the start, not the path
@@ -372,7 +372,7 @@ def test_resume_walks_back_to_that_room_and_carries_on():
 
             assert host.routes.start(route.id, resume=True) is None
             await asyncio.sleep(0)
-            assert s.sent == ["l"], "a look first, to be sure where it is"
+            assert s.sent == ["look"], "a look first, to be sure where it is"
             arrive(s, m, a)
             await asyncio.sleep(0.01)
             assert s.sent[1:] == ["n"], "back to where it paused"

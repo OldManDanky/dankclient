@@ -436,7 +436,7 @@ class Mapper:
         itself there on every visit.  Only the empty list, and only with the
         name to confirm it; exits that disagree still disagree.
         """
-        if self._fits(room_id, exits, scenery):
+        if self.store.consistent(room_id, exits, scenery, name=name):
             return True
         return not exits and bool(name) and self._called(room_id, name)
 

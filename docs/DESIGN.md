@@ -676,6 +676,26 @@ waited on for two seconds.  The look goes out at once now; a mark wears off
 by one a day; and every mark in a map from before 0.2.19 is forgotten once,
 because silence was the only way one was ever made.
 
+**The look is `look`, not `l`.**  `l` is an alias on 3K's side, and a
+player's aliases are their own: the same tester's `l` answered "That does
+not seem to be here."  `embrace void` sends no room, so the walker looks to
+see where it went -- and his looks never showed the temple doorway, so the
+bot sent `embrace void` from the doorway five times ("Whom do you wish to
+embrace?") and stopped at its own start.  `look` is the command itself.
+
+**A way out that comes and goes is not a different room.**  A puddle wanders
+Chaos, and 3K lists it as an exit wherever it lies -- `e~w~puddle` in the
+room with the void, `e~w~s~n~vortex~puddle` at the centre.  3kdb records
+that room as `e,w`, so the room dead reckoning predicted was contradicted
+and the map went lost, and from lost the two temple doorways beyond it --
+identical rooms, one per Angels -- cannot be told apart.  So the check on a
+*predicted* room also accepts extra exits, on three conditions: none is a
+direction, none is a way out anywhere on the map (a `vortex` is, eleven
+times over), and 3K's title for the room agrees.  The title is what stops
+Eastwick Road with a puddle passing for the Eastwick next door, which has
+the same four directions; the first version without it placed a room
+wrong in the captures.  Finding a room from nothing is not loosened.
+
 And because what was sent cannot be taken back, a long stack does not all go
 at once.  A route worked out from the wrong room is a walk into the wrong
 part of the world, and the whole path at once is forty moves of it before
