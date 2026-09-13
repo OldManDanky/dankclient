@@ -166,7 +166,7 @@
       paint();
     } catch (err) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#c8553d';
+      ctx.fillStyle = css('--bad', '#c8553d');
       ctx.font = '11px Consolas, monospace';
       ctx.fillText('map: ' + (err && err.message ? err.message : err), 8, 16);
       console.error('map', err);
@@ -200,7 +200,7 @@
       // An older server sends `rooms` as a count and no `centre` at all.
       // Object.entries(4) is [], so this drew a blank panel and called it an
       // empty map -- say what it really is instead.
-      ctx.fillStyle = '#c8553d';
+      ctx.fillStyle = css('--bad', '#c8553d');
       ctx.fillText('server is older than this page - restart the client', 8, 18);
       return;
     }
@@ -243,6 +243,10 @@
     const ink = css('--ink', '#d8dde6');
     const dim = css('--dim', '#7c8598');
     const accent = css('--accent', '#6f9beb');
+    // Options -> Colours: a light theme's rooms are light, and so are its areas.
+    const roomFill = css('--room', '#333a48');
+    const roomBlank = css('--room-unnamed', '#262b36');
+    const areaLight = css('--area-light', '34%');
 
     // links first, so rooms sit on top of them
     for (const [id, room] of Object.entries(state.rooms)) {
@@ -322,8 +326,8 @@
       const [x, y] = at(p);
       const here = id === state.centre;
       const tint = room.region == null
-        ? null : `hsl(${areaHue(room.region)} 42% 34%)`;
-      ctx.fillStyle = here ? accent : (tint || (room.name ? '#333a48' : '#262b36'));
+        ? null : `hsl(${areaHue(room.region)} 42% ${areaLight})`;
+      ctx.fillStyle = here ? accent : (tint || (room.name ? roomFill : roomBlank));
       ctx.strokeStyle = here ? accent : line;
       ctx.beginPath();
       ctx.roundRect(x - dot / 2, y - dot / 2, dot, dot, 2);
@@ -391,6 +395,9 @@
     if (!hit || hit.id === state.centre) return;
     if (window.ws) window.ws.send(JSON.stringify({ t: 'walk', to: hit.id }));
   });
+
+  // A new colour scheme or theme: the canvas does not follow CSS by itself.
+  document.addEventListener('themechange', () => draw());
 
   window.renderMap = function (map) {
     // Called with nothing at all: draw what is already here.  The panel being

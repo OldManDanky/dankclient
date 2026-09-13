@@ -41,12 +41,41 @@ def test_a_persons_colour_wins_over_their_channels():
     assert body.index("colours.who") < body.index("colours.channel")
 
 
+def _lum(hexa: str) -> float:
+    r, g, b = (int(hexa[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _block(name: str) -> str:
+    js = chat()
+    start = js.index(f"const {name} =")
+    return js[start:js.index("}" if name == "DARKER" else "];", start)]
+
+
 def test_every_colour_reads_on_the_dark_ground():
     """A colour you cannot read is worse than none: each must be light."""
-    for hexa in re.findall(r"'#([0-9a-f]{6})'", chat()[chat().index("PALETTE"):]):
-        r, g, b = (int(hexa[i:i + 2], 16) / 255 for i in (0, 2, 4))
-        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        assert lum > 0.45, hexa
+    palette = re.findall(r"'#([0-9a-f]{6})'", _block("PALETTE"))
+    assert len(palette) == 8, palette
+    for hexa in palette:
+        assert _lum(hexa) > 0.45, hexa
+
+
+def test_on_a_light_ground_each_has_a_darker_twin():
+    """Options -> Colours can make the window light, and those same colours
+    would all but vanish on it."""
+    palette = re.findall(r"'#([0-9a-f]{6})'", _block("PALETTE"))
+    twins = dict(re.findall(r"'#([0-9a-f]{6})':\s*'#([0-9a-f]{6})'", _block("DARKER")))
+    assert set(twins) == set(palette), "every colour has one"
+
+    def relative(hexa: str) -> float:          # WCAG's, not the rough one above
+        def channel(c: float) -> float:
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b = (channel(int(hexa[i:i + 2], 16) / 255) for i in (0, 2, 4))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    for dark in twins.values():
+        contrast = 1.05 / (relative(dark) + 0.05)   # against white
+        assert contrast >= 4.5, (dark, round(contrast, 2))
 
 
 def test_the_menu_can_be_closed_without_choosing():

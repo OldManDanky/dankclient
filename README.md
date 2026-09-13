@@ -132,6 +132,14 @@ the messages window's size.  It offers the fixed-width fonts installed on
 your computer, or any other by name.  **Ctrl +** and **Ctrl -** make
 everything else bigger or smaller.
 
+**Options -> Colours** chooses the terminal's colour scheme -- Dank (the
+default), Linux Tango, Solarized, Dracula, Gruvbox, Nord, One Dark,
+Catppuccin, Tomorrow Night, Rosé Pine, Monokai or Campbell -- or one of your
+own: download a scheme from [terminalcolors.com](https://terminalcolors.com/)
+or its own site as an Alacritty, iTerm2, Ghostty, Windows Terminal or
+Xresources file and add it.  The rest of the window can be **Dark**, **Light**,
+or **match the terminal**.
+
 **Deadman.**  3K expects a person at the keyboard.  If you haven't typed a
 command for 15 minutes, steppers pause where they are and nothing automated is sent -- no triggers, no
 timers -- until you type something, and then everything carries on.  The 15

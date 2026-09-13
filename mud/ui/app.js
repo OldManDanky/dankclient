@@ -9,7 +9,7 @@ function fail(what, err) {
   const s = $('status');
   if (s) {
     s.className = '';
-    s.style.color = '#c8553d';
+    s.style.color = 'var(--bad)';
     s.textContent = `${what}: ${err && err.message ? err.message : err}`;
   }
   console.error(what, err);
@@ -108,6 +108,11 @@ function fontStack(name) {
 }
 window.fontStack = fontStack;
 
+/* Options -> Colours: a scheme swapped in while the terminal is running. */
+window.setTerminalTheme = function (theme) {
+  if (term) term.options.theme = theme;
+};
+
 /* Change it while it is running.  The width of a column is a property of the
    font -- refit() measures it once and keeps it -- so it is measured again. */
 window.setTerminalFont = function (family, size, line) {
@@ -139,13 +144,17 @@ try {
     // swallows keystrokes into its hidden textarea and typing appears to do
     // nothing until you click the input again.
     disableStdin: true,
-    // cursor matches the ground: the terminal takes no input, so the marker
-    // would only suggest otherwise
-    theme: { background: '#111318', foreground: '#d8dde6',
-             cursor: '#111318', cursorAccent: '#111318',
-             // Visible against the ground: a selection you cannot see is one
-             // you do not know you have made before pressing Ctrl+C.
-             selectionBackground: 'rgba(111, 155, 235, 0.45)' },
+    // The scheme chosen under Options -> Colours, from the start: colours.js
+    // loads first.  Its cursor is the ground and its selection is seen
+    // through -- see there.
+    // Some schemes hide text on purpose: Solarized Dark's bright black is its
+    // own ground, and so is Solarized Light's bright white.  3K text in those
+    // colours would vanish, so a colour nearly invisible on the ground is
+    // nudged until it reads -- at 3:1, which leaves ordinary colours alone.
+    minimumContrastRatio: 3,
+    theme: window.colours ? window.colours.terminalTheme()
+      : { background: '#111318', foreground: '#d8dde6', cursor: '#111318',
+          cursorAccent: '#111318', selectionBackground: 'rgba(111, 155, 235, 0.45)' },
   });
   if (typeof FitAddon !== 'undefined') {
     fit = new FitAddon.FitAddon();

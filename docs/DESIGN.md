@@ -1067,6 +1067,41 @@ two megabytes at most, which is why the socket's message limit is three.
 and a walk to a room on the map is over the moment you arrive, so neither
 chimes.  Disconnect, pressed, is not the MUD dropping you.
 
+## Colour schemes
+
+**Options -> Colours** has two choices, kept in the browser like Fonts.  The
+terminal's scheme sets the sixteen colours 3K's ANSI codes name, plus the
+ground and the text; 256-colour and true-colour output is the MUD's own and is
+not recoloured.  The page's theme is Dark (the look it has always had), Light,
+or Match the terminal, which builds the page's variables from the scheme --
+its ground and text, and its own red, green, yellow and blue for the things
+that are red, green, yellow and blue.
+
+The built-in schemes are the palettes as their projects publish them, each
+credited in `colours.js`; "Dank" is today's look, which was xterm.js's own
+Tango sixteen on this client's ground.  Nothing is copied from
+terminalcolors.com, which shows a copyright and no licence and offers files
+rather than colours -- so instead the client reads the files it and most
+schemes' own sites give out: Alacritty, iTerm2, Ghostty, Windows Terminal
+and Xresources.  Which format a file is comes from what is in it, not its
+name.
+
+Some schemes hide text on purpose -- Solarized Dark's bright black is its own
+ground, and so is Solarized Light's bright white -- and 3K text in those
+colours would simply vanish.  So the terminal runs with xterm's
+`minimumContrastRatio` at 3: a colour nearly invisible on the ground is
+nudged until it reads, and an ordinary one is left as the scheme publishes it.
+
+`colours.js` loads before `app.js`, so the terminal is made in the chosen
+scheme and the page's variables are set before anything is drawn.  Everything
+the page colours now comes from those variables -- a light theme found the
+hard-coded ones: scrollbars, placeholders, the bar tracks, the warning
+yellow, the accent tints, and the map's room fills, which a canvas does not
+take from CSS by itself, so the map redraws on a `themechange` event.  The
+messages window's right-click colours are chosen to read on a dark ground; on
+a light one each is drawn as a darker twin, and what was saved is not
+touched.
+
 ## Your own colours
 
 The line markers are settings on the character, so somebody who tries this

@@ -6,4 +6,5 @@
 - **Keep the last command** in the box, also under Keyboard, to send it again with Enter.
 - **Speedwalk**, also under Keyboard: `.3n2e` walks n, n, n, e, e, as zMUD does; `h` `j` `k` `l` are nw, ne, sw, se.
 - [Options → Fonts](options:fonts) sets the output's font, size and spacing. **Ctrl +** and **Ctrl -** make everything else bigger or smaller.
+- [Options → Colours](options:colours) chooses the terminal's colour scheme -- Dank, Linux Tango, Solarized, Dracula, Nord and more, or your own from a file (Alacritty, iTerm2, Ghostty, Windows Terminal or Xresources, as terminalcolors.com offers them) -- and whether the rest of the window is **Dark**, **Light**, or **matches the terminal**.
 - [Options → Layout](options:panels) shows and hides the panels.

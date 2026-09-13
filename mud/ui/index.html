@@ -14,13 +14,16 @@
     /* set from Options -> Fonts by fonts.js */
     --term-font:Consolas,"DejaVu Sans Mono",monospace; --term-size:14px; --cm-size:11px;
     --hp:#c8553d; --sp:#4a90d9; --gp:#5aa66f; --enemy:#b8863b;
-    --good:#5aa66f; --bad:#c8553d;
+    --good:#5aa66f; --bad:#c8553d; --warn:#f2cc60;
+    /* The rest of what Options -> Colours sets; these are the Dark theme. */
+    --scroll:#39404f; --scroll-hover:#4a5365; --placeholder:#4b525f; --track:#000;
+    --room:#333a48; --room-unnamed:#262b36; --area-light:34%;
     /* One gutter for every outer edge, so the first line of the terminal,
        the vitals strip, the input box and the docked map all start on the
        same lines instead of within a couple of pixels of each other. */
     --gut:10px;
     /* Inherited, so this reaches xterm's viewport too -- see below. */
-    scrollbar-width:thin; scrollbar-color:#39404f transparent;
+    scrollbar-width:thin; scrollbar-color:var(--scroll) transparent;
   }
   *{box-sizing:border-box}
   /* One scrollbar everywhere.  The terminal's is xterm's own, in its own
@@ -31,9 +34,9 @@
      so they cannot fight. */
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-track{background:transparent}
-  ::-webkit-scrollbar-thumb{background:#39404f;border-radius:5px;
+  ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px;
                             border:2px solid transparent;background-clip:padding-box}
-  ::-webkit-scrollbar-thumb:hover{background:#4a5365;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover);background-clip:padding-box}
   ::-webkit-scrollbar-corner{background:transparent}
   /* An id selector setting `display` outranks the browser's [hidden] rule, so
      toggling .hidden on a panel silently did nothing.  Make it unconditional. */
@@ -76,16 +79,31 @@
   .cm-filters button.end{margin-left:auto}
   .cm-filters button.clear.armed{color:var(--bad);border-color:var(--bad)}
   .cm-msg{display:flex;gap:5px;align-items:baseline;cursor:pointer}
-  .cm-msg:hover{background:rgba(111,155,235,.10)}
+  .cm-msg:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .cm-who{flex:none;color:var(--accent)}
   .cm-txt{flex:1;min-width:0;word-break:break-word;color:var(--ink)}
   .cm-msg.mine .cm-who{color:var(--gp)}
   .cm-msg.soul .cm-txt{font-style:italic}
   .cm-empty{color:var(--dim);font-style:italic}
+  /* Options -> Colours */
+  .scheme-preview{padding:8px 10px;border:1px solid var(--line);border-radius:4px;
+                  font:12px/1.45 var(--term-font);white-space:pre;overflow-x:auto}
+  .sw-row{display:flex;gap:3px;margin-top:6px}
+  .sw{display:inline-block;width:14px;height:14px;border-radius:2px}
+  .scheme-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+  .scheme{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 6px;
+          padding:6px 8px;border:1px solid var(--line);border-radius:4px;cursor:pointer}
+  .scheme:hover{border-color:var(--dim)}
+  .scheme.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+  .scheme b{font-size:12px;color:var(--ink)}
+  .scheme small{grid-column:1;font-size:10px;color:var(--dim)}
+  .scheme .sws{grid-column:1 / -1;display:flex;gap:2px;padding:3px;border-radius:3px}
+  .scheme .sws .sw{width:12px;height:10px}
+  .scheme button{grid-row:1;grid-column:2;padding:0 6px!important}
   #font-preview{margin:4px 0 0;padding:8px 10px;background:var(--bg);color:var(--ink);
                 border:1px solid var(--line);border-radius:4px;white-space:pre;
                 overflow-x:auto;font-family:var(--term-font)}
-  #font-other-hint.warn{color:#f2cc60}
+  #font-other-hint.warn{color:var(--warn)}
   .numpad{display:grid;grid-template-columns:repeat(4,minmax(0,84px));gap:5px;margin:8px 0}
   .numpad .nk{display:flex;flex-direction:column;gap:3px;padding:5px;border:1px solid var(--line);
               border-radius:4px;background:var(--sunk)}
@@ -175,7 +193,7 @@
        color:var(--ink);font:var(--term-size)/1.4 var(--term-font);
        padding:7px 9px;border-radius:3px}
   #cmd:focus{outline:none;border-color:var(--accent)}
-  #cmd::placeholder{color:#4b525f}
+  #cmd::placeholder{color:var(--placeholder)}
   aside{width:330px;flex:none;border-left:1px solid var(--line);background:var(--panel);
         overflow-y:auto;padding:var(--gut);display:flex;flex-direction:column;
         gap:var(--gut)}
@@ -194,7 +212,7 @@
   .bar-top{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
   .bar-top b{font-weight:600;color:var(--dim);letter-spacing:.06em}
   .bar-top i{font-style:normal;font-variant-numeric:tabular-nums}
-  .track{height:7px;background:#000;border-radius:3px;overflow:hidden}
+  .track{height:7px;background:var(--track);border-radius:3px;overflow:hidden}
   .fill{height:100%;width:0;border-radius:3px;transition:width .18s ease}
   .hp .fill{background:var(--hp)} .sp .fill{background:var(--sp)}
   .gp .fill{background:var(--gp)} .en .fill{background:var(--enemy)}
@@ -269,8 +287,8 @@
         color:var(--fg)}
   #link b{color:var(--bad)}
   #link-again{margin-top:6px;width:100%}
-  #deadman-note{margin:6px 0;padding:6px 8px;border:1px solid #f2cc60;border-radius:4px;
-                color:#f2cc60;font-size:12px}
+  #deadman-note{margin:6px 0;padding:6px 8px;border:1px solid var(--warn);border-radius:4px;
+                color:var(--warn);font-size:12px}
   /* Three across, equal share.  Disconnect is the one you must not press by
      accident, so it is quiet until you are over it rather than loud all the
      time -- a red button beside two grey ones is where the eye lands. */
@@ -313,9 +331,9 @@
   #guide-topics{display:flex;flex-direction:column}
   #guide-topics button{all:unset;cursor:pointer;padding:4px 8px;border-radius:3px;
                        font-size:12px;color:var(--dim);line-height:1.35}
-  #guide-topics button:hover{color:var(--ink);background:rgba(111,155,235,.08)}
+  #guide-topics button:hover{color:var(--ink);background:color-mix(in srgb,var(--accent) 8%,transparent)}
   #guide-topics button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-  #guide-topics button.on{color:var(--ink);background:rgba(111,155,235,.14)}
+  #guide-topics button.on{color:var(--ink);background:color-mix(in srgb,var(--accent) 14%,transparent)}
   #guide-topics .none{padding:4px 8px;font-size:12px;color:var(--dim);font-style:italic}
   #guide-article{min-width:0;font-size:13px;line-height:1.6;color:var(--ink);max-width:44em;
                  outline:none}
@@ -342,7 +360,7 @@
   #guide-article th{font-weight:600;color:var(--dim);font-size:11px}
   #guide-article a{color:var(--accent);cursor:pointer;text-decoration:none}
   #guide-article a:hover{text-decoration:underline}
-  #guide-article mark{background:rgba(242,204,96,.25);color:inherit;border-radius:2px}
+  #guide-article mark{background:color-mix(in srgb,var(--warn) 25%,transparent);color:inherit;border-radius:2px}
   .guide-link{font-size:11px;color:var(--accent);cursor:pointer;background:none;border:0;
               padding:0;margin-left:6px}
   .guide-link:hover{text-decoration:underline}
@@ -409,7 +427,7 @@
      worse than loading none. */
   #login{position:fixed;inset:0;z-index:40;display:flex;
          align-items:center;justify-content:center;padding:24px;
-         background:rgba(9,11,14,.82);backdrop-filter:blur(4px)}
+         background:color-mix(in srgb,var(--sunk) 82%,transparent);backdrop-filter:blur(4px)}
   .login-card{width:min(560px,100%);max-height:100%;overflow-y:auto;
               background:var(--panel);border:1px solid var(--line);
               border-radius:6px;box-shadow:0 24px 64px rgba(0,0,0,.6);
@@ -467,7 +485,7 @@
   /* One box, beside the title, filtering whatever list is showing.  Six of
      them -- one per tab -- would be six places to look for the same thing. */
   #opt-search{flex:0 1 240px;min-width:0;padding:4px 8px;font-size:11.5px}
-  #opt-search::placeholder{color:#4b525f}
+  #opt-search::placeholder{color:var(--placeholder)}
   #opt-where{flex:1;min-width:0;font-size:11px;color:var(--dim);
              text-align:right;
              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -485,8 +503,8 @@
   #opt-tabs button{display:flex;align-items:center;gap:6px;width:100%;
                    text-align:left;border:0;border-radius:3px;
                    padding:7px 9px;font-size:12.5px;color:var(--dim)}
-  #opt-tabs button:hover{color:var(--ink);background:rgba(255,255,255,.05)}
-  #opt-tabs button.on{color:var(--ink);background:rgba(111,155,235,.15);
+  #opt-tabs button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
+  #opt-tabs button.on{color:var(--ink);background:color-mix(in srgb,var(--accent) 15%,transparent);
                       box-shadow:inset 2px 0 0 var(--accent)}
   #opt-tabs .n{margin-left:auto;font-size:10px;color:var(--dim);
                font-variant-numeric:tabular-nums}
@@ -528,7 +546,7 @@
   .opt-head .acts{margin-left:auto;flex:none;display:flex;gap:6px}
   .opt-head .acts button{padding:5px 10px;font-size:11px}
   button.primary{color:var(--ink);border-color:var(--accent)}
-  button.primary:hover{background:rgba(111,155,235,.14)}
+  button.primary:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
   .card-list{display:flex;flex-direction:column;gap:6px}
   .card-list:empty::after{content:attr(data-empty);color:var(--dim);
                           font-style:italic;font-size:11.5px}
@@ -575,7 +593,7 @@
   input.num,.frow .ctl input.num{flex:0 0 74px;min-width:0}
   input.mono,textarea.mono{font-family:Consolas,"DejaVu Sans Mono",monospace}
   code{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:.95em;
-       color:var(--ink);background:rgba(255,255,255,.05);
+       color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent);
        border-radius:2px;padding:0 3px}
   .fbar{display:flex;align-items:center;gap:8px;padding-top:2px}
   .fbar .err{margin:0;flex:1;min-width:0}
@@ -923,6 +941,7 @@
       <div class="opt-group">Interface</div>
       <button type="button" data-tab="panels">Layout<span class="n"></span></button>
       <button type="button" data-tab="fonts">Fonts</button>
+      <button type="button" data-tab="colours">Colours</button>
       <button type="button" data-tab="keyboard">Keyboard</button>
       <button type="button" data-tab="sounds">Sounds</button>
       <div class="opt-group">Game</div>
@@ -1296,6 +1315,51 @@
         </section>
 
         <!-- fonts ------------------------------------------------------------ -->
+        <section class="opt-pane" data-pane="colours" hidden>
+          <div class="opt-head">
+            <div>
+              <h4>Colours</h4>
+              <p>The terminal's colour scheme, and the look of everything around it.
+                 Changes show at once, and are saved in this browser.</p>
+            </div>
+            <div class="acts">
+              <button type="button" id="colours-reset">Back to the defaults</button>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Interface</h5>
+            <div class="in">
+              <div class="frow">
+                <label for="ui-theme">Theme</label>
+                <div class="ctl"><select id="ui-theme">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="match">Match the terminal</option>
+                </select></div>
+                <p class="fhint">Match the terminal takes the sidebar, panels and
+                  Options from the scheme below.</p>
+              </div>
+            </div>
+          </div>
+          <div class="fset">
+            <h5>Terminal</h5>
+            <div class="in">
+              <div id="scheme-preview" class="scheme-preview" aria-label="preview"></div>
+              <div id="scheme-list" class="scheme-list"></div>
+              <div class="frow">
+                <label>Your own</label>
+                <div class="ctl"><button type="button" id="scheme-import">Add from a file&hellip;</button>
+                  <input id="scheme-file" type="file" hidden
+                         accept=".toml,.itermcolors,.json,.conf,.txt,.Xresources,.xresources"></div>
+                <p class="fhint">A scheme from terminalcolors.com or a scheme's own
+                  site: Alacritty (.toml), iTerm2 (.itermcolors), Ghostty, Windows
+                  Terminal (.json) or Xresources.</p>
+                <p id="scheme-error" class="err"></p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="opt-pane" data-pane="fonts" hidden>
           <div class="opt-head">
             <div>
@@ -1827,6 +1891,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="vendor/xterm.js"></script>
   <script src="vendor/xterm-addon-fit.js"></script>
   <script src="prefs.js"></script>
+  <script src="colours.js"></script>
   <script src="app.js"></script>
   <script src="login.js"></script>
   <script src="options.js"></script>

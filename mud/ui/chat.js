@@ -49,6 +49,18 @@
     ['green', '#7ee787'], ['teal', '#56d4dd'], ['blue', '#79c0ff'],
     ['violet', '#d2a8ff'], ['pink', '#ff9bce'],
   ];
+  /* On a light theme each is drawn as its darker twin: the same colour a
+     person chose, readable on that ground.  What is saved does not change,
+     so going back to a dark theme needs nothing putting back. */
+  const DARKER = {
+    '#ff7b72': '#cf222e', '#ffa657': '#bc4c00', '#f2cc60': '#9a6700', '#7ee787': '#1a7f37',
+    '#56d4dd': '#0a7c86', '#79c0ff': '#0969da', '#d2a8ff': '#8250df', '#ff9bce': '#bf3989',
+  };
+  const onGround = (colour) => {
+    const root = document.documentElement;
+    return root && root.dataset && root.dataset.theme === 'light'
+      ? (DARKER[colour] || colour) : colour;
+  };
   let colours = { channel: {}, who: {} };
   try {
     const got = JSON.parse(store.get(`cm:${ID}:colours`, '{}'));
@@ -291,6 +303,8 @@
 
   // --- the list -------------------------------------------------------------
 
+  document.addEventListener('themechange', () => render());
+
   function render() {
     const atBottom =
       bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 24;
@@ -324,7 +338,7 @@
       txt.className = 'cm-txt';
       txt.textContent = m.text || '';
       const colour = colourOf(m);
-      if (colour) txt.style.color = colour;
+      if (colour) txt.style.color = onGround(colour);
 
       row.oncontextmenu = (e) => {
         e.preventDefault();
@@ -351,7 +365,7 @@
         const who = document.createElement('span');
         who.className = 'cm-who';
         who.textContent = speaker(m);
-        if (colour) who.style.color = colour;
+        if (colour) who.style.color = onGround(colour);
         row.append(who, txt);
       } else {
         row.append(txt);

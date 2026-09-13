@@ -237,7 +237,7 @@ def test_options_is_grouped_by_what_you_are_looking_for():
     for tab in ("keyboard", "sounds", "panels", "fonts", "settings"):
         assert f'data-tab="{tab}"' in rail, tab
     interface = rail[rail.index("Interface"):rail.index("Game")]
-    for tab in ("panels", "fonts", "keyboard", "sounds"):
+    for tab in ("panels", "fonts", "colours", "keyboard", "sounds"):
         assert f'data-tab="{tab}"' in interface, tab
     # A pane is a <section>, which the sidebar styles as a box.
     assert "background:none;border:0;border-radius:0;padding:0" in page
@@ -278,6 +278,14 @@ def test_options_has_a_search_for_every_setting():
     for part in ("querySelectorAll('.opt-pane')", "'.frow'", "'.fhint'",
                  "e.stopPropagation()"):
         assert part in js, part
+
+
+def test_no_scheme_can_hide_the_text():
+    """Solarized's bright black is Solarized Dark's ground: 3K text in it would
+    vanish.  xterm nudges a colour that close to the ground until it reads."""
+    js = scripts()["app.js"]
+    assert "minimumContrastRatio: 3," in js
+    assert js.index("minimumContrastRatio") < js.index("theme: window.colours")
 
 
 def test_every_tab_has_a_pane_and_every_pane_a_tab():
