@@ -5,7 +5,7 @@ const { page, load, check, same, finish } = require('./stage');
 
 const sent = [];
 const IDS = ['bot-now', 'bot-name', 'bot-step', 'bot-bar', 'bot-note', 'bot-start',
-  'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect'];
+  'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect', 'bot-loop', 'bot-cot'];
 const saved = {};
 const p = page(Object.fromEntries(IDS.map((i) => [i, i === 'bot-find' ? 'input' : 'div'])), saved);
 global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
@@ -20,7 +20,7 @@ const ROUTES = [route(), route({ id: 'b2', name: 'Treehouse', path: 'u, {pick fr
   targets: ['rat'], step_count: 2 })];
 
 renderBotPanel(ROUTES);
-check('nothing chosen: nothing to press', el('bot-name').textContent === 'No bot chosen'
+check('nothing chosen: nothing to press', el('bot-name').textContent === 'No stepper chosen'
   && el('bot-start').disabled && el('bot-pause').disabled && el('bot-stop').disabled);
 
 const type = (q) => { el('bot-find').value = q; el('bot-find').oninput(); };
@@ -31,7 +31,7 @@ check('search finds it by the creature it hunts',
 type('fruit');
 check('or by a step in its path', rows().length === 1);
 type('zz');
-check('says so when nothing matches', el('bot-found').children[0].textContent.includes('No bot'));
+check('says so when nothing matches', el('bot-found').children[0].textContent.includes('No path'));
 
 type('tree');
 rows()[0].children[0].onclick();
@@ -72,11 +72,11 @@ check('Resume resumes it', same(last(), { t: 'routes', op: 'resume', id: 'a1' })
 const beforeStop = sent.length;
 el('bot-stop').onclick();
 check('Stop stops it', same(last(), { t: 'routes', op: 'stop', id: 'a1' }) && sent.length === beforeStop + 1);
-check('and takes it off the panel', el('bot-name').textContent === 'No bot chosen'
+check('and takes it off the panel', el('bot-name').textContent === 'No stepper chosen'
   && saved['bot:route'] === '' && el('bot-stop').disabled && el('bot-start').disabled,
   el('bot-name').textContent);
 renderBotPanel([route({ steps_taken: 2, note: 'stopped' }), ROUTES[1]]);
-check('and the server saying it stopped does not bring it back', el('bot-name').textContent === 'No bot chosen');
+check('and the server saying it stopped does not bring it back', el('bot-name').textContent === 'No stepper chosen');
 
 // A route that ended on its own stays until cleared, so its note can be read.
 type('sec');
@@ -87,7 +87,7 @@ check('a finished route stays, with Clear', el('bot-name').textContent === 'Sect
 sent.length = 0;
 el('bot-stop').onclick();
 check('Clear empties the panel and tells the server nothing',
-  el('bot-name').textContent === 'No bot chosen' && sent.length === 0 && saved['bot:route'] === '');
+  el('bot-name').textContent === 'No stepper chosen' && sent.length === 0 && saved['bot:route'] === '');
 renderBotPanel([route({ paused: { step: 1, room: 7, room_name: 'A Dark Square' } }), ROUTES[1]]);
 check('a paused route still shows itself, with Stop', el('bot-name').textContent === 'Section Z'
   && el('bot-stop').textContent === 'Stop');
@@ -122,5 +122,22 @@ check('the box shows the setting the server sent', el('bot-autocollect').checked
 el('bot-autocollect').checked = false;
 el('bot-autocollect').onchange();
 check('unticking it tells the server', same(last(), { t: 'routes', op: 'autocollect', on: false }), last());
+
+// COT when done: the panel's, kept by the server, like AutoCollect.
+setCot(true);
+check('COT when done shows the setting the server sent', el('bot-cot').checked === true);
+el('bot-cot').checked = false;
+el('bot-cot').onchange();
+check('unticking COT when done tells the server', same(last(), { t: 'routes', op: 'cot', on: false }), last());
+
+// Loop is the chosen path's own Repeat, shown here.
+renderBotPanel(ROUTES);
+if (el('bot-stop').textContent === 'Clear') el('bot-stop').onclick();
+check('nothing chosen: nothing to loop', el('bot-loop').disabled === true && el('bot-loop').checked === false);
+renderBotPanel([route({ loop: true, running: true }), ROUTES[1]]);
+check('a path that repeats shows Loop ticked', el('bot-loop').disabled === false && el('bot-loop').checked === true);
+el('bot-loop').checked = false;
+el('bot-loop').onchange();
+check('unticking Loop changes that path', same(last(), { t: 'routes', op: 'loop', id: 'a1', on: false }), last());
 
 finish();

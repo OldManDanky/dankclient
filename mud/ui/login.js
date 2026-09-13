@@ -191,7 +191,7 @@
         + 'them in.'
       : who.character
       ? `Playing ${who.character}. Their triggers, aliases and markers are `
-        + 'loaded; the map and routes are shared with everyone.'
+        + 'loaded; the map and paths are shared with everyone.'
       : who.asking
         ? 'The MUD is asking for a name. Pick one and the client will answer.'
         : who.known.length

@@ -87,7 +87,7 @@ certain as it is used rather than starting out sure and being wrong.
 house.  Seventeen public rooms led there -- by `home`, by `home 726`, and by
 `.goHome`, his own tt++ alias -- and the house's portal room has shortcuts to
 the shop, the bank, the guild and the realms.  So going home looked like the
-fastest way anywhere: 57 of 259 routes between rooms around Pinnacle went in
+fastest way anywhere: 57 of 259 walks between rooms around Pinnacle went in
 through his door, and every one of them fails for anybody else, whose `home`
 goes to their own house or nowhere.  It also placed anyone who typed `home` in
 his house, and then wrote their next steps into the map from there.
@@ -100,12 +100,12 @@ character has, so they are treated exactly like houses.
 A way out that only works for whoever walked it is never an edge now.  The
 importer leaves them out, a map that already has them is cleaned once when it
 is opened, walking never records one, and the router ignores any that come
-back.  Measured on a real map: 44 edges went, and none of 259 sampled routes
+back.  Measured on a real map: 44 edges went, and none of 259 sampled walks
 around Pinnacle was lost or goes through a house any more.  The 1,558 rooms
 only reachable that way -- Mystic Seal and the Ruins of the Mad Titan Lord
 behind a flight, his house, eight other houses and one clan's hall -- are
 still in the map, unreachable: a room is not wrong, only the claim that
-anybody can walk into it.  A route that starts in one of them still runs for
+anybody can walk into it.  A path that starts in one of them still runs for
 somebody who has got there themselves.
 
 ### Rooms that are not rooms, and rooms with no name
@@ -123,7 +123,7 @@ nowhere and is dropped.
 
 The other 2,225 are real rooms tt++ passed without catching a title.  They
 come in with no name and their exits taken from their edges, so the map can
-route through them and dead reckoning can check them; the first walk through
+use them and dead reckoning can check them; the first walk through
 one records its name.  A number with no name *and* no way out is still an
 unused number.
 
@@ -134,7 +134,7 @@ one did.  The importer's version in `update.py` went up with it, so a client
 that had already taken the map is offered it again, and a merge only adds.
 
 `tools/repair_map.py` brings an older import up to date;
-`tools/import_bots.py` reads 3kdb's route library.
+`tools/import_bots.py` reads 3kdb's stepper library.
 
 ## Knowing where you are
 
@@ -170,7 +170,7 @@ tells it that it is wrong.
 `/speedruns` lists the places `/go` knows by name -- the 399 speedruns
 imported from 3kdb -- with how many steps each is from where you stand, and
 which cannot be reached at all.  Distances come from one search out from
-here, not a route per place: the whole map's ways out are read in one query
+here, not a walk per place: the whole map's ways out are read in one query
 and searched with the router's own costs and refusals, so a place listed
 twelve steps away is the walk `/go` would take.  A few cannot be reached
 from anywhere; walking in once teaches the map the way, locked or not -- a
@@ -181,7 +181,7 @@ areas -- the Underdark, Westersea, Xenolocles, over a thousand rooms apiece --
 were islands, joined up inside with no way in.  The ways in were in 3kdb's
 map all along; the importer had thrown them away (see *Rooms that are not
 rooms*, under The map).  A player's "for xeno you'd go to ravenloft, then go
-to xeno" was the clue: the route now goes exactly that way.
+to xeno" was the clue: the walk now goes exactly that way.
 
 ### Brief mode
 
@@ -290,7 +290,7 @@ it off; `/js` still forces it.
 ## Link death
 
 3k.org drops you for a reboot, for a bad hop, and for nothing at all.  The map,
-the rules, the log, the routes and the browser on the other end of the
+the rules, the log, the paths and the browser on the other end of the
 websocket are all still perfectly good when it happens -- they belong to the
 character, not to the socket -- so the read loop is the inner one and the
 client outlives the connection.  It goes back after two seconds, then four,
@@ -305,10 +305,10 @@ has been sent, and then the handshake goes out again -- MIP is something the
 MUD does for a connection, and the new one has never heard of us.
 
 What does not survive the gap is everything the socket owned: half a MIP
-message, half a line, half a room description, a route walking somewhere, and
+message, half a line, half a room description, a path walking somewhere, and
 the belief that we know which room we are standing in.  The first three would
 glue onto the new connection and desync the parser.  The fourth is worse than
-useless -- a route carries on counting steps while there is nothing to send
+useless -- a path carries on counting steps while there is nothing to send
 them down, and arrives convinced it is somewhere it has never been.  The map
 goes honestly unsure and works out where you are from the first room block,
 which is the same thing it does after a death.
@@ -317,14 +317,14 @@ which is the same thing it does after a death.
 input is the end.
 
 A hang-up we asked for is a different thing, and the difference is the whole
-point of the **Disconnect** button: it stops the bots, puts the log and the map
+point of the **Disconnect** button: it stops the steppers, puts the log and the map
 on disk, marks the session finished, closes the socket, and then leaves it
 closed.  It does not send `quit`.  Closing the connection and logging the
 character out are different acts with different consequences, and a button
 labelled Disconnect should only do the one it says -- so you are link-dead
 rather than logged out, exactly as if the line had dropped.
 
-Everything else was already saved: rules and routes are written the moment you
+Everything else was already saved: rules and paths are written the moment you
 edit them, and the log is flushed on a timer.  What the session row could not
 know until now is when it ended -- a row with no end never finished, because
 the client was killed or link-died and nobody brought it back -- and who was
@@ -354,9 +354,9 @@ watches and the line markers follow the character::
     profiles/player/rules.json   triggers, aliases, events, watches
     profiles/player/prefixes.json
 
-The map and the routes deliberately do not.  A road is in the same place
+The map and the paths deliberately do not.  A road is in the same place
 whoever walks it, and splitting fifty thousand rooms per character would mean
-walking them again for nothing; routes are paths across that map, so they go
+walking them again for nothing; paths cross that map, so they go
 with it.
 
 The login screen shows itself while nobody has said who is playing, and gets
@@ -377,13 +377,13 @@ Nothing floats.  Panels that can be dragged anywhere are panels you have to
 place, and they sit over the text while you decide.  The sidebar reads top to
 bottom in the order you look at things: three buttons, then the session --
 who is logged in, whether MIP is live, the pacing, the MUD's uptime -- then
-the map, then the Bot panel with what a route is doing (and the deadman's
-note, which is about bots), then combat when there is any.  The session sits
+the map, then the Stepper panel with what a path is doing (and the deadman's
+note, which is about steppers), then combat when there is any.  The session sits
 above the map because it is the line you check before trusting anything
 below it: a map that has stopped moving is often a connection that has.
 
 The buttons come first because they are the ones you reach for without looking:
-**Options**, **Bots** (the routes tab in one press) and **Disconnect**.
+**Options**, **Steppers** (the paths tab in one press) and **Disconnect**.
 Disconnect is last and set apart, being the only press in the sidebar you
 cannot take back by pressing it again -- a mis-click leaves you link-dead in
 whatever room you were standing in, so it asks first.
@@ -466,9 +466,9 @@ sits at the bottom when it is on.  It lists everything in the room with a
 button for every action the MUD says each thing takes, which is worth having
 and is not worth a third of the sidebar when you are not using it.
 
-A running route shows which step of how many, because "walking" on its own
+A running path shows which step of how many, because "walking" on its own
 does not tell you whether to wait for it or go and do something else.  A
-repeating route's bar shows the current lap rather than filling up and staying
+repeating path's bar shows the current lap rather than filling up and staying
 full.
 
 The terminal takes the width it is given.  It can be capped in columns under
@@ -551,11 +551,11 @@ missing `e` is a gap in the record rather than an invented exit.
 ### Which command caused this room
 
 Oldest first, because that is the order the MUD ran them in.  Except that a
-route sends its housekeeping and its next step in one breath -- `wrap all`,
+path sends its housekeeping and its next step in one breath -- `wrap all`,
 `disperse corpse`, `divvy gold`, `w` -- and only the last of them moves.
 Oldest-first hands the block to `wrap all`, the room has no such way out, the
 map cannot place it, and the client is lost with a perfectly good `w` three
-places down the queue.  On the chessboard route that happened at every kill.
+places down the queue.  On the chessboard path that happened at every kill.
 
 So the queue skips past commands the room you are standing in has no way out
 for -- DDD lists them all, and the map knows the ones that are not directions.
@@ -589,41 +589,41 @@ possible byte.
 ## Finding things
 
 One search box, beside the panel title, filtering whichever list is showing --
-routes, triggers, aliases, events, watches, script rules.  `/` jumps to it and
+paths, triggers, aliases, events, watches, script rules.  `/` jumps to it and
 Escape clears it before it closes anything.
 
 It matches every word anywhere, in any order, and it looks at what a rule
 *does* as well as what sets it off: half of what you remember about a rule is
 its action -- "the one that quaffs" is a search for the command, and the
-pattern that fires it is the part you have forgotten.  A route's path is
+pattern that fires it is the part you have forgotten.  A path's steps are
 searched for the same reason, because with sixty-seven imported from tt++ the
 thing you remember is often a step rather than a name.
 
 The counts on the tabs stay the totals.  A search is a way of looking at what
 you have, not a change to it.
 
-## Routes
+## Paths
 
-A route is a name, a path and what to attack along it -- the tt++ botpath,
-as a form rather than a file.  Paths read the way people write them:
+A path is a name, its steps and what to attack along it -- tt++'s path
+script, as a form rather than a file.  Steps read the way people write them:
 `n n e s w`, `3n 2e s`, semicolons for a pasted tt++ path, and braces for a
 step that is several commands (`{pick fruit;get seed;d}`).
 
-A route walks its own path one step at a time, because it stops in each room
-to fight.  Getting somewhere -- `/go`, a click on the map, a route walking to
+A path walks its own steps one at a time, because it stops in each room
+to fight.  Getting somewhere -- `/go`, a click on the map, a path walking to
 its start or back to where it paused -- sends the whole way at once.
 
 A fight has no time limit once it has begun.  There was one, two minutes,
-and some of 3K's creatures take hundreds of rounds: the route took the limit
+and some of 3K's creatures take hundreds of rounds: the stepper took the limit
 for the end of the fight and walked off, leaving its target at "bleeding".
 Only a kill that never starts a fight gives up, after ten seconds; the health
 floor and Stop are what end a fight that should not go on.  And a room is not
-left on 3K's word that the fight is over: after every fight the route
+left on 3K's word that the fight is over: after every fight the stepper
 glances, and steps on only when that glance shows the creature gone and no
-other target in the room -- what 3kdb's own bot does after every kill.  The
+other target in the room -- what 3kdb's own stepper does after every kill.  The
 next target is picked from the glance, not from the room as it was on
 arrival, and a kill is counted only once the glance shows it gone.  If three
-glances go unanswered the route stops where it is rather than walking off.
+glances go unanswered the stepper stops where it is rather than walking off.
 
 A room has arrived when 3K's prompt follows it.  A room block used to count
 as arrived only when the next unrelated message came; walking, that is the
@@ -631,7 +631,7 @@ next room at once, but standing in a quiet room it can be seconds away.
 `embrace void` sends its message and a dungeon banner and no room at all,
 then only the two-second sample naming the temple doorway; the look sent to
 find out where we were was answered straight away, and sat open for six
-seconds more while the walk decided it had not been answered.  A route
+seconds more while the walk decided it had not been answered.  A stepper
 standing at its own start said it could not reach it.  Across 1,283 rooms in
 the captures a block's records never came after its prompt and trailed its
 DDD by 0.18s at most, so the prompt closes the block, and half a second of
@@ -643,7 +643,7 @@ ways out -- Pure light, left by `w` and `will` -- is the room the edge leads
 to when its own title says so: an empty list is not a contradiction.  There is no cap on that either:
 a fight takes as long as it takes.  The one thing left alone is a creature
 the kill command will not start a fight with at all, which would otherwise
-hold the route in that room for good.
+hold the stepper in that room for good.
 
 That used to be one step at a time too, and it went at one step a round: the
 next step waited for the last room to *settle*, a room settles on the next
@@ -661,12 +661,12 @@ now locked, a way out that no longer works -- the client walks the rest room
 by room from wherever the map says it is.  A step that produces nothing is
 *looked* at rather than assumed to have failed -- some moves send no room
 block at all -- and a way out that really does not work is remembered, so
-routing stops choosing it.
+the map stops choosing it.
 
 **Only evidence marks a way out broken**: 3K's "You cannot go west.", or a
 look that answers and shows the room the step started in.  Silence is not
 evidence.  Until 0.2.19 a step and the look after it both going unanswered
-was enough, and a tester's bots walked him through the hyperfunk zone for
+was enough, and a tester's steppers walked him through the hyperfunk zone for
 it: Eastwick Road's `e` and `w` had been marked that way, and a way out the
 router avoids is never walked again to clear it -- twelve steps to Angels
 became thirty-two, in by the fog at Crazy Road and out by `defunkt`.  Lag
@@ -680,7 +680,7 @@ because silence was the only way one was ever made.
 player's aliases are their own: the same tester's `l` answered "That does
 not seem to be here."  `embrace void` sends no room, so the walker looks to
 see where it went -- and his looks never showed the temple doorway, so the
-bot sent `embrace void` from the doorway five times ("Whom do you wish to
+stepper sent `embrace void` from the doorway five times ("Whom do you wish to
 embrace?") and stopped at its own start.  `look` is the command itself.
 
 **A way out that comes and goes is not a different room.**  A puddle wanders
@@ -696,13 +696,26 @@ Eastwick Road with a puddle passing for the Eastwick next door, which has
 the same four directions; the first version without it placed a room
 wrong in the captures.  Finding a room from nothing is not loosened.
 
+**Shorthand in 3kdb's map is written out.**  The map has four ways out
+whose command is `l` -- rooms you fall or drift through, where any command
+carries you on -- three of them beside a `look` to the same room, and one
+`efor` beside `portal eforest`.  `l` is a player's alias, and `efor` is a
+tt++ one 3K has never heard of, so a walk through either sent something that
+was not a command.  The importer writes them as `look` and `portal eforest`
+(a copy of a way out the room already has simply merges into it), the stepper
+importer does the same to its steps, and every map from before is put right
+once when it is opened.  Measured over the whole of 3kdb, that is all there
+is: 610 rooms have two commands to the same place, and no other pair is a
+shorthand for the other.  Neither 3kdb's 159 stepper files nor anybody's saved
+paths had one.
+
 And because what was sent cannot be taken back, a long stack does not all go
-at once.  A route worked out from the wrong room is a walk into the wrong
+at once.  A way worked out from the wrong room is a walk into the wrong
 part of the world, and the whole path at once is forty moves of it before
 anything notices; the map is at its least sure exactly when nothing has moved
 for a while, which is when somebody types `/go`.  So two things bound it.
 A walk **looks first** -- unless a room block arrived in the last three
-seconds, in which case the map has just been told -- and works the route out
+seconds, in which case the map has just been told -- and works the walk out
 from where the look puts us.  Then the stack goes out **eight commands at a
 time**, and each chunk is checked against the room the map says it should
 have reached before the next one is sent.  A chunk that lands somewhere else
@@ -710,7 +723,7 @@ stops the rest, and the room-by-room walk takes over.
 
 A chunk is whole *steps*, never half of one.  725 edges in 3kdb's map are
 compound -- `lift grate;d`, `push button;s`, `unlock west door;open west
-door;w` -- one step of the route and two or three commands on the wire.  The
+door;w` -- one step of the path and two or three commands on the wire.  The
 map knows where the step goes; it does not know where `lift grate` alone
 goes.  Cut a chunk through the middle of one and it has nothing to check
 itself against, and the first compound way out on a path used to blind every
@@ -722,64 +735,88 @@ what a look does for free: a room's exits and scenery are usually a unique
 fingerprint.  If the look finds us the walk goes ahead; if it does not, then
 it says so.
 
-### The Bot panel, and pausing
+### The Stepper panel, and pausing
 
-The sidebar's Bot panel starts, pauses and stops a route without opening
-Options.  With a hundred-odd routes imported from 3kdb it is a search rather
+The sidebar's Stepper panel starts, pauses and stops a path without opening
+Options.  With a hundred-odd paths imported from 3kdb it is a search rather
 than a list -- name, a step, or a creature it hunts -- and each match has its
 own Start.  Clicking a name only picks it, and Enter picks the first match:
 Enter is the key most often pressed by accident, and a start is a character
-walking off.  Only one route walks at a time from here, because two routes
+walking off.  Only one path walks at a time from here, because two steppers
 driving one character are each walking from a room the other has just left.
-The results are redrawn only when the search or the set of routes changes,
-not as a route takes its steps, so a button is never replaced under the
+The results are redrawn only when the search or the set of paths changes,
+not as a path takes its steps, so a button is never replaced under the
 cursor between press and release.
 
 **AutoCollect**, a box on the panel, sends `get all` in a room where the
-route fought -- once, after the glance has shown the room clear, and before
+stepper fought -- once, after the glance has shown the room clear, and before
 the next step.  Once rather than per kill, because the corpses of every fight
 there are still on the floor at the end and each `get all` costs APM.  It
 goes at the moves' own priority, so the queue keeps it ahead of the step that
-follows.  It is for every route, kept in `routes-settings.json`, and read in
+follows.  It is for every path, kept in `routes-settings.json`, and read in
 each room, so ticking it mid-walk counts from the next one.
 
 **Pause is not stop.**  After every step the runner notes how far through
 its path it is and the room the map says that left it in.  Pause keeps both,
-with the step and kill counts, in `routes-paused.json` beside the routes, so a
+with the step and kill counts, in `routes-paused.json` beside the paths, so a
 pause outlives closing the client.  **Resume** walks back to that room by the
-ordinary routing -- the same `travel` that gets a route to its start -- does
-what the route does in a room (the creature it came for may be back), then
+ordinary walking -- the same `travel` that gets a path to its start -- does
+what the path does in a room (the creature it came for may be back), then
 takes the *next* step, not the first.  If it cannot get back the pause is
 kept, so Resume can be tried again from nearer; if the map did not know where
-it was, it resumes from where you stand.  Start on a paused route starts
+it was, it resumes from where you stand.  Start on a paused path starts
 over, Stop forgets the pause, and a changed path forgets it too, because step
 twelve of another path is another place.  Setup commands are not sent again
 on a resume: they are for walking in at the start.
 
-A paused route reads as paused the moment Pause returns, even though the
+A paused path reads as paused the moment Pause returns, even though the
 cancelled task only finishes on the loop's next turn -- the list goes back to
 the page straight away, and said "walking" until the next push.  Found by
-driving the server's routes op, not by the store's own tests.
+driving the server's `routes` op, not by the store's own tests.
 
 ## The deadman
 
-A bot left walking with nobody at the keyboard keeps walking into whatever
-changed while nobody was looking.  So after fifteen minutes -- settable in
-Routes & bots, 0 for off -- without a command typed by a person, everything
-automated stops: bots and routes pause where they are, and triggers, timers
-and script sends are dropped.  The first command typed brings it all back and
-the bots carry on from the step they were on.
+A stepper left walking with nobody at the keyboard keeps walking into whatever
+changed while nobody was looking, and 3K expects a person to be playing.  So
+after fifteen minutes without a command typed by a person, everything
+automated stops: steppers pause where they are, and triggers, timers
+and script sends are dropped.  **Fifteen minutes is fixed.**  It was once a
+setting, 0 for off; it is the game's rule rather than a preference, so there
+is nothing to set, and a time an older client saved with the map is not read.  The first command typed brings it all back and
+the steppers carry on from the step they were on.
 
 What counts as a person is what only a person does: a line typed in the box
-(numpad included), a click on the map to walk there, starting a route.  What
+(numpad included), a click on the map to walk there, starting a path.  What
 is held back is dropped rather than saved up, and anything already waiting in
 the queue goes when it trips, because somebody coming back should not be met
-by a burst of stale commands.  Bots wait *before* each thing they send rather
-than having it dropped: a step dropped mid-route reads as a step that went
-nowhere, and the route would stop instead of pausing.  Logging back in after
+by a burst of stale commands.  Steppers wait *before* each thing they send rather
+than having it dropped: a step dropped mid-path reads as a step that went
+nowhere, and the stepper would stop instead of pausing.  Logging back in after
 a link death and the MIP handshake are not held -- they keep the connection,
 they do not play the character.  It is enforced by the client rather than the
-page, so the setting is kept with the map, and checked on the game's beat.
+page, and checked on the game's beat.
+
+## Somebody else in the room
+
+In a public area another player is on their own hunt, and a stepper that
+kills what they came for is stealing it; a partymate's kill is yours to share.
+So in a room with something to fight, a stepper fights only if everybody else
+there is in your party, and otherwise leaves that room's creatures alone and
+moves on to the next step.  It does not wait: standing over somebody's fight
+is its own kind of rude.  A dungeon needs no rule of its own -- whoever is in
+yours is in your party, or the same rule leaves them be.
+
+3K's room data does not say who is a partymate: a player there offers `exa`,
+`follow` and `say hi` whoever they are, and no MIP record lists a party.  So
+the list comes from 3K's own words.  `pwho` prints a table, one row per
+member, and a table replaces the list outright; `[PARTY] X joins the party.`,
+`... has quit ...` and `... has been booted from ...` keep it current in
+between; anybody on the Party channel is in it.  A stepper sends `pwho` when
+a player it does not know is in a room with something to fight, waits two
+seconds for the answer, and asks at most every thirty -- a stranger trailing
+you from room to room is one question, not one a room.  This replaced a
+per-path "wait for other players to leave", which 3kdb switches on for every
+bot it defines; the field is still read, so old paths load, and ignored.
 
 ## Timers
 
@@ -820,7 +857,7 @@ every save.
 
 ### A folder is only the prefix its items carry
 
-The routes list had no grouping at all and 3kdb gives you 141 of them; rules
+The paths list had no grouping at all and 3kdb gives you 141 of them; rules
 had had one flat level of groups since 0.2.14, and the CMUD importer had been
 writing `areas/zombies` into that field since 0.2.16.  So folders are that
 same field, read as a `/`-separated path, for both lists -- one field, one
@@ -840,7 +877,7 @@ is not being helped.
 Switching a folder reaches everything under it.  The first version matched
 the exact name only, which would leave a folded-away `areas/zombies` still
 firing under an `areas` heading showing "off" -- a lie the fold makes
-invisible.  Imported routes start filed under 3kdb's own tags, which is 46 in
+invisible.  Imported paths start filed under 3kdb's own tags, which is 46 in
 `chaos`, 21 in `chaos/dungeon` and 78 at the top: not much of a filing
 system, but better than 141 in one list, and it costs nothing to read a field
 that is already there.
@@ -852,24 +889,24 @@ off` has switched an area's triggers, aliases, timers and stat watches
 together since groups existed.  Two things were missing, and both showed up
 the moment somebody described filing an area: the five rule panes are five
 filtered views of one store, so an area's triggers were in one pane and its
-aliases in another with nowhere showing the area itself; and a route with the
-same folder name was a coincidence rather than a link, because routes are a
+aliases in another with nowhere showing the area itself; and a path with the
+same folder name was a coincidence rather than a link, because paths are a
 store of their own.
 
 So the Folders pane, and `/folders`.  Two screens rather than two columns --
 the folders, then one folder -- because Options already has a rail and a tree
 beside it would be a third column that has to become something else on a
 phone anyway.  It owns no data: the census is built in the page from the rules
-and routes it already holds, so the pane and the lists it summarises cannot
+and paths it already holds, so the pane and the lists it summarises cannot
 disagree.  What it cannot do in the page is write, and both writes have to
 reach both stores at once, so switching and renaming go to `ScriptHost`, which
 is the only thing that holds both.
 
 `Route.enabled` was in the dataclass from the first version of that file and
 nothing ever read it.  A folder that switches an area's triggers off and
-leaves its route walking is not a folder, so `RouteStore.start` refuses a
-route that is off -- in the store rather than the panel, because it has to
-hold however the route was asked for: the Bot panel, a script, or a rule whose
+leaves its path walking is not a folder, so `RouteStore.start` refuses a
+path that is off -- in the store rather than the panel, because it has to
+hold however the path was asked for: the Stepper panel, a script, or a rule whose
 action starts it.
 
 Which folders are folded is per-viewer and per-list, held in memory for the
@@ -896,7 +933,7 @@ other rules fire while it counts; a rule that fires again meanwhile runs
 twice.  What comes out the other end is queued like any send, so the deadman
 holds it and the APM governor paces it.  A rule edited, switched off or
 deleted while it waits does not carry on as it was, and `/stop` drops every
-waiting rule along with the bots.  Up to an hour; longer is a timer.  As a
+waiting rule along with the steppers.  Up to an hour; longer is a timer.  As a
 script it becomes `await wait(2)` in an `async def`.
 
 ## Gags
@@ -963,7 +1000,7 @@ line and never runs on: one real export has an alias with unbalanced braces,
 which a brace-counting reader would have run on into the rest of the file.
 Classes become groups (`areas|zombies` is `areas/zombies`), `#T-`/`#T+` become
 `/group` for the class and every class inside it, `#WAIT` in milliseconds is
-a wait, `{disable}` comes in switched off, and a `#PATH` becomes a route --
+a wait, `{disable}` comes in switched off, and a `#PATH` becomes a path --
 with its start, when its moves fit only one room on the map.  A zMUD trigger
 ignores capitals unless {case} (no trigger in a real export of a thousand
 had it), so an imported one starts `(?i)`.
@@ -1013,7 +1050,7 @@ pattern that does not match the 3K line it is shown with.
 
 ## Sounds
 
-A tell, a channel line you chose to ding, 3K's bell, a bot ending by itself,
+A tell, a channel line you chose to ding, 3K's bell, a stepper ending by itself,
 the deadman tripping, and the MUD dropping you: each plays the built-in chime,
 nothing, or a file of your own, chosen under Options -> Sounds.  The built-in
 ones are made by the browser's own audio, so nothing ships; they differ in
@@ -1026,7 +1063,7 @@ one", so a sound kept there could vanish the day 8080 was busy.  One file per
 event, named after the event -- a name from the page is never a path -- and
 two megabytes at most, which is why the socket's message limit is three.
 
-"A bot ends by itself" means finished or gave up.  Stop and Pause are you,
+"A stepper ends by itself" means finished or gave up.  Stop and Pause are you,
 and a walk to a room on the map is over the moment you arrive, so neither
 chimes.  Disconnect, pressed, is not the MUD dropping you.
 
@@ -1065,8 +1102,8 @@ the terminal.  It goes out as the escape byte itself, the way tt++ sends a
 
 3kdb keeps seven hundred-odd tt++ `#gag` lines in `common/gags/`, in the
 groups its own `gags` alias switches: area monsters, guild combat, items, the
-ray-gun, blank lines.  They come in with the map and the bots -- data, never
-run -- into a library beside the routes, and every group starts **off**.  A
+ray-gun, blank lines.  They come in with the map and the steppers -- data, never
+run -- into a library beside the paths, and every group starts **off**.  A
 gag hides text, and a line somebody wanted to read going missing without
 their say is worse than any spam it saves, so each group is a switch they
 throw, after reading its gags if they like.  Which groups are on belongs to
@@ -1088,7 +1125,7 @@ installer should not have to be told that the first thing to do is go and find
 fifty thousand rooms.  It takes about ten seconds and the client is usable
 while it runs; the login screen is what they should be looking at anyway.
 Measured on an empty directory: 49,494 rooms, 142,239 exits, 777 areas, 399
-named destinations and 3kdb's whole route library.  `--no-bootstrap` skips it, and a failure is
+named destinations and 3kdb's whole stepper library.  `--no-bootstrap` skips it, and a failure is
 a note rather than a stop -- the client works without a map, and Options ->
 Updates will retry.
 
@@ -1104,18 +1141,18 @@ leaves the decision alone.  A tag nobody can parse counts as older than
 everything, which is the safe direction: a release named "latest" should not
 make every client in the world announce a new version.
 
-The map and the route library came from
+The map and the stepper library came from
 [jmitchell33/3kdb](https://github.com/jmitchell33/3kdb), a TinTin++ setup for
 3K, and it keeps growing.  **Options -> Updates** asks what has changed and
 takes it.
 
 Three paths are watched: `common/map/3k_shared.map`, `common/map/speedruns.tin`
 and `common/bot` -- the last as a directory, so one sha covers all hundred and
-seventy route files.  One API call gets every sha; the tarball is one
+seventy stepper files.  One API call gets every sha; the tarball is one
 compressed request rather than a hundred and seventy.  Against a map that was
 already current the whole thing takes four seconds.
 
-What is remembered is what was taken **and how it was read**.  The route
+What is remembered is what was taken **and how it was read**.  The stepper
 library sat at 67 of 3kdb's 145 for a while because `.add_bot` lines with six
 fields were skipped and only the seven-field ones matched -- silently, because
 a line that does not match is not a line that failed.  3kdb had not changed, so
@@ -1123,13 +1160,13 @@ without this a client that had already pulled would never have taken the fix:
 the record saying "we have this" is exactly what would have frozen the bug in.
 Each importer carries a version, and bumping it offers the data again.
 
-All three are data.  The map is parsed into SQLite and the bot files are read
+All three are data.  The map is parsed into SQLite and the stepper files are read
 with a regex; nothing pulled here is executed, and that is the reason this is a
 button at all.  `scripts/` is deliberately not on the list -- those are Python
 and they hot-reload, so pulling them would be running somebody else's code as
 you.
 
-Nothing is replaced.  The map is merged, which only ever adds; a route you have
+Nothing is replaced.  The map is merged, which only ever adds; a path you have
 named is left alone.  Both were measured before they were trusted, against a
 map that had been played on: a plain re-import duplicated every region, reset
 every visit count, wiped every fingerprint learned by walking and put a room
@@ -1143,7 +1180,7 @@ invented back when the map could still grow.  So **Fresh copy** drops this
 client's copy of what is ticked and takes 3kdb's as it stands.  It is two
 presses -- the button arms and says what it costs -- and it costs what this
 client added to those things: names set by hand, visit counts, exits learned
-by walking, and 3kdb's own routes as you have edited them.  Routes 3kdb's
+by walking, and 3kdb's own paths as you have edited them.  Paths 3kdb's
 listing does not name are yours and are not touched.
 
 Nothing is dropped until the download has succeeded, so it cannot leave you
@@ -1190,7 +1227,7 @@ def _(_): send("look")            # held until there is a socket, then sent
 ```
 
 `connected`, `disconnected` and `retrying` are events like any other, so the
-Events tab offers them too.  A route that was walking when the line dropped
+Events tab offers them too.  A path that was walking when the line dropped
 otherwise just stops, with no way to say so or to start again -- and coming
 back is the moment to re-arm whatever was running.
 
@@ -1249,7 +1286,7 @@ from that one.
 
 What the socket accepts is worth knowing, because it is the reason any of this
 matters: commands as the character, playing a saved character with a saved
-password, writing triggers and routes, and the whole log through `/find`.
+password, writing triggers and paths, and the whole log through `/find`.
 
 ## The edges
 
@@ -1316,7 +1353,7 @@ wire.
 the machine's certificate store, and on Windows that store is filled in on
 demand: a root arrives the first time a Windows program asks for it, and
 Python reading the store is not asking.  A tester's client came up with no
-map, no bots and "unable to get local issuer certificate" on the Updates page,
+map, no steppers and "unable to get local issuer certificate" on the Updates page,
 because their machine had never opened GitHub in a browser.  The client now
 carries Mozilla's roots, as curl publishes them, in `mud/cacert.pem`, and
 trusts them alongside the machine's store rather than instead of it -- a work
@@ -1326,7 +1363,7 @@ machine's store emptied: it failed exactly as the tester's did, and with the
 bundle it fetched the whole of 3kdb.  `tools/refresh_certs.py` updates it,
 against curl's published SHA-256.
 
-**A file half written.**  Rules, routes, characters and the line markers were
+**A file half written.**  Rules, paths, characters and the line markers were
 written with `write_text`, which truncates first.  A crash between the two left
 half a file; half a file loaded as nothing; and the next save wrote the nothing
 back.  Fifty triggers became two bytes that way in a test.  They are written
@@ -1414,7 +1451,7 @@ browser the player already has open: their extensions run against it, their
 session is shared with it, and closing it closes nothing, because the process
 was already running.  With one it is a separate program that can be waited on
 -- and closing the window is how you quit an application, so that is what it
-does: the log and the map go to disk, the bots stop, the session row is marked
+does: the log and the map go to disk, the steppers stop, the session row is marked
 finished, the socket closes.  It is Disconnect, pressed a different way, and
 like Disconnect it does not send `quit`.
 
@@ -1535,7 +1572,7 @@ use: its interpreter holds `python\`, which is exactly what is being
 replaced.  So before Windows checks, the installer closes it -- the way a
 person would.  It closes the client's window, found by the window profile
 only this client uses, and the client saves and disconnects itself as it
-does when you close it: the log and the map to disk, the bots stopped, no
+does when you close it: the log and the map to disk, the steppers stopped, no
 `quit` sent.  It waits for that only if a window was closed, then stops
 whatever is still running from the client's own folder.  Nothing else on the
 machine is touched.
@@ -1560,6 +1597,6 @@ one loads it into the input box, because most of them take an argument.
     /speedruns [word]  /region <name>  /regions    about
     /name  /merge <id>  /forget <id>  /new         correcting the map
     /dupes  /repair  /lock  /unlock
-    /bots  /stop  /prefixes [set]                  what is driving the
+    /steppers  /stop  /prefixes [set]              what is driving the
     /ansivars [show|restore [go]]                  character, and scripting
     /scripts  /reload  /test <line>  /triggers

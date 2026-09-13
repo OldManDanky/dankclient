@@ -31,14 +31,14 @@ HELP = [
         ('/state', 'parsed player state and code tally'),
         ('/clock', 'tick source, period and queue depth'),
     ]),
-    ('Running things', 'Routes, and anything the scripts have started.', [
-        ('/bots', 'routes and hunts that are running'),
-        ('/stop', 'stop every bot at once'),
+    ('Running things', 'Paths, and anything the scripts have started.', [
+        ('/steppers', 'the paths that are walking, and anything else running'),
+        ('/stop', 'stop every stepper at once'),
         ('/tick <secs> <command>', 'send it every so often, and keep doing it'),
         ('/ticks', 'the ones that are running'),
         ('/untick <name|all>', 'stop one, or all of them'),
         ('/delay <secs> <command>', 'send it once, later'),
-        ('/group <name> on|off', 'switch a folder on or off, rules and routes; /groups lists them'),
+        ('/group <name> on|off', 'switch a folder on or off, rules and paths; /groups lists them'),
         ('/folders', 'every folder, and what is filed in it'),
         ('/alias <word> <cmd;cmd>', 'make an alias; {args} or {1} for what follows it'),
         ('/alias', 'the aliases you have made; /alias <word> shows one'),
@@ -76,7 +76,7 @@ HELP = [
         ('/ansivars restore', 'show what would put them back'),
         ('/ansivars restore go', 'send it'),
         ('/help', 'this list'),
-        ('/help <topic>', 'read the guide: /help triggers, /help regex, /help routes...'),
+        ('/help <topic>', 'read the guide: /help triggers, /help regex, /help paths...'),
     ]),
 ]
 
@@ -268,7 +268,7 @@ def handle(text: str, session, scripts, note) -> bool:
     elif verb == "dupes":
         _dupes(session, note)
 
-    elif verb == "bots":
+    elif verb in ("steppers", "bots"):
         if scripts is None:
             note("scripting is disabled (--no-scripts)")
         else:
@@ -277,7 +277,7 @@ def handle(text: str, session, scripts, note) -> bool:
                 f"  {b['name']:<16} {'running' if b['running'] else 'stopped':<8}"
                 f" {b['steps']:>4} steps  {b['kills']:>3} kills"
                 f"  [{b['owner']}] {b['note']}"
-                for b in rows) or "no bots")
+                for b in rows) or "nothing running")
 
     elif verb == "stop":
         # This used to sit below an earlier `verb in ("flush", "stop")`, which
@@ -289,7 +289,7 @@ def handle(text: str, session, scripts, note) -> bool:
             session.queue.flush()
             rules = getattr(scripts, "rules", None)
             held = rules.cancel_waits() if rules is not None else 0
-            note(f"stopped {n} bot(s), queue cleared"
+            note(f"stopped {n} stepper(s), queue cleared"
                  + (f", {held} waiting rule(s) dropped" if held else ""))
 
     elif verb in ("tick", "ticks", "untick"):
@@ -758,7 +758,7 @@ def _group(rest: str, scripts, note) -> None:
     did = scripts.set_folder(name, switch == "on")
     said = f"{did['rules']} rule(s)"
     if did.get("routes"):
-        said += f" and {did['routes']} route(s)"
+        said += f" and {did['routes']} path(s)"
     note(f"{name}: {said} {switch}")
 
 
@@ -778,12 +778,13 @@ def _folders(rest: str, scripts, note) -> None:
     rows = scripts.folders()
     if not rows:
         note("no folders.  Put a name in the Folder box of a trigger, an "
-             "alias, a timer or a route, and it is one.")
+             "alias, a timer or a path, and it is one.")
         return
     order = ("trigger", "alias", "event", "watch", "timer", "route")
+    called = {"route": "path"}
 
     def what(kinds: dict) -> str:
-        return ", ".join(f"{kinds[k]} {k}" + ("" if kinds[k] == 1 else "s")
+        return ", ".join(f"{kinds[k]} {called.get(k, k)}" + ("" if kinds[k] == 1 else "s")
                          for k in order if kinds.get(k))
     note("\n".join(
         f"  {row['path']:<22} {('on' if row['on'] == row['count'] else 'off' if not row['on'] else str(row['on']) + ' of ' + str(row['count']) + ' on'):<12} {what(row['kinds'])}"
@@ -879,7 +880,7 @@ def _go(session, text: str, note) -> None:
         room = int(mark["room_id"])
         route = mapper.route(room)
         if route is None:
-            note(f"no route from here to {mark['name']}")
+            note(f"no way from here to {mark['name']}")
             return
         session.travel(room, "speedwalk", mark["name"])
         note(f"walking {len(route)} steps to {mark['name']} -- {mark['note']}")

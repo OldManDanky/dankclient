@@ -47,7 +47,7 @@
     const d = state.data || {};
     step('gs-data', d.rooms > 0 && !d.fetching,
       d.fetching ? (d.said || 'fetching…')
-        : d.rooms ? `${d.rooms.toLocaleString()} rooms, ${d.routes} routes, `
+        : d.rooms ? `${d.rooms.toLocaleString()} rooms, ${d.routes} paths, `
           + `${d.gag_groups} gag groups`
           : (d.said || 'not fetched yet — Options → Updates'),
       !d.fetching && !d.rooms);

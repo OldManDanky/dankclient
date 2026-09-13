@@ -26,19 +26,19 @@ turns `areas/zombies` off as well.
 
 [Options → Folders](options:folders) lists every folder you have, whatever is
 in it: choose one and it shows that folder's triggers, aliases, events, stat
-watches, timers **and routes** together, with one switch for the lot. `/folders`
+watches, timers **and paths** together, with one switch for the lot. `/folders`
 lists the same from the command box.
 
 So a folder called `zodiacs`, put on that area's triggers, its aliases and its
-route, is one thing: one page, and `/group zodiacs off` switches all of it,
-routes included. A route that is switched off will not walk until it is on
+path, is one thing: one page, and `/group zodiacs off` switches all of it,
+paths included. A path that is switched off will not walk until it is on
 again, however it is started.
 
 ## Switching
 
 - `/group party off` and `/group party on`, from the command box.
 - Or the **turn off** / **turn on** button on the group's heading in Options.
-- `/group party` lists what is in it; `/groups` lists every group and how many are on; `/folders` lists them as folders, counting the routes.
+- `/group party` lists what is in it; `/groups` lists every group and how many are on; `/folders` lists them as folders, counting the paths.
 
 Switching a group switches each rule's own **enabled** box, so it is remembered, and you can still switch one rule by itself.
 

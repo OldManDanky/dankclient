@@ -60,7 +60,7 @@ def sent(wire: Wire) -> list[str]:
 
 def test_it_trips_on_time_and_not_before():
     clock = Clock()
-    d = Deadman(15, clock=clock)
+    d = Deadman(clock=clock)
     clock.now = 14 * 60 + 59
     assert not d.tripped
     clock.now = 15 * 60
@@ -70,7 +70,7 @@ def test_it_trips_on_time_and_not_before():
 def test_a_typed_command_lets_go_and_starts_the_count_again():
     clock = Clock()
     changes: list[bool] = []
-    d = Deadman(15, clock=clock, on_change=changes.append)
+    d = Deadman(clock=clock, on_change=changes.append)
     clock.now = 16 * 60
     assert d.tripped
     d.touched()
@@ -79,20 +79,13 @@ def test_a_typed_command_lets_go_and_starts_the_count_again():
     assert not d.tripped
 
 
-def test_zero_is_off():
+def test_there_is_no_off():
+    """3K's rule, not a preference: nothing sets the time or switches it off."""
     clock = Clock()
-    d = Deadman(0, clock=clock)
+    d = Deadman(clock=clock)
+    assert not hasattr(d, "set_minutes")
     clock.now = 10 ** 6
-    assert not d.tripped
-
-
-def test_switching_it_off_while_tripped_lets_go_at_once():
-    clock = Clock()
-    d = Deadman(15, clock=clock)
-    clock.now = 20 * 60
     assert d.tripped
-    d.set_minutes(0)
-    assert not d.tripped
 
 
 # --- what it holds back ------------------------------------------------------
@@ -156,20 +149,29 @@ def test_the_default_is_fifteen_minutes():
     assert s.deadman.minutes == 15
 
 
-def test_the_setting_is_kept_with_the_map():
+def test_a_time_an_older_client_saved_is_not_read():
+    """Older clients kept a setting with the map, 0 among the choices."""
+    store = Store()
+    store.set_setting("deadman:minutes", "0")
+    assert Session(store=store, prefixes_path=str(Path(tempfile.mkdtemp()) / "p.json")
+                   ).deadman.minutes == 15
+
+
+def test_the_page_cannot_change_it():
     store = Store()
     s, _, _ = session(store)
-    WebServer(s)._on_client_message(b'{"t": "deadman", "minutes": 30}')
-    assert store.setting("deadman:minutes") == "30"
-    assert Session(store=store, prefixes_path=str(Path(tempfile.mkdtemp()) / "p.json")
-                   ).deadman.minutes == 30
+    WebServer(s)._on_client_message(b'{"t": "deadman", "minutes": 0}')
+    assert s.deadman.minutes == 15
+    assert store.setting("deadman:minutes") == ""
 
 
-def test_the_page_is_told_and_has_the_setting():
+def test_the_page_is_told_and_says_it_is_fixed():
     s, _, clock = session()
     clock.now = 15 * 60
     assert WebServer(s).snapshot()["deadman"] == {"minutes": 15.0, "tripped": True}
     html = (UI / "index.html").read_text()
-    for part in ('id="deadman-min"', 'id="deadman-note"', 'id="deadman-why"'):
+    for part in ('id="deadman-note"', 'id="deadman-why"', 'id="deadman-rule"'):
         assert part in html, part
-    assert "t: 'deadman', minutes: n" in (UI / "app.js").read_text()
+    assert 'id="deadman-min"' not in html, "no box to set it"
+    assert "cannot be\n                  changed or turned off" in html
+    assert "t: 'deadman'" not in (UI / "app.js").read_text()

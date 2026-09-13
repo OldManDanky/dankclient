@@ -27,4 +27,4 @@ A name the rule does not know is left as it is, braces and all.
 
 ## When nothing goes out
 
-If you have not typed anything for a while, the deadman stops everything automated until you type again. See [Routes and bots](#routes). `/stop` also throws away anything still waiting.
+If you have not typed anything for a while, the deadman stops everything automated until you type again. See [Paths and steppers](#paths). `/stop` also throws away anything still waiting.

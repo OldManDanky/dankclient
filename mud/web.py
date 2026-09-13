@@ -960,9 +960,6 @@ class WebServer:
         if kind == "open":
             self._open_link(msg.get("url"))
             return
-        if kind == "deadman":
-            self._set_deadman(msg.get("minutes"))
-            return
         if kind == "sound":
             self._sound_op(msg)
             return
@@ -1092,21 +1089,6 @@ class WebServer:
         self.push({"t": "sounds", "slots": self.sounds.listing(),
                    "error": problem or "", "slot": slot})
 
-    def _set_deadman(self, minutes) -> None:
-        """Options -> Routes & bots: minutes before it trips, 0 for never."""
-        deadman = getattr(self.session, "deadman", None)
-        if deadman is None:
-            return
-        try:
-            minutes = min(1440.0, max(0.0, float(minutes)))
-        except (TypeError, ValueError):
-            return
-        deadman.set_minutes(minutes)
-        store = getattr(self.session, "store", None)
-        if store is not None:
-            store.set_setting("deadman:minutes", f"{minutes:g}")
-        self._dirty = True
-
     def _open_link(self, url) -> None:
         """Open an address from the output in the player's own browser.
 
@@ -1185,7 +1167,7 @@ class WebServer:
         self._touched()                     # a click on the map is a person
         route = mapper.route(dest)
         if route is None:
-            self.note("no route from here" if mapper.here is not None
+            self.note("no way from here" if mapper.here is not None
                       else "lost -- walk a room or two first")
             return
         row = self.session.store.room(dest) if self.session.store else None
@@ -1276,7 +1258,8 @@ class WebServer:
                 # Every folder there is, so the page can offer one to file a
                 # route in without having to derive them from the routes.
                 "folders": store.folders(),
-                "walk": self._walk_state(), "autocollect": store.autocollect}
+                "walk": self._walk_state(), "autocollect": store.autocollect,
+                "cot": store.cot}
 
     def _folders_op(self, msg: dict) -> None:
         """A folder spans both stores, so the ops that act on one live here.
@@ -1357,6 +1340,13 @@ class WebServer:
             self.session.queue.flush()
         elif op == "autocollect":
             store.set_autocollect(bool(msg.get("on")))
+        elif op == "cot":
+            store.set_cot(bool(msg.get("on")))
+        elif op == "loop":
+            problem = store.set_loop(msg.get("id", ""), bool(msg.get("on")))
+            if problem:
+                self.push({"t": "routes", "op": "error", "error": problem})
+                return
 
         self.push(self._routes_msg(store))
 

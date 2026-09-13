@@ -1,11 +1,14 @@
 """The deadman: once nobody has typed for a while, nothing automated goes out.
 
-A bot left walking with nobody at the keyboard is a bot that keeps walking
-into whatever changed while nobody was looking.  So: fifteen minutes, by
-default, without a command typed by a person, and the bots and steppers pause
+3K expects a person to be playing.  A stepper left walking with nobody at the
+keyboard keeps walking into whatever changed while nobody was looking.  So:
+fifteen minutes without a command typed by a person, and the steppers pause
 where they are and nothing automated is sent -- no triggers, no timers, no
-script sends.  The first command typed brings it all back, and the bots carry
-on from where they stopped.
+script sends.  The first command typed brings it all back, and the steppers
+carry on from where they stopped.
+
+Fifteen minutes is fixed.  It is the game's rule, not a preference, so there
+is nothing to set and no way to switch it off.
 
 What is held back is dropped rather than saved up: somebody coming back to
 their keyboard should not be greeted by twenty stale commands going out at
@@ -19,15 +22,14 @@ import asyncio
 import time
 from typing import Callable
 
-#: The default, in minutes.  0 switches it off.
-DEFAULT_MINUTES = 15.0
+#: Minutes without a typed command before everything automated pauses.
+MINUTES = 15.0
 
 
 class Deadman:
-    def __init__(self, minutes: float = DEFAULT_MINUTES,
-                 clock: Callable[[], float] = time.monotonic,
+    def __init__(self, clock: Callable[[], float] = time.monotonic,
                  on_change: Callable[[bool], None] | None = None) -> None:
-        self.minutes = max(0.0, float(minutes))
+        self.minutes = MINUTES
         self._clock = clock
         self._last = clock()
         self._tripped = False
@@ -45,8 +47,7 @@ class Deadman:
     @property
     def tripped(self) -> bool:
         """Has it been too long?  Asking is what trips it, so ask often."""
-        if not self._tripped and self.minutes > 0 \
-                and self.idle() >= self.minutes * 60:
+        if not self._tripped and self.idle() >= self.minutes * 60:
             self._tripped = True
             self._free.clear()
             if self.on_change:
@@ -57,15 +58,8 @@ class Deadman:
         """Seconds since somebody last typed a command."""
         return self._clock() - self._last
 
-    def set_minutes(self, minutes: float) -> None:
-        """Change the time.  Switched off, or given longer, it lets go now."""
-        self.minutes = max(0.0, float(minutes))
-        if self._tripped and (self.minutes <= 0
-                              or self.idle() < self.minutes * 60):
-            self._release()
-
     async def wait(self) -> None:
-        """Hold a bot here for as long as it is tripped."""
+        """Hold a stepper here for as long as it is tripped."""
         while self.tripped:
             await self._free.wait()
 

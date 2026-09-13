@@ -27,7 +27,7 @@ SLOTS = {
     "tell": "A tell to you",
     "channel": "A channel line you chose to ding",
     "bell": "3K's bell (somebody used wake)",
-    "bot": "A bot ends by itself",
+    "bot": "A stepper ends by itself",
     "idle": "You have been idle (the deadman trips)",
     "disconnect": "The MUD drops you",
 }

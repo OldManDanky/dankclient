@@ -515,24 +515,17 @@ window.renderBrief = function (b) {
     $('brief-map').value = b.mapping;
   }
 };
-/* The deadman: how long before bots pause for want of a person, and whether
-   they have.  The box is left alone while somebody is typing in it. */
+/* The deadman: whether the steppers have paused for want of a person.  The
+   time is fixed at fifteen minutes; there is nothing here to set. */
 window.renderDeadman = function (d) {
   if (!d) return;
-  const box = $('deadman-min');
-  if (document.activeElement !== box) box.value = String(Math.round(d.minutes));
   $('deadman-note').hidden = !d.tripped;
   if (d.tripped) {
     const m = Math.round(d.minutes);
     $('deadman-why').textContent =
-      `${m} minute${m === 1 ? '' : 's'} without you typing. Type anything to carry on.`;
+      `${m} minutes without you typing. Type anything to carry on.`;
   }
 };
-$('deadman-min').addEventListener('change', () => {
-  const n = Math.max(0, Math.min(1440, parseInt($('deadman-min').value, 10) || 0));
-  $('deadman-min').value = String(n);
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'deadman', minutes: n }));
-});
 
 $('brief-send').addEventListener('click', () =>
   send(`brief ${$('brief-desc').value} ${$('brief-map').value}`, true));

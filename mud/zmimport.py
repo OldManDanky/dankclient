@@ -318,7 +318,7 @@ def body(text: str, ctx: Context, alias: bool, notes: list[str], flags: dict) ->
         elif cmd == "cr":
             acts.append({"type": "send", "text": ""})
         elif cmd in SLOW:
-            raise _Unsupported(f"#{cmd.upper()}, zMUD's slow walking (routes do that here)")
+            raise _Unsupported(f"#{cmd.upper()}, zMUD's slow walking (paths do that here)")
         else:
             raise _Unsupported(f"#{cmd.upper()}")
     while acts and acts[-1]["type"] == "wait" and ctx.depth == 0:
@@ -534,11 +534,11 @@ def _route(name: str, text: str, ctx: Context, where: str, first: str, rooms) ->
             steps += walk
             continue
         if piece.startswith("#") or piece.split()[0].lower() in ctx.aliases:
-            notes.append(f"{piece.split()[0]} dropped: a route only walks and sends")
+            notes.append(f"{piece.split()[0]} dropped: a path only walks and sends")
             continue
         steps.append(_fill(piece, ctx, False))
     if not steps:
-        return Found("skip", where, first, why="route uses nothing it can walk")
+        return Found("skip", where, first, why="path uses nothing it can walk")
     rule = {"name": name, "path": ", ".join(steps), "start": 0}
     if rooms is not None:
         moves = []

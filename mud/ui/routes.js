@@ -39,14 +39,13 @@
 
   function edit(route) {
     if (window.options) window.options.editor('route-editor');
-    $('route-form-title').textContent = route ? `Edit ${route.name}` : 'New route';
+    $('route-form-title').textContent = route ? `Edit ${route.name}` : 'New path';
     $('r-id').value = route ? route.id : '';
     $('r-name').value = route ? route.name : '';
     $('r-path').value = route ? route.path : '';
     $('r-setup').value = route ? (route.setup || '') : '';
     $('r-targets').value = route ? (route.targets || []).join(', ') : '';
     $('r-loop').checked = route ? !!route.loop : false;
-    $('r-polite').checked = route ? !!route.polite : false;
     $('r-start').value = route && route.start ? String(route.start) : '';
     $('r-group').value = route ? (route.group || '') : '';
     $('r-rest').value = route ? String(route.rest || 0) : '0';
@@ -74,7 +73,6 @@
         setup: $('r-setup').value,
         targets: $('r-targets').value,
         loop: $('r-loop').checked,
-        polite: $('r-polite').checked,
         group: $('r-group').value,
         start: parseInt($('r-start').value, 10) || 0,
         rest: parseFloat($('r-rest').value) || 0,
@@ -100,8 +98,8 @@
     const list = $('route-list');
     list.replaceChildren();
     list.dataset.empty = q
-      ? `No route matches “${q}”.`
-      : list.dataset.none || 'No routes yet.';
+      ? `No path matches “${q}”.`
+      : list.dataset.none || 'No paths yet.';
     const shown = routes.filter(matches);
     const card = function (r) {
       const row = document.createElement('div');
@@ -125,7 +123,6 @@
       const bits = [`${r.step_count} step${r.step_count === 1 ? '' : 's'}`];
       if (r.loop) bits.push('repeats');
       if (r.start) bits.push(`from #${r.start}`);
-      if (r.polite) bits.push('polite');
       if (r.targets && r.targets.length) bits.push('kills ' + r.targets.join(', '));
       if (r.running || r.steps_taken) {
         bits.push(`${r.steps_taken} walked`);
@@ -189,6 +186,7 @@
         return o;
       }));
       if (window.setAutoCollect) window.setAutoCollect(!!m.autocollect);
+      if (window.setCot) window.setCot(!!m.cot);
       // The form closes only once the server has taken the save: an error
       // comes back on the same channel, and closing on the click would throw
       // away what you typed before you had seen why it was refused.

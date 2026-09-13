@@ -8,7 +8,7 @@ The first things to know: what is on the screen, where you type, and where every
 - **Messages**, across the top, keeps tells and channel lines where combat cannot scroll them away. See [The messages window](#messages).
 - **The map**, top right, follows you. Click a room to walk there. See [The map and getting about](#map).
 - **Session**, under the buttons, says who is logged in, whether MIP is live, and how many commands you have spent this minute (**APM**).
-- **The Bot panel** runs a route or a bot. See [Routes and bots](#routes).
+- **The Stepper panel** walks a path for you. See [Paths and steppers](#paths).
 - **Your health and points** run along the bottom, above the box you type in.
 
 ## Typing commands
@@ -24,8 +24,8 @@ Up and Down go back through what you have typed.
 
 ## Options
 
-**Options**, top right, holds everything else: triggers, aliases and timers, routes and bots, layout, fonts, keys, sounds, your character's 3K settings and updates. **Find a setting**, at the top of it, searches every page. **Getting started** is the first page, and the first time a character logs in it opens by itself: work down it and press **Done**.
+**Options**, top right, holds everything else: triggers, aliases and timers, paths and steppers, layout, fonts, keys, sounds, your character's 3K settings and updates. **Find a setting**, at the top of it, searches every page. **Getting started** is the first page, and the first time a character logs in it opens by itself: work down it and press **Done**.
 
 ## Leaving
 
-**Disconnect** stops the bots, saves everything and closes the connection. It does not send `quit`: you go link-dead, exactly as if the line had dropped. Closing the window does the same, then quits. If 3K drops you, the client logs you back in by itself.
+**Disconnect** stops the steppers, saves everything and closes the connection. It does not send `quit`: you go link-dead, exactly as if the line had dropped. Closing the window does the same, then quits. If 3K drops you, the client logs you back in by itself.

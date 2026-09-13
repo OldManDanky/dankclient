@@ -273,28 +273,6 @@ def test_a_route_walks_to_its_start_before_it_begins():
         asyncio.new_event_loop().run_until_complete(scenario())
 
 
-def test_a_polite_route_waits_for_another_player_to_leave():
-    """3kdb sets playercheck on every bot it defines.  Nobody wants their
-    kill taken by somebody else's script."""
-    with tempfile.TemporaryDirectory() as tmp:
-        s, host = build(tmp)
-        route, _ = host.routes.upsert(
-            {"name": "polite", "path": "n", "targets": ["rat"], "polite": True})
-
-        async def scenario():
-            host.routes.start(route.id)
-            await asyncio.sleep(0)
-            s._consume(mip("DDD", "s")
-                       + mip("HAA", "player~Grot~Grot the Master~exa #N")
-                       + mip("HAA", "npc~rat~A rat~kill #N"))
-            s._consume(mip("FFF", "A~100"))
-            await asyncio.sleep(0.05)
-            assert "kill rat" not in s.sent
-            assert "waiting" in host.bots.bots["polite"].note
-
-        asyncio.new_event_loop().run_until_complete(scenario())
-
-
 # --- pause and resume ---------------------------------------------------------
 
 
@@ -799,3 +777,94 @@ def test_the_bot_panel_sets_it_and_hears_it():
         assert pushed[-1]["autocollect"] is True
         html = (Path(__file__).resolve().parents[1] / "mud/ui/index.html").read_text()
         assert 'id="bot-autocollect"' in html and "AutoCollect" in html
+
+
+# --- Loop and COT when done ---------------------------------------------------
+
+def with_a_town(s):
+    """A map with a Center of Town, and a travel that only notes where to."""
+    from mud.mapper import Mapper
+    from mud.store import Store
+    s.store = Store()
+    s.mapper = Mapper(s.store)
+    cot = s.store.add_room("The Center of Town")
+    s.store.db.execute("INSERT INTO landmark (name, room_id) VALUES ('cot', ?)", (cot,))
+    walked = []
+    s.travel = lambda room, name="speedwalk", label="": walked.append((room, label)) or True
+    return cot, walked
+
+
+def one_room_hunt(s, host, answer=True):
+    route, _ = host.routes.upsert({"name": "hunt", "path": "n", "targets": ["rat"]})
+
+    async def scenario():
+        host.routes.start(route.id)
+        await asyncio.sleep(0)
+        if answer:
+            s._consume(mip("DDD", "s") + b"\r\n>\r\n")
+        await asyncio.sleep(0.3)
+    asyncio.new_event_loop().run_until_complete(scenario())
+    return host.bots.bots["hunt"]
+
+
+def test_cot_when_done_walks_to_the_center_of_town_when_a_path_finishes():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        cot, walked = with_a_town(s)
+        host.routes.set_cot(True)
+        bot = one_room_hunt(s, host)
+        assert walked == [(cot, "Center of Town")]
+        assert "finished 1 steps" in bot.note and "Center of Town" in bot.note
+
+
+def test_without_cot_when_done_it_stays_where_it_finished():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        _, walked = with_a_town(s)
+        bot = one_room_hunt(s, host)
+        assert walked == [] and bot.note == "finished 1 steps"
+
+
+def test_a_path_that_gives_up_does_not_walk_home():
+    """A long walk set off from wherever it stopped is not what was asked."""
+    import mud.patrol as patrol
+    was = (patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT)
+    patrol.MOVE_TIMEOUT = patrol.LOOK_TIMEOUT = 0.05
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            s, host = build(tmp)
+            _, walked = with_a_town(s)
+            host.routes.set_cot(True)
+            bot = one_room_hunt(s, host, answer=False)
+            assert walked == [] and "did not go anywhere" in bot.note
+    finally:
+        patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT = was
+
+
+def test_a_map_without_the_center_of_town_says_so():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        host.routes.set_cot(True)
+        bot = one_room_hunt(s, host)
+        assert "no Center of Town" in bot.note
+
+
+def test_the_stepper_panel_sets_loop_and_cot_and_they_are_kept():
+    from mud.web import WebServer
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        route, _ = host.routes.upsert({"name": "circuit", "path": "n e s w"})
+        web = WebServer(s, scripts=host)
+        pushed = []
+        web.push = pushed.append
+        web._on_client_message(b'{"t": "routes", "op": "cot", "on": true}')
+        web._on_client_message(
+            ('{"t": "routes", "op": "loop", "id": "%s", "on": true}' % route.id).encode())
+        assert host.routes.cot is True and route.loop is True
+        assert pushed[-1]["cot"] is True
+        assert next(r for r in pushed[-1]["routes"] if r["id"] == route.id)["loop"] is True
+        again = RouteStore(host, Path(tmp) / "routes.json")
+        again.load()
+        assert again.cot is True and again.routes[0].loop is True
+        html = (Path(__file__).resolve().parents[1] / "mud/ui/index.html").read_text()
+        assert 'id="bot-loop"' in html and 'id="bot-cot"' in html and "COT when done" in html

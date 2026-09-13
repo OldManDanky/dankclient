@@ -28,7 +28,7 @@ document.hasFocus = () => focused;
 load('sound.js');
 // Each event's row: its label, the choice, Upload, a file box, and play.
 const row = (slot) => p.els['sound-rows'].children.find((r) => r.children[0].textContent
-  === { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A bot ends by itself' }[slot]);
+  === { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A stepper ends by itself' }[slot]);
 const play = (slot) => row(slot).children.find((b) => b.title === 'Play it').onclick();
 
 const fresh = () => { played.length = 0; peak = 0; };
@@ -94,7 +94,7 @@ global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
 const clips = [];
 global.Audio = class { constructor(src) { this.src = src; clips.push(this); } play() { this.played = true; return Promise.resolve(); } };
 const slots = (over) => ['tell', 'channel', 'bell', 'bot', 'idle', 'disconnect'].map((slot) => Object.assign(
-  { slot, label: { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A bot ends by itself' }[slot] || slot,
+  { slot, label: { tell: 'A tell to you', bell: "3K's bell (somebody used wake)", bot: 'A stepper ends by itself' }[slot] || slot,
     choice: 'builtin', name: '', stamp: 0 }, over[slot] || {}));
 setSounds(slots({ bot: { choice: 'file', name: 'horn.mp3', stamp: 42 }, tell: { choice: 'none' } }));
 audio.currentTime += 5;

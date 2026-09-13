@@ -182,7 +182,7 @@ def test_slash_stop_drops_waiting_rules_and_stops_bots():
         assert commands.handle("/stop", session, host, said.append)
         await asyncio.sleep(0.1)
         assert stopped, "the bots were not stopped"
-        assert "1 bot(s)" in said[0] and "1 waiting rule(s) dropped" in said[0], said
+        assert "1 stepper(s)" in said[0] and "1 waiting rule(s) dropped" in said[0], said
         assert out(session) == ["kill rat"]
     asyncio.run(go())
 

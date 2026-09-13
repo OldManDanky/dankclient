@@ -105,6 +105,8 @@
       $('bot-pause').disabled = true;
       $('bot-stop').disabled = false;
       stopOrClear(false);
+      const loop = $('bot-loop');
+      if (loop) { loop.disabled = true; loop.checked = false; }
       return;
     }
     const r = current();
@@ -114,7 +116,7 @@
     if (r && r.paused) at = r.paused.step || 0;
     else if (r && r.running) at = r.loop && all ? done % all : done;
 
-    $('bot-name').textContent = r ? r.name : 'No bot chosen';
+    $('bot-name').textContent = r ? r.name : 'No stepper chosen';
     $('bot-step').textContent = !r ? ''
       : r.running || r.paused ? `${at} / ${all}` : `${all} step${all === 1 ? '' : 's'}`;
     // A repeating route walks past its own length, so the bar shows where it
@@ -141,6 +143,11 @@
     pause.disabled = !r || (!r.running && !r.paused);
     $('bot-stop').disabled = !r;
     stopOrClear(!!r && !r.running && !r.paused);
+    const loop = $('bot-loop');
+    if (loop) {
+      loop.disabled = !r;
+      loop.checked = !!(r && r.loop);
+    }
   }
 
   // --- finding one ------------------------------------------------------------
@@ -161,7 +168,7 @@
     if (!hits.length) {
       const none = document.createElement('p');
       none.className = 'bf-none';
-      none.textContent = `No bot matches “${q}”.`;
+      none.textContent = `No path matches “${q}”.`;
       box.append(none);
       return;
     }
@@ -229,6 +236,19 @@
   const collect = $('bot-autocollect');
   if (collect) collect.onchange = () => send({ op: 'autocollect', on: collect.checked });
   window.setAutoCollect = (on) => { if (collect) collect.checked = on; };
+  /* Loop is the path's own Repeat, shown here: one setting in two places.
+     COT when done is the panel's, kept by the server like AutoCollect: a path
+     that finishes by itself, not looping, then walks to the Center of Town. */
+  const loopBox = $('bot-loop');
+  if (loopBox) {
+    loopBox.onchange = () => {
+      const r = current();
+      if (r) send({ op: 'loop', id: r.id, on: loopBox.checked });
+    };
+  }
+  const cot = $('bot-cot');
+  if (cot) cot.onchange = () => send({ op: 'cot', on: cot.checked });
+  window.setCot = (on) => { if (cot) cot.checked = on; };
 
   $('bot-find').oninput = drawFound;
   $('bot-find').onkeydown = (e) => {

@@ -221,7 +221,7 @@ def test_the_folders_command_lists_both_kinds():
     said = []
     commands.handle("/folders", session, host, said.append)
     out = "\n".join(said)
-    assert "zodiacs" in out and "1 trigger" in out and "1 route" in out, out
+    assert "zodiacs" in out and "1 trigger" in out and "1 path" in out, out
 
 
 def test_the_group_command_says_it_switched_the_routes_too():
@@ -229,5 +229,5 @@ def test_the_group_command_says_it_switched_the_routes_too():
     session, host = both(("trigger", "zodiacs"), ("route", "zodiacs"))
     said = []
     commands.handle("/group zodiacs off", session, host, said.append)
-    assert "1 route(s)" in "\n".join(said), said
+    assert "1 path(s)" in "\n".join(said), said
     assert host.routes.routes[0].enabled is False

@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one shared set of rules for every character")
     p.add_argument("--no-scripts", action="store_true", help="don't load scripts")
     p.add_argument("--no-bootstrap", action="store_true",
-                   help="on a first run, do not fetch the map and bots from "
+                   help="on a first run, do not fetch the map and paths from "
                         "3kdb")
     p.add_argument("--app", action="store_true",
                    help="run as a window of its own, and stop when it closes")
@@ -328,7 +328,7 @@ async def amain(args: argparse.Namespace) -> int:
         in the background: the client is usable while it runs, and the login
         screen is the thing they should be looking at anyway.
         """
-        _note("first run -- fetching the map and bot library from 3kdb "
+        _note("first run -- fetching the map and path library from 3kdb "
               "(about 10MB, once)")
         session.fetching, session.fetch_said = True, "fetching the world from 3kdb..."
         try:
@@ -350,7 +350,7 @@ async def amain(args: argparse.Namespace) -> int:
         routes = (did.get("bots") or {}).get("added", 0)
         marks = (did.get("speedruns") or {}).get("added", 0)
         _note(f"ready: {rooms} rooms, {marks} named destinations, "
-              f"{routes} routes")
+              f"{routes} paths")
         session.fetching, session.fetch_said = False, ""
         # The store and the route list were written by another thread's
         # connection; this side is holding what it read before.

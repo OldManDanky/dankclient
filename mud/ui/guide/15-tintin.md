@@ -42,7 +42,7 @@ zMUD keeps its settings in a `.mud` file the client cannot read, but it will wri
 | `#T- class`, `#T+ class` | `/group class off`, `/group class on` |
 | `#GAG` | the trigger hides its line |
 | `.3n2e` in commands | its steps: n, n, n, e, e |
-| `#PATH name {…}` | a route; if its moves fit one room only, that is where it starts |
+| `#PATH name {…}` | a path; if its moves fit one room only, that is where it starts |
 | `#ALARM {*5:00}` | a timer, every 5 minutes |
 
 A zMUD trigger ignores capitals, so an imported one does too. `#CAP`, `#BEEP`, zMUD's slow walking (`#STEP`, `#PAUSE`, `#SLOW`), `#VARIABLE`, `#IF` and `#KEY` do not come across; each is listed with the reason.

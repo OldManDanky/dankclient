@@ -211,7 +211,36 @@ class Store:
         if self.setting("forgot:silent-failures") != "1":
             self.db.execute("UPDATE edge SET failed = 0 WHERE failed > 0")
             self.set_setting("forgot:silent-failures", "1")
+        if self.setting("forgot:shorthand") != "1":
+            self.expand_shorthand()
+            self.set_setting("forgot:shorthand", "1")
         self.fade_failures()
+
+    #: 3kdb's shorthand for commands 3K knows by their whole name.  `l` is a
+    #: player's own alias on 3K's side -- one tester's is his corpse command --
+    #: and `efor` is a tt++ alias for `portal eforest` that 3K has never heard
+    #: of.  Both were imported as ways out, and a walk that took one sent it.
+    #: Measured over 3kdb's whole map: four `l` exits, one `efor`, nothing else
+    #: of the kind.
+    SHORTHAND = {"l": "look", "efor": "portal eforest"}
+
+    def expand_shorthand(self) -> int:
+        """Write every shorthand way out as the command it stands for.
+
+        Where the room already has the whole command to the same place, the
+        shorthand is only a second copy of it and goes; otherwise it is
+        renamed.  Returns how many ways out changed.
+        """
+        changed = 0
+        for short, full in self.SHORTHAND.items():
+            changed += self.db.execute(
+                "DELETE FROM edge WHERE command = ? AND EXISTS (SELECT 1 FROM "
+                "edge f WHERE f.from_room = edge.from_room AND f.to_room = "
+                "edge.to_room AND f.command = ?)", (short, full)).rowcount
+            changed += self.db.execute(
+                "UPDATE edge SET command = ? WHERE command = ?",
+                (full, short)).rowcount
+        return changed
 
     #: How long it takes a failed mark to wear off by one.  A door that was
     #: locked opens again, and a mark nothing ever clears reroutes somebody

@@ -220,7 +220,7 @@ def test_the_routes_panel_is_wired_up():
     js = scripts()["routes.js"]
     for element in ("route-list", "route-form", "r-name", "r-path", "r-targets",
                     "r-loop", "r-rest", "r-id", "r-setup", "r-start",
-                    "r-polite", "route-error", "route-stop-all", "r-new",
+                    "route-error", "route-stop-all", "r-new",
                     "route-back", "route-cancel"):
         assert f'id="{element}"' in page, f"{element} is not in the page"
         assert f"'{element}'" in js, f"{element} is never used"

@@ -30,6 +30,15 @@ GLANCE_TRIES = 3
 #: What AutoCollect sends after a room's fights, before the route moves on.
 COLLECT = "get all"
 
+#: What lists your party.  Sent when a stepper is in a room with something to
+#: fight and a player it does not know.
+PWHO = "pwho"
+#: How long it waits for pwho's answer before leaving the room's creatures.
+ASK_WAIT = 2.0
+#: And how often it may ask: a stranger trailing you from room to room is one
+#: question, not one a room.
+ASK_EVERY = 30.0
+
 #: How many times one step may be repeated.  A cap, because "999n" in a path
 #: is a typo far more often than it is a plan.
 MAX_REPEAT = 99
@@ -195,6 +204,9 @@ class RouteStore:
         #: before moving on.  For every route, and read in every room, so
         #: ticking it mid-walk counts from the next one.
         self.autocollect = False
+        #: The Stepper panel's COT when done: a path that finishes by itself,
+        #: not looping, then walks to the Center of Town.
+        self.cot = False
 
     @property
     def paused_path(self) -> Path:
@@ -206,18 +218,85 @@ class RouteStore:
 
     def set_autocollect(self, on: bool) -> None:
         self.autocollect = bool(on)
-        write_atomically(self.settings_path,
-                         json.dumps({"autocollect": self.autocollect}, indent=2))
+        self._save_settings()
+
+    def set_cot(self, on: bool) -> None:
+        """The Stepper panel's "COT when done"."""
+        self.cot = bool(on)
+        self._save_settings()
+
+    def _save_settings(self) -> None:
+        write_atomically(self.settings_path, json.dumps(
+            {"autocollect": self.autocollect, "cot": self.cot}, indent=2))
 
     def _load_settings(self) -> None:
-        self.autocollect = False
+        self.autocollect = self.cot = False
         if not self.settings_path.exists():
             return
         try:
             raw = json.loads(self.settings_path.read_text())
             self.autocollect = bool(raw.get("autocollect", False))
+            self.cot = bool(raw.get("cot", False))
         except (ValueError, OSError, AttributeError):
             set_aside(self.settings_path)
+
+    def set_loop(self, route_id: str, on: bool) -> str | None:
+        """The Stepper panel's Loop box, which is the path's own Repeat.
+
+        One setting, shown in two places, rather than a panel switch that
+        could disagree with the path.  A stepper already walking reads it at
+        the end of each lap, so unticking it mid-walk finishes this lap.
+        """
+        route = self.get(route_id)
+        if route is None:
+            return "no such path"
+        route.loop = bool(on)
+        self.save()
+        return None
+
+    async def _strangers(self, room) -> list[str]:
+        """Players here who are not in your party -- asking 3K when unsure.
+
+        You are not a stranger in your own room.  Somebody the party list does
+        not know may simply have joined before the client was watching, so a
+        `pwho` goes out and its answer gets a moment before they are counted
+        as somebody else's hunt.
+        """
+        import asyncio
+        session = self.host.session
+        me = (session.who_am_i or "").strip().lower()
+        others = [p.name for p in room.players() if p.name.strip().lower() != me]
+        party = getattr(session, "party", None)
+        if not others or party is None:
+            return others
+        if (any(not party.has(n) for n in others)
+                and party.since_asked() >= ASK_EVERY):
+            seen = party.version
+            party.asked()
+            session.queue.put(PWHO, HIGH)
+            loop = asyncio.get_running_loop()
+            give_up = loop.time() + ASK_WAIT
+            while party.version == seen and loop.time() < give_up:
+                await asyncio.sleep(0.1)
+        return [n for n in others if not party.has(n)]
+
+    #: Where "COT when done" walks you: 3kdb's speedrun name for the Center
+    #: of Town, the same place `/go cot` goes.
+    HOME = "cot"
+
+    def _walk_home(self) -> str:
+        """Set off for the Center of Town.  Returns what to add to the note.
+
+        The walk is the client's own, as `/go cot` is: it shows in the Stepper
+        panel with Stop, and waits on the deadman like anything automated.
+        """
+        session = self.host.session
+        store = getattr(session, "store", None)
+        mark = store.landmark(self.HOME) if store is not None else None
+        if mark is None or getattr(session, "mapper", None) is None:
+            return " — COT when done: the map has no Center of Town"
+        session.travel(int(mark["room_id"]), "speedwalk", "Center of Town")
+        return " — walking to the Center of Town"
 
     # --- persistence --------------------------------------------------------
 
@@ -356,7 +435,7 @@ class RouteStore:
         """Walk a route from the top -- or, resuming, from where it paused."""
         route = self.get(route_id)
         if route is None:
-            return "no such route"
+            return "no such path"
         if not route.enabled:
             # Switched off with its folder.  Refusing here rather than in the
             # panel is the point: a folder switched off has to mean the route
@@ -384,14 +463,17 @@ class RouteStore:
         async def in_room(bot) -> None:
             """What the route does in each room it arrives in."""
             room = self.host.session.world.room
-            if route.polite and room.players():
-                # Somebody else is here.  Nobody wants their kill taken by
-                # another player's script, so wait it out rather than
-                # fighting through them.
-                bot.note = "waiting: " + ", ".join(p.name for p in room.players())
-                while room.players():
-                    await asyncio.sleep(2.0)
-                bot.note = ""
+            if any(wanted(m, targets) for m in room.mobs()):
+                # Somebody else here is either a partymate, whose kill is
+                # ours to share, or a stranger, whose mob we leave alone: move
+                # on to the next step rather than take it, or stand over it.
+                strangers = await self._strangers(room)
+                if strangers:
+                    bot.note = ("skipped a room: " + ", ".join(strangers)
+                                + " not in your party")
+                    return
+                if bot.note.startswith("skipped a room"):
+                    bot.note = ""
             # As 3kdb's own bot does: after every fight, glance.  The route
             # moves on only when that glance shows the creature gone and no
             # other target here.  3K stops calling a creature your enemy when
@@ -431,6 +513,13 @@ class RouteStore:
                 self.host.session.queue.put(COLLECT, HIGH)
             if route.rest:
                 await asyncio.sleep(route.rest)
+
+        def finished(bot) -> None:
+            """The path ran to its end by itself -- not Stop, not Pause, not
+            giving up partway -- so this is where COT when done applies."""
+            bot.note = f"finished {len(steps)} steps"
+            if self.cot and not route.loop:
+                bot.note += self._walk_home()
 
         async def run() -> None:
             bot = bots.bots[route.name]
@@ -498,7 +587,7 @@ class RouteStore:
                         bot.steps += len(left)
                         first = 0
                         if not route.loop:
-                            bot.note = f"finished {len(steps)} steps"
+                            finished(bot)
                             return
                         continue
                 for i in range(first, len(steps)):
@@ -512,7 +601,7 @@ class RouteStore:
                     await in_room(bot)
                 first = 0
                 if not route.loop:
-                    bot.note = f"finished {len(steps)} steps"
+                    finished(bot)
                     return
 
         bots.start(route.name, run, owner=f"route:{route.id}")
@@ -522,7 +611,7 @@ class RouteStore:
         """Stop, and remember where: the step it had reached and the room."""
         route = self.get(route_id)
         if route is None:
-            return "no such route"
+            return "no such path"
         bot = self.host.bots.bots.get(route.name)
         if bot is None or not bot.running:
             return "it is not walking"

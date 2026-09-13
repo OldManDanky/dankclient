@@ -40,7 +40,8 @@ from .state import World
 from .telnet import TelnetFilter
 from .gags import HOLD, LineGate
 from . import gaglib
-from .deadman import DEFAULT_MINUTES, Deadman
+from .deadman import Deadman
+from .party import Party
 from .triggers import TriggerSet
 
 DEFAULT_HOST = "3k.org"
@@ -154,16 +155,16 @@ class Session:
                              keep=(n for n, _ in self.prefixes.pairs))
         if self.mapper is not None:
             self.bus.on(events.ROOM, self._on_room)
-        #: Pauses everything automated once nobody has typed for a while.
-        #: Kept with the map, because it is the client enforcing it.
-        minutes = DEFAULT_MINUTES
-        if store is not None:
-            try:
-                minutes = float(store.setting("deadman:minutes",
-                                              str(DEFAULT_MINUTES)))
-            except (ValueError, TypeError):
-                pass
-        self.deadman = Deadman(minutes, on_change=self._deadman_changed)
+        #: Pauses everything automated once nobody has typed for fifteen
+        #: minutes.  Fixed: a `deadman:minutes` an older client saved with the
+        #: map is not read.
+        self.deadman = Deadman(on_change=self._deadman_changed)
+        #: Who is in your party, from pwho and 3K's [PARTY] lines: whether a
+        #: player in the room is a partymate or a stranger whose mob a stepper
+        #: leaves alone.
+        self.party = Party(me=lambda: self.who_am_i)
+        self.bus.on(events.LINE, lambda _raw, plain: self.party.line(plain))
+        self.bus.on(events.CHAT, self.party.chat)
         # Movement is exempt, and DDD tells us what counts as movement *here*,
         # so named exits like "omp" or "vortex" are free too.
         self.queue = SendQueue(self.send, self.clock, apm=self.apm,
@@ -599,7 +600,7 @@ class Session:
             self.queue.flush()            # nothing waiting goes out later
             minutes = self.deadman.minutes
             said = (f"deadman: {minutes:g} minute{'s' if minutes != 1 else ''} "
-                    f"without you typing -- bots paused, and nothing automated "
+                    f"without you typing -- steppers paused, and nothing automated "
                     f"will be sent until you type a command.")
         else:
             said = "deadman: you're back -- carrying on."

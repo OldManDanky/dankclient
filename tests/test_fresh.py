@@ -258,7 +258,7 @@ def test_the_summary_says_what_was_taken():
         "gags": {"gags": 88}}}, fresh=True)
     assert said.startswith("fresh copy finished: ")
     for want in ("51,720 rooms", "71,394 exits", "152 of your logged lines",
-                 "1,247 destinations", "145 routes", "3 of yours left alone",
+                 "1,247 destinations", "145 paths", "3 of yours left alone",
                  "88 gags"):
         assert want in said, (want, said)
 

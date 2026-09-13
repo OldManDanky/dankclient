@@ -16,7 +16,7 @@
   const NAMES = {
     map: ['The map', 'Rooms, exits and areas — 3k_shared.map'],
     speedruns: ['Named destinations', 'What /go walks to — speedruns.tin'],
-    bots: ['Bot library', 'Routes: where the monsters are, and in what order'],
+    bots: ['Path library', 'Paths: where the monsters are, and in what order'],
     gags: ['Gag library', 'Lines 3kdb players hide — every group off until you switch it on'],
   };
 
@@ -139,7 +139,7 @@
       const names = want.map((k) => (NAMES[k] || [k])[0].toLowerCase());
       say(`this drops your copy of ${names.join(', ')} and takes 3kdb's `
           + 'instead. Room names you set, visit counts and exits you walked '
-          + 'go with it. Your own routes and your session log are kept.');
+          + 'go with it. Your own paths and your session log are kept.');
       return;
     }
     disarm();
@@ -166,7 +166,7 @@
     }
     if (done.speedruns) said.push(`${done.speedruns.added} destinations`);
     if (done.bots) {
-      said.push(`${done.bots.added} routes added`
+      said.push(`${done.bots.added} paths added`
                 + (done.bots.dropped ? `, ${done.bots.dropped} of 3kdb's replaced` : '')
                 + (done.bots.kept ? `, ${done.bots.kept} of yours left alone` : ''));
     }

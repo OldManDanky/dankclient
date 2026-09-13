@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .codes import parse_bad
-from .store import personal
+from .store import Store, personal
 
 #: .add_speedrun {name} {type} {vnum} {description}
 SPEEDRUN = re.compile(
@@ -278,6 +278,7 @@ def import_map(store, path: str | Path, progress=None,
                     voids[current].append(int(got[0]))
                     continue
                 command = walkable((got[2] or got[1]).strip().lower())
+                command = Store.SHORTHAND.get(command, command)
                 # Somebody's own house, or somebody's own alias, is not a way
                 # out of a public room.
                 if command and not personal(command):
@@ -504,7 +505,8 @@ def translate_step(step: str, aliases: dict[str, str]) -> tuple[str, str]:
         if part.startswith((".", "#")):
             left_out.append(part)          # a 3kdb alias this file does not define
             continue
-        parts.append(part)
+        # `l` and `efor` are shorthand: a player's own alias and a tt++ one.
+        parts.append(Store.SHORTHAND.get(low, part))
     return ";".join(parts), ";".join(left_out)
 
 
@@ -623,7 +625,7 @@ def import_bots(routes, root: str | Path, note=None) -> dict:
         # Said rather than counted.  These routes walk, but somewhere in each
         # of them 3kdb stopped its own bot for the player to do something,
         # and a route that quietly walks past that is worth a warning.
-        note(f"{len(partial)} route(s) have a step of 3kdb's own left out:")
+        note(f"{len(partial)} path(s) have a step of 3kdb's own left out:")
         for name in sorted(partial):
             note(f"  {name:<22} {', '.join(partial[name])[:60]}")
     return {"added": added, "kept": kept, "skipped": skipped, "missing": "",

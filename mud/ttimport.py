@@ -520,7 +520,7 @@ def _one(name: str, args: list[str], ctx: _Context, where: str, first: str) -> F
             if re.match(r"_|\.(pre|post)_", word):
                 # 3kdb's hooks: its bot calls them, nobody types them.
                 return Found("skip", where, first, why="a 3kdb hook, called by "
-                             "3kdb's own bot rather than typed")
+                             "3kdb's own stepper rather than typed")
             actions = translate_body(body, ctx, True, notes)
             if not actions:
                 raise _Unsupported("nothing in it this can send")
@@ -651,7 +651,7 @@ def bring_in(files: list[tuple[str, str]], ids, store, routes=None,
             continue
         if f.kind == "route":
             if routes is None:
-                problems.append(f"{f.source}: routes are not available")
+                problems.append(f"{f.source}: paths are not available")
                 continue
             _route, problem = routes.upsert(dict(f.rule))
         else:

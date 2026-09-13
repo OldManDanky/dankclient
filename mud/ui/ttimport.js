@@ -10,7 +10,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const KINDS = [['alias', 'Aliases'], ['trigger', 'Triggers'], ['gag', 'Gags'], ['timer', 'Timers'],
-    ['route', 'Routes']];
+    ['route', 'Paths']];
   let files = [];
   let items = [];
 
@@ -59,7 +59,7 @@
     if (it.kind === 'gag') return `hide lines ${r.mode === 'contains' ? 'containing' : 'matching'} ${r.pattern}`;
     if (it.kind === 'timer') return `every ${r.every}s: ${acts}`;
     if (it.kind === 'route') {
-      return `route ${r.name}: ${r.path.length > 160 ? r.path.slice(0, 160) + '\u2026' : r.path}`
+      return `path ${r.name}: ${r.path.length > 160 ? r.path.slice(0, 160) + '\u2026' : r.path}`
         + (r.start ? `  (starts at room ${r.start})` : '');
     }
     const what = r.mode === 'command' ? r.pattern : `${r.mode} ${r.pattern}`;

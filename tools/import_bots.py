@@ -38,7 +38,7 @@ def main(argv: list[str]) -> int:
     if got["missing"]:
         print(f"no {got['missing']}", file=sys.stderr)
         return 1
-    print(f"\n{got['added']} routes imported, {got['kept']} left alone "
+    print(f"\n{got['added']} paths imported, {got['kept']} left alone "
           f"(yours), {got['skipped']} skipped, into {out}")
     return 0
 

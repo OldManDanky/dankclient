@@ -69,6 +69,9 @@ def find(word: str) -> list[dict]:
     want = word.strip().lower().lstrip("/")
     if not want:
         return []
+    # Old names for a topic, and the words somebody might reach for.
+    want = {"routes": "paths", "route": "paths", "bots": "paths",
+            "bot": "paths", "steppers": "paths", "stepper": "paths"}.get(want, want)
     every = topics()
     exact = [t for t in every if want in (t["id"], t["title"].lower())
              or t["id"].rstrip("s") == want.rstrip("s")]

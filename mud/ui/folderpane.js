@@ -23,7 +23,7 @@
   const KINDS = [
     ['trigger', 'Triggers', 'trigger'], ['alias', 'Aliases', 'alias'],
     ['event', 'Events', 'event'], ['watch', 'Stat watches', 'stat watch'],
-    ['timer', 'Timers', 'timer'], ['route', 'Routes', 'route'],
+    ['timer', 'Timers', 'timer'], ['route', 'Paths', 'path'],
   ];
   //: which folder is open, or null for the list of them
   let open = null;
@@ -91,7 +91,7 @@
     b.type = 'button';
     b.textContent = allOn ? 'turn off' : 'turn on';
     b.title = `/group ${row.path} ${allOn ? 'off' : 'on'} does the same from `
-      + 'the input line, and switches its routes with them';
+      + 'the input line, and switches its paths with them';
     b.onclick = (e) => {
       if (e && e.stopPropagation) e.stopPropagation();
       send({ op: 'set', name: row.path, on: !allOn });
@@ -141,7 +141,7 @@
     const go = document.createElement('button');
     go.type = 'button';
     go.textContent = 'Show';
-    go.title = item.fkind === 'route' ? 'Open it in Routes & bots'
+    go.title = item.fkind === 'route' ? 'Open it in Paths & steppers'
       : 'Open it in its own page';
     go.onclick = () => {
       if (!window.options) return;

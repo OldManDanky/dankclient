@@ -21,8 +21,8 @@
           + 'output. Each channel gets a tag you can switch off.' },
     { id: 'mapmon', label: 'Map', on: true,
       note: 'Top of the sidebar. Click a room to walk there.' },
-    { id: 'botpanel', label: 'Bot', on: true,
-      note: 'Under the map. Find a route and start, pause or stop it '
+    { id: 'botpanel', label: 'Stepper', on: true,
+      note: 'Under the map. Find a path and start, pause or stop it '
           + 'without opening Options.' },
     { id: 'roompanel', label: 'Room contents and exits', on: false,
       note: 'Bottom of the sidebar, with a button for every action the MUD '

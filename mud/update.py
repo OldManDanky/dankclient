@@ -518,7 +518,7 @@ def summary(got: dict, fresh: bool = False) -> str:
         parts.append(f"{done['speedruns'].get('added', 0):,} destinations")
     if "bots" in done:
         it = done["bots"]
-        said = f"{it.get('added', 0):,} routes"
+        said = f"{it.get('added', 0):,} paths"
         if it.get("kept"):
             said += f" ({it['kept']:,} of yours left alone)"
         parts.append(said)

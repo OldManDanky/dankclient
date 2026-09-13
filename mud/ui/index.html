@@ -378,8 +378,10 @@
   #bot-note:empty{display:none}
   #bot-acts{display:flex;gap:6px;margin-bottom:8px}
   #bot-acts button{flex:1 1 0;min-width:0;padding:5px 4px;font-size:11px}
-  #bot-collect{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:var(--dim);cursor:pointer;width:max-content}
-  #bot-collect input{margin:0}
+  #bot-opts{display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:8px}
+  .bot-check{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer;width:max-content}
+  .bot-check input{margin:0}
+  .bot-check:has(input:disabled){opacity:.5;cursor:default}
   #bot-find{width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px}
   #bot-found{display:flex;flex-direction:column;gap:3px;margin-top:6px;
              max-height:14em;overflow-y:auto}
@@ -746,9 +748,9 @@
          without looking: where the settings are, what is running, and out. -->
     <div id="side-acts">
       <button id="open-options" type="button"
-              title="Routes, triggers, aliases and character setup">Options</button>
+              title="Paths, triggers, aliases and character setup">Options</button>
       <button id="open-bots" type="button"
-              title="What is running, and starting or stopping it">Bots</button>
+              title="What is running, and starting or stopping it">Steppers</button>
       <button id="hangup" type="button" class="danger"
               title="Save everything and close the connection">Disconnect</button>
     </div>
@@ -786,12 +788,12 @@
 
     <!-- Under the map: what is walking you, and the three things you do to it. -->
     <section id="botpanel">
-      <h2>Bot</h2>
+      <h2>Stepper</h2>
       <div id="deadman-note" hidden>
         <b>Paused</b> &mdash; <span id="deadman-why"></span>
       </div>
       <div id="bot-now">
-        <div class="bar-top"><b id="bot-name">No bot chosen</b><i id="bot-step"></i></div>
+        <div class="bar-top"><b id="bot-name">No stepper chosen</b><i id="bot-step"></i></div>
         <div class="track"><div class="fill" id="bot-bar"></div></div>
         <div id="bot-note"></div>
       </div>
@@ -804,11 +806,20 @@
                 title="Stop, forget where it had got to, and take it off the panel"
                 >Stop</button>
       </div>
-      <label id="bot-collect" title="After a room's fights, before moving on: get all">
-        <input id="bot-autocollect" type="checkbox"> AutoCollect</label>
+      <div id="bot-opts">
+        <label id="bot-collect" class="bot-check"
+               title="After a room's fights, before moving on: get all">
+          <input id="bot-autocollect" type="checkbox"> AutoCollect</label>
+        <label class="bot-check"
+               title="Start the path over at its end. The same as the path's own Repeat">
+          <input id="bot-loop" type="checkbox" disabled> Loop</label>
+        <label class="bot-check"
+               title="When a path finishes by itself and is not looping, walk to the Center of Town (/go cot)">
+          <input id="bot-cot" type="checkbox"> COT when done</label>
+      </div>
       <input id="bot-find" type="search" autocomplete="off" spellcheck="false"
-             placeholder="find a bot: name, step or creature"
-             aria-label="Find a bot">
+             placeholder="find a path: name, step or creature"
+             aria-label="Find a path">
       <div id="bot-found" hidden></div>
     </section>
 
@@ -900,7 +911,7 @@
       <button type="button" data-tab="start">Getting started<span class="n"></span></button>
       <div class="opt-group">Automation</div>
       <button type="button" data-tab="folders">Folders<span class="n"></span></button>
-      <button type="button" data-tab="routes">Routes &amp; bots<span class="n"></span></button>
+      <button type="button" data-tab="routes">Paths &amp; steppers<span class="n"></span></button>
       <button type="button" data-tab="trigger">Triggers<span class="n"></span></button>
       <button type="button" data-tab="gaglib">Gags<span class="n"></span></button>
       <button type="button" data-tab="alias">Aliases<span class="n"></span></button>
@@ -947,7 +958,7 @@
           <ol id="gs-steps" class="gs-steps">
             <li class="gs" id="gs-data">
               <div class="gs-top"><b>The world</b><span class="gs-state"></span></div>
-              <p>The map, the routes and the gag library come from 3kdb. The first
+              <p>The map, the paths and the gag library come from 3kdb. The first
                  run fetches them by itself; Options &rarr; Updates takes anything new.</p>
             </li>
             <li class="gs" id="gs-colours">
@@ -987,31 +998,28 @@
         <section class="opt-pane" data-pane="routes">
           <div class="opt-head">
             <div>
-              <h4>Routes &amp; bots</h4>
-              <p>Paths to walk and what to fight on the way. Start them here or
-                 from the Bot panel under the map.</p>
+              <h4>Paths &amp; steppers</h4>
+              <p>Walks to take and what to fight on the way. Start them here or
+                 from the Stepper panel under the map.</p>
             </div>
             <div class="acts">
-              <button id="r-new" type="button" class="primary">+ New route</button>
+              <button id="r-new" type="button" class="primary">+ New path</button>
               <button id="route-stop-all" type="button">Stop everything</button>
             </div>
           </div>
           <div class="fset">
             <h5>Deadman</h5>
             <div class="in">
-              <div class="frow">
-                <label for="deadman-min">Pause after</label>
-                <div class="ctl">
-                  <input id="deadman-min" type="number" min="0" max="1440" step="1"
-                         class="num"> <span class="hint">minutes without you typing</span>
-                </div>
-                <p class="fhint">Bots pause and nothing automated is sent until you
-                  type again. 0 turns it off.</p>
+              <div class="frow one">
+                <p id="deadman-rule" class="fhint">After <b>15 minutes</b> without you
+                  typing, steppers pause and nothing automated is sent until you type
+                  again. 3K expects a person at the keyboard, so this cannot be
+                  changed or turned off.</p>
               </div>
             </div>
           </div>
-          <div id="route-list" class="card-list" data-empty="No routes yet. Paste a path into a new one."
-               data-none="No routes yet. Paste a path into a new one."></div>
+          <div id="route-list" class="card-list" data-empty="No paths yet. Paste the steps into a new one."
+               data-none="No paths yet. Paste the steps into a new one."></div>
         </section>
 
         <!-- folders ------------------------------------------------------ -->
@@ -1021,7 +1029,7 @@
               <h4 id="fold-title">Folders</h4>
               <p id="fold-blurb">Everything you have filed under one name,
                 whatever kind it is. Put a folder name on a trigger, an alias,
-                a timer or a route and it appears here.</p>
+                a timer or a path and it appears here.</p>
             </div>
             <div class="acts">
               <button id="fold-back" type="button" hidden>&larr; All folders</button>
@@ -1032,7 +1040,7 @@
           <div id="fold-list" class="card-list"
                data-empty="Nothing is in a folder yet."
                data-none="Nothing is in a folder yet. Type a name in the Folder
-                          box of any trigger, alias, timer or route."></div>
+                          box of any trigger, alias, timer or path."></div>
         </section>
 
         <!-- triggers ----------------------------------------------------- -->
@@ -1460,7 +1468,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <p class="fhint" id="tt-intro">Aliases, triggers, gags and timers come
             across, with <code>%1</code> as <code>{1}</code>, a class as a group,
             <code>#delay</code> or <code>#WAIT</code> as a wait; a zMUD
-            <code>#PATH</code> becomes a route, and a speedwalk its steps. Real
+            <code>#PATH</code> becomes a path, and a speedwalk its steps. Real
             TinTin++ programming &mdash; <code>#if</code>, <code>#math</code>,
             <code>#foreach</code> &mdash; does not; each is listed with the reason, so
             you can write it as a script instead.
@@ -1499,8 +1507,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
         <section class="opt-pane" data-pane="updates" hidden>
           <div class="opt-head">
             <div>
-              <h4>Map &amp; bot updates</h4>
-              <p>The map and the route library come from <b>jmitchell33/3kdb</b>.
+              <h4>Map &amp; path updates</h4>
+              <p>The map and the path library come from <b>jmitchell33/3kdb</b>.
                  An update only adds &mdash; nothing you have walked, renamed or
                  edited is changed.</p>
             </div>
@@ -1514,13 +1522,13 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                data-empty="Press Check now to ask GitHub what has changed."
                data-none="Press Check now to ask GitHub what has changed."></div>
           <p class="fhint" id="up-note">Only data is taken: the map, the named
-             destinations and the bots. Your scripts are never touched.</p>
+             destinations and the paths. Your scripts are never touched.</p>
           <p class="fhint"><b>Fresh copy</b> drops this client's copy of what is
              ticked and takes 3kdb's as it stands &mdash; for a map that has
              gone wrong, which an update cannot fix because an update only adds.
              It costs what you have added to those things: room names you set,
-             visit counts, exits learned by walking, and 3kdb's own routes as
-             you have edited them. Your own routes, and your session log, are
+             visit counts, exits learned by walking, and 3kdb's own paths as
+             you have edited them. Your own paths, and your session log, are
              kept.</p>
         </section>
 
@@ -1567,7 +1575,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
       <div id="route-editor" class="opt-editor" hidden>
         <header>
           <button id="route-back" type="button" class="back" title="Back">&larr;</button>
-          <h4 id="route-form-title">New route</h4>
+          <h4 id="route-form-title">New path</h4>
         </header>
         <form id="route-form" class="body">
           <input type="hidden" id="r-id">
@@ -1581,7 +1589,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                        placeholder="tradepost circuit">
               </div>
               <div class="frow">
-                <label for="r-path">Path</label>
+                <label for="r-path">Steps</label>
                 <textarea id="r-path" spellcheck="false" rows="4"
                           placeholder="n n e s w"></textarea>
                 <p class="fhint">Directions separated by spaces, commas, semicolons
@@ -1589,7 +1597,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                   a direction is sent as a command &mdash; <code>climb pipe</code>,
                   <code>enter</code>. Wrap a step in <code>{ }</code> to keep
                   something containing a separator together.<button type="button"
-                  class="guide-link" data-guide="routes">How routes work</button></p>
+                  class="guide-link" data-guide="paths">How paths work</button></p>
               </div>
               <div class="frow">
                 <label for="r-group">Folder</label>
@@ -1597,7 +1605,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                        list="r-folders" placeholder="chaos/dungeon">
                 <datalist id="r-folders"></datalist>
                 <p class="fhint">Optional, and only for keeping the list
-                  tidy &mdash; it changes nothing about how the route walks. A
+                  tidy &mdash; it changes nothing about how the path walks. A
                   <code>/</code> makes another level. The folder exists as long
                   as something is in it, so naming one here is how you make it.</p>
               </div>
@@ -1637,13 +1645,8 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                 <label>Repeat</label>
                 <label class="check"><input id="r-loop" type="checkbox">
                   start over at the end of the path</label>
-                <p class="fhint">Off by default, so a forgotten route does not
+                <p class="fhint">Off by default, so a forgotten path does not
                   keep walking.</p>
-              </div>
-              <div class="frow">
-                <label>Other players</label>
-                <label class="check"><input id="r-polite" type="checkbox">
-                  wait rather than take their kill</label>
               </div>
               <div class="frow">
                 <label for="r-rest">Rest</label>
@@ -1658,7 +1661,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
           <div class="fbar">
             <span id="route-error" class="err"></span>
             <button id="route-cancel" type="button">Cancel</button>
-            <button type="submit" class="primary">Save route</button>
+            <button type="submit" class="primary">Save path</button>
           </div>
         </form>
       </div>
@@ -1779,7 +1782,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                        placeholder="optional, e.g. zodiacs">
                 <datalist id="f-groups"></datalist>
                 <p class="fhint">Files it with everything else of that name
-                  &mdash; triggers, aliases, timers and routes alike &mdash; and
+                  &mdash; triggers, aliases, timers and paths alike &mdash; and
                   they switch together: <code>/group zodiacs on</code> or
                   <code>/group zodiacs off</code>, or the switch on the folder in
                   <button type="button" class="guide-link"

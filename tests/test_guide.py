@@ -123,7 +123,7 @@ def test_the_page_has_the_help_and_the_forms_link_to_it():
     html = (UI / "index.html").read_text()
     for part in ('data-tab="guide"', 'data-pane="guide"', 'id="guide-find"',
                  'id="guide-topics"', 'id="guide-article"', 'src="guide.js"',
-                 'data-guide="patterns"', 'data-guide="actions"', 'data-guide="routes"'):
+                 'data-guide="patterns"', 'data-guide="actions"', 'data-guide="paths"'):
         assert part in html, part
     assert "t: 'guide'" in (UI / "guide.js").read_text()
     assert "window.handleGuide(m)" in (UI / "app.js").read_text()

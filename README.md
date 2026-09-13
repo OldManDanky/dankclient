@@ -3,7 +3,7 @@
 A MUD client for [3Kingdoms](https://3k.org), built around MIP -- the
 protocol 3K already speaks.  Health, guild state, room contents, tells and
 channels arrive as data rather than text to be scraped, and it comes with
-the whole 3K map and a library of bots.
+the whole 3K map and a library of paths to walk.
 
 ## Installing
 
@@ -21,7 +21,7 @@ SmartScreen does not recognise it.  Click **More info**, then **Run anyway**.
 
 ## The first time you run it
 
-It fetches the map and the bots from
+It fetches the map and the paths from
 [3kdb](https://github.com/jmitchell33/3kdb) in the background -- about ten
 seconds, and you can log in while it runs.
 
@@ -38,11 +38,11 @@ it is done; press **Done** when you are.  It stays at the top of **Options**.
 
 The three buttons above the map are the ones you will use most:
 
-- **Options** -- routes and bots, triggers, aliases and timers; layout, fonts,
+- **Options** -- paths and steppers, triggers, aliases and timers; layout, fonts,
   keyboard and sounds; your character's 3K settings; updates, and a list of
   every client command.  **Find a setting**, at the top, searches all of it.
-- **Bots** -- straight to your routes and bots.
-- **Disconnect** -- stops the bots, saves everything, and closes the
+- **Steppers** -- straight to your paths and steppers.
+- **Disconnect** -- stops the steppers, saves everything, and closes the
   connection.  It does **not** send `quit`: you go link-dead, exactly as if
   the line had dropped.  The character screen comes back so you can pick who
   to play next.
@@ -54,14 +54,16 @@ shows here first.  The window's title shows the version, and counts tells
 that arrive while you are in another window -- "(2) Dank Mud Client" on the
 taskbar -- until you come back.
 
-**The Bot panel**, under the map, runs a bot without opening Options.  Type
-part of a route's name, a step or a creature it hunts, and press **Start**
+**The Stepper panel**, under the map, walks a path without opening Options.  Type
+part of a path's name, a step or a creature it hunts, and press **Start**
 beside the one you want (clicking its name just picks it).  **Pause** stops
 it and remembers the step it had reached and the room it was in -- even
 across closing the client; **Resume** walks you back to that room, deals with
-whatever the route hunts there, and carries on from the next step.  **Start
+whatever the path hunts there, and carries on from the next step.  **Start
 over** begins again from the top, and **Stop** forgets where it had got to.
-Only one bot walks at a time from here.  You can hide the panel under
+**Loop** starts the path over at its end, and **COT when done** walks you to
+the Center of Town once a path finishes.  Only one stepper walks at a time
+from here.  You can hide the panel under
 **Options -> Layout -> Show**.
 
 Closing the window does the same as Disconnect, then quits.
@@ -70,7 +72,7 @@ If 3K drops you, the client goes back by itself and logs you in again,
 waiting a little longer between tries.  The sidebar counts down while it waits.
 
 **Options -> Help** is the guide: triggers, patterns and regex, aliases,
-groups, routes and the rest, a topic at a time.  The same guide is in the
+groups, paths and the rest, a topic at a time.  The same guide is in the
 output -- `/help triggers`, `/help regex`.
 
 Commands that start with `/` are for the client and never reach the MUD --
@@ -80,8 +82,8 @@ first, with a **Go** button; `/speedruns` shows the same in the terminal.
 Some say *can't reach*: the map has no way in to that area yet, and walking
 in once teaches it.  Clicking a room on
 the map walks there, and so does `/go <name>`: the whole way goes at once, so
-you arrive as fast as 3K can move you, and the Bot panel shows where you are
-going.  A route with nothing to fight goes the same way.
+you arrive as fast as 3K can move you, and the Stepper panel shows where you are
+going.  A path with nothing to fight goes the same way.
 
 In the output, drag to select, double-click for a word or triple-click for a
 whole line, then **Ctrl+C** to copy it.  Web addresses underline when you
@@ -130,10 +132,10 @@ the messages window's size.  It offers the fixed-width fonts installed on
 your computer, or any other by name.  **Ctrl +** and **Ctrl -** make
 everything else bigger or smaller.
 
-**Deadman.**  If you haven't typed a command for 15 minutes, bots and
-routes pause where they are and nothing automated is sent -- no triggers, no
-timers -- until you type something, and then everything carries on.  Set the
-minutes, or 0 for off, at the top of **Options -> Routes & bots**.
+**Deadman.**  3K expects a person at the keyboard.  If you haven't typed a
+command for 15 minutes, steppers pause where they are and nothing automated is sent -- no triggers, no
+timers -- until you type something, and then everything carries on.  The 15
+minutes is fixed; it cannot be changed or turned off.
 
 To walk with the **numpad**, turn it on under **Options -> Keyboard**:
 8 is north, 2 south, 7 north-west and so on, 5 is `look` then `search`, and
@@ -153,8 +155,8 @@ the client first: the installer closes it for you, and it saves and
 disconnects as it would if you had closed it yourself.  Your map, characters
 and settings are kept.
 
-**The map and bots**: **Options -> Updates** checks 3kdb and takes what has
-changed.  It only ever adds: rooms you have renamed and routes you have made
+**The map and paths**: **Options -> Updates** checks 3kdb and takes what has
+changed.  It only ever adds: rooms you have renamed and paths you have made
 are left alone.
 
 ## Where your things are
@@ -243,7 +245,7 @@ mapping with no room ids, reconnecting, the installer -- is in
 
 ## Credits and licence
 
-The map and the bots come from
+The map and the paths come from
 [jmitchell33/3kdb](https://github.com/jmitchell33/3kdb).  The root
 certificates in `mud/cacert.pem` are Mozilla's, under the MPL 2.0, as
 [extracted by curl](https://curl.se/docs/caextract.html).

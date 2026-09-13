@@ -118,7 +118,7 @@ def close_script() -> str:
     """PowerShell that closes a running client before any file is replaced.
 
     The way a person would: close its window, and the client saves and
-    disconnects on its own -- the log and the map go to disk, the bots stop,
+    disconnects on its own -- the log and the map go to disk, the steppers stop,
     no `quit` is sent, exactly as Disconnect does.  Only if a window was
     closed is there anything to wait for, and then no longer than it takes.
     Whatever is still running after that is stopped: a process whose program

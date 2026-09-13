@@ -49,19 +49,19 @@ check('only what is in a folder is listed, and every prefix is one',
 const zod = rows().find((r) => r.querySelector('b').textContent === 'zodiacs');
 check('a folder says what is in it, by kind, rolling up what is under it',
       textOf(zod).includes('1 trigger') && textOf(zod).includes('1 alias')
-      && textOf(zod).includes('1 timer') && textOf(zod).includes('1 route'),
+      && textOf(zod).includes('1 timer') && textOf(zod).includes('1 path'),
       textOf(zod));
 check('and says how many are on when they are not all on',
       textOf(zod).includes('3 of 4 on'), textOf(zod));
 check('a singular is a singular, not a stripped plural',
-      !textOf(zod).includes('1 rout ') && textOf(zod).includes('1 route'),
+      !textOf(zod).includes('1 pat ') && textOf(zod).includes('1 path'),
       textOf(zod));
 
 // Open it: contents by kind, and what is nested shown as a folder again.
 zod.onclick();
 check('the title becomes the folder', p.els['fold-title'].textContent === 'zodiacs');
 check('its contents are grouped by kind, routes among them',
-      same(heads(), ['Triggers (1)', 'Aliases (1)', 'Routes (1)', 'In here']),
+      same(heads(), ['Triggers (1)', 'Aliases (1)', 'Paths (1)', 'In here']),
       heads());
 check('only what is directly in it is listed as items', items().length === 3,
       items().length);
