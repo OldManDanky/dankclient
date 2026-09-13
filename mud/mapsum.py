@@ -76,9 +76,12 @@ def summarize(store) -> dict:
 def lines(got: dict) -> list[str]:
     """A summary as the output shows it."""
     c = got["counts"]
+    # `named` counts the landmark table, which only 3kdb's speedruns file
+    # fills.  It said "of your own names" until 0.2.19, and a player whose map
+    # matched 3kdb's exactly read 405 of them as something he had added.
     out = [f"map digest {got['digest']}",
            f"  {c['rooms']} rooms, {c['exits']} exits, {c['areas']} areas; "
-           f"{c['walked']} exits walked, {c['named']} of your own names"
+           f"{c['walked']} exits walked, {c['named']} 3kdb speedrun destinations"
            + (", locked" if got.get("locked") else "")]
     for key, mark in sorted(got.get("marks", {}).items()):
         sha, _, version = mark.partition("/")

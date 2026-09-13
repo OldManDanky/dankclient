@@ -215,10 +215,11 @@ def test_a_way_out_that_does_not_work_is_remembered_and_routed_around():
     assert m.route(chaos) == ["enter portal", "chaos"]   # doors do reopen
 
 
-def test_travelling_tries_another_way_when_a_step_goes_nowhere():
-    """Not just stopping: mark the way out that failed, work the route out
+def test_travelling_tries_another_way_when_a_step_is_refused():
+    """Not just stopping: mark the way out 3K refused, work the route out
     again from where we actually are, and try that.  Which both gets there
-    and leaves the map better than it was found."""
+    and leaves the map better than it was found.  The other way goes
+    unanswered, and silence marks nothing -- see test_failed_exits."""
     from mud.store import Store
     from mud.mapper import Mapper
     import mud.patrol as patrol
@@ -236,13 +237,20 @@ def test_travelling_tries_another_way_when_a_step_goes_nowhere():
         store.link(here, "shortcut", there)      # and neither works today
         m.here = here
 
+        def send(line):
+            s.sent.append(line)
+            if line == "n":
+                asyncio.get_running_loop().call_later(
+                    0.01, s._consume, b"You cannot go north.\r\n>\r\n")
+        s.queue._send = send
+
         async def scenario():
             walk = asyncio.ensure_future(api["travel"](there, tries=2))
             assert await asyncio.wait_for(walk, 4) is False
-            # Both ways were tried, and each was looked at before being
-            # written off.
-            assert set(s.sent) == {"n", "shortcut", "l"}
-            assert all(r["failed"] for r in store.exits_from(here))
+            assert "shortcut" in s.sent, "the other way was tried"
+            failed = {r["command"]: r["failed"] for r in store.exits_from(here)}
+            assert failed["n"], "3K said no"
+            assert not failed["shortcut"], "3K said nothing"
 
         run(scenario())
     finally:
@@ -375,8 +383,8 @@ def test_a_stray_look_still_ages_out_among_stacked_steps():
 
 def test_a_stack_that_does_not_arrive_walks_the_rest():
     """Nothing sent can be taken back.  If the stack does not get there, the
-    client walks from wherever the map says it is -- which is what finds and
-    marks the way out that did not work."""
+    client walks from wherever the map says it is.  3K never answers here,
+    and silence is not a refusal, so the way out is left unmarked."""
     import mud.patrol as patrol
 
     was = (patrol.MOVE_TIMEOUT, patrol.LOOK_TIMEOUT)
@@ -394,7 +402,7 @@ def test_a_stack_that_does_not_arrive_walks_the_rest():
             assert s.sent[1] == "n", "then the stack"
             assert s.sent[2] == "l", "then a look, in case it had got there"
             assert s.sent[3:] == ["n", "l"], "then a step, looked at"
-            assert store.exits_from(a)[0]["failed"], "and the bad way marked"
+            assert not store.exits_from(a)[0]["failed"], "silence marks nothing"
 
         run(scenario())
     finally:

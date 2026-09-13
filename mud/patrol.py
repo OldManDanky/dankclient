@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from . import events
-from .outbound import HIGH, NORMAL
+from .outbound import HIGH, NORMAL, NOW
 from .rules import MOST_WAIT
 
 #: Below this, stop.  A percentage, because max hp changes with the character.
@@ -87,6 +87,15 @@ FIGHT_POLL = 5.0
 #: the mapper relocates rather than crediting the step.
 LOOK = "l"
 LOOK_TIMEOUT = 2.0
+
+#: 3K's own word that a way out is not there, the one refusal it is
+#: consistent about: "You cannot go west."  Searched for, not matched, since
+#: after a prompt with no line break it arrives on the prompt's line.
+REFUSED = re.compile(r"You cannot go (\w+)\b")
+#: What 3K calls a direction when it refuses one typed short.
+LONG = {"n": "north", "s": "south", "e": "east", "w": "west",
+        "ne": "northeast", "nw": "northwest", "se": "southeast",
+        "sw": "southwest", "u": "up", "d": "down"}
 
 
 def wanted(mob, targets: Iterable[str]) -> bool:
@@ -247,40 +256,97 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         to embrace the void again.  So when nothing arrives, look -- which is
         what a person does, and what settles it either way.
         """
+        room, _refused = await _step(direction, timeout)
+        return room
+
+    async def _step(direction: str, timeout: float = MOVE_TIMEOUT):
+        """`walk`, and whether 3K refused it: (room or None, refused).
+
+        Only a refusal is evidence that a way out is not there.  Silence is
+        not -- lag, or a look waiting its turn, produces it on a way out that
+        works -- and a way out marked broken on silence is routed around and
+        so never walked again to clear it.
+        """
         check()
         parts = [p.strip() for p in direction.split(";") if p.strip()]
-        sent = []
-        for part in parts:
-            # "wait 4" holds the step up rather than going out.  3kdb writes
-            # it as `#delay 4 {pull brick;e}`: the brick needs a moment
-            # before the door it opens can be walked through.
-            held = WAIT_STEP.fullmatch(part)
-            if held:
-                await asyncio.sleep(min(float(held.group(1)), MOST_WAIT))
-                continue
+        sent: list[str] = []
+        said_no = asyncio.Event()
+        waiting: list[asyncio.Future] = []
+
+        def heard(_raw, plain) -> None:
+            # The move is the last command of the step; a refusal naming any
+            # other direction is some other command's.
+            hit = REFUSED.search(plain or "")
+            if hit and sent:
+                move = sent[-1].lower()
+                if hit.group(1).lower() in (move, LONG.get(move)):
+                    said_no.set()
+                    mapper = getattr(session, "mapper", None)
+                    if mapper is not None:
+                        mapper.refused(sent[-1])
+                    for fut in waiting:
+                        if not fut.done():
+                            fut.set_result(None)
+
+        async def arrival(wait: float):
+            """The next room, or None on a refusal or when time runs out."""
+            if said_no.is_set():
+                return None
+            fut = asyncio.get_running_loop().create_future()
+
+            def arrived(room) -> None:
+                if not fut.done():
+                    fut.set_result(room)
+
+            bus.on(events.ROOM, arrived)
+            waiting.append(fut)
+            try:
+                return await asyncio.wait_for(fut, wait)
+            except asyncio.TimeoutError:
+                return None
+            finally:
+                bus.off(events.ROOM, arrived)
+                waiting.remove(fut)
+
+        bus.on(events.LINE, heard)
+        try:
+            for part in parts:
+                # "wait 4" holds the step up rather than going out.  3kdb
+                # writes it as `#delay 4 {pull brick;e}`: the brick needs a
+                # moment before the door it opens can be walked through.
+                held = WAIT_STEP.fullmatch(part)
+                if held:
+                    await asyncio.sleep(min(float(held.group(1)), MOST_WAIT))
+                    continue
+                await gate()
+                sent.append(part)
+                # Directions do not count against APM, so they go straight
+                # out; the queue still meters anything that is not one.
+                if session.apm.is_directional(part, world.room.exits):
+                    session.queue.now(part)
+                else:
+                    session.queue.put(part, HIGH)
+            if not sent:
+                return None, False        # nothing but a wait: nowhere to arrive
+            room = await arrival(timeout)
+            if said_no.is_set():
+                return None, True
+            if room is not None:
+                return room, False
+            # Nothing came back.  Ask -- and tell the mapper the step is still
+            # outstanding, because by the time a look answers, the command
+            # that would explain where we are has aged out of its window.
+            mapper = getattr(session, "mapper", None)
+            if mapper is not None:
+                mapper.expect(sent[-1])
             await gate()
-            # Directions do not count against APM, so they go straight out;
-            # the queue still meters anything that is not one.
-            if session.apm.is_directional(part, world.room.exits):
-                session.queue.now(part)
-            else:
-                session.queue.put(part, HIGH)
-            sent.append(part)
-        if not sent:
-            return None                   # nothing but a wait: nowhere to arrive
-        parts = sent
-        room = await bus.wait(events.ROOM, timeout)
-        if room is not None:
-            return room
-        # Nothing came back.  Ask -- and tell the mapper the step is still
-        # outstanding, because by the time a look answers, the command that
-        # would explain where we are has aged out of its window.
-        mapper = getattr(session, "mapper", None)
-        if mapper is not None and parts:
-            mapper.expect(parts[-1])
-        await gate()
-        session.queue.put(LOOK, HIGH)
-        return await bus.wait(events.ROOM, LOOK_TIMEOUT)
+            # At once, not queued: the queue drains on the game's two-second
+            # beat, and the look is only waited on for two seconds.
+            session.queue.put(LOOK, HIGH, NOW)
+            room = await arrival(LOOK_TIMEOUT)
+            return (None, True) if said_no.is_set() else (room, False)
+        finally:
+            bus.off(events.LINE, heard)
 
     async def attack(target, timeout: float | None = None):
         """Attack, and wait until the fight is over.
@@ -409,7 +475,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
             parts = [p.strip() for p in steps[-1].split(";") if p.strip()]
             mapper.expect(parts[-1] if parts else steps[-1])
             await gate()
-            session.queue.put(LOOK, HIGH)
+            session.queue.put(LOOK, HIGH, NOW)
             await bus.wait(events.ROOM, LOOK_TIMEOUT)
         return mapper.here == dest
 
@@ -429,7 +495,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
             return True                 # a room has just arrived: we know
         check()
         await gate()
-        session.queue.put(LOOK, HIGH)
+        session.queue.put(LOOK, HIGH, NOW)
         await bus.wait(events.ROOM, LOOK_TIMEOUT)
         return mapper.here is not None
 
@@ -447,6 +513,7 @@ def make_api(session, bots: Bots, owner: str) -> dict:
         mapper = getattr(session, "mapper", None)
         if mapper is None:
             return False
+        mapper.store.fade_failures()
         # The whole way at once first; walking it room by room is for when
         # that did not get there, and is what finds and marks a bad way out.
         if mapper.here != dest and mapper.route(dest):
@@ -463,12 +530,23 @@ def make_api(session, bots: Bots, owner: str) -> dict:
                 return mapper.here == dest
             for step in route:
                 start = mapper.here
-                if await walk(step):
-                    if start is not None:
-                        mapper.store.mark_worked(start, step)
+                room, refused = await _step(step)
+                if start is None:
+                    if room is None and not refused:
+                        break
                     continue
-                if start is not None:
+                meant = mapper.store.destination(start, step)
+                if refused or (room is not None and mapper.here == start
+                               and meant != start):
+                    # 3K said no, or the look shows we never left: evidence.
                     mapper.store.mark_failed(start, step)
+                    break
+                if room is not None and mapper.here == meant:
+                    mapper.store.mark_worked(start, step)
+                    continue
+                # Silence, or somewhere the map did not expect.  Neither says
+                # the way out is broken, so nothing is marked; work the route
+                # out again from wherever we are.
                 break
             else:
                 return mapper.here == dest

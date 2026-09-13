@@ -103,6 +103,17 @@ def test_lines_say_what_it_was_built_from():
     assert "abc1234567" in said and "importer 2" in said
 
 
+def test_lines_call_the_landmarks_what_they_are():
+    """Only 3kdb's speedruns file fills the landmark table.  "405 of your own
+    names" made a map that matched 3kdb's exactly look like one he had added
+    to."""
+    store = a_map()
+    store.db.execute("INSERT INTO landmark (name, room_id) VALUES ('cot', 1)")
+    said = "\n".join(mapsum.lines(mapsum.summarize(store)))
+    assert "1 3kdb speedrun destinations" in said
+    assert "your own" not in said
+
+
 def test_the_commands():
     where = Path(tempfile.mkdtemp())
     session = Session("127.0.0.1", 1, sec_code=1, store=a_map())

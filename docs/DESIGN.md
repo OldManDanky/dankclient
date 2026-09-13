@@ -663,6 +663,19 @@ by room from wherever the map says it is.  A step that produces nothing is
 block at all -- and a way out that really does not work is remembered, so
 routing stops choosing it.
 
+**Only evidence marks a way out broken**: 3K's "You cannot go west.", or a
+look that answers and shows the room the step started in.  Silence is not
+evidence.  Until 0.2.19 a step and the look after it both going unanswered
+was enough, and a tester's bots walked him through the hyperfunk zone for
+it: Eastwick Road's `e` and `w` had been marked that way, and a way out the
+router avoids is never walked again to clear it -- twelve steps to Angels
+became thirty-two, in by the fog at Crazy Road and out by `defunkt`.  Lag
+does that to a good exit, and so did the look itself: it waited its turn in
+the queue, which drains on the game's two-second beat, while it was only
+waited on for two seconds.  The look goes out at once now; a mark wears off
+by one a day; and every mark in a map from before 0.2.19 is forgotten once,
+because silence was the only way one was ever made.
+
 And because what was sent cannot be taken back, a long stack does not all go
 at once.  A route worked out from the wrong room is a walk into the wrong
 part of the world, and the whole path at once is forty moves of it before

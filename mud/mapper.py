@@ -111,6 +111,17 @@ class Mapper:
         entry = (time.time() if at is None else at, cmd)
         self._pending.append(Stacked(entry) if self.stacking else entry)
 
+    def refused(self, line: str) -> None:
+        """3K said no to a command: it will bring no room, so it must not be
+        handed the next one.  Left in, "You cannot go west." followed by `n`
+        gave the north room to `w`, whose room it is not, and the map was lost
+        one step after the walk had found its way round."""
+        cmd = line.strip().lower()
+        for i, (_at, pending) in enumerate(self._pending):
+            if pending == cmd:
+                del self._pending[i]
+                return
+
     def arrived(self, exits: Iterable[str], scenery: Iterable[str],
                 name: str | None = None, at: float | None = None) -> int | None:
         """A room block settled.  Returns the room we believe we are in."""

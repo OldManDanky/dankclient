@@ -197,6 +197,35 @@ class Store:
         if self.setting("forgot:personal") != "1":
             self.forget_personal()
             self.set_setting("forgot:personal", "1")
+        # Until 0.2.19 a way out was marked failed when a step and the look
+        # after it both went unanswered -- which lag, or a look waiting its
+        # turn in the queue, does to a perfectly good exit.  That was the only
+        # way a mark was ever made, so none of them can be trusted.
+        if self.setting("forgot:silent-failures") != "1":
+            self.db.execute("UPDATE edge SET failed = 0 WHERE failed > 0")
+            self.set_setting("forgot:silent-failures", "1")
+        self.fade_failures()
+
+    #: How long it takes a failed mark to wear off by one.  A door that was
+    #: locked opens again, and a mark nothing ever clears reroutes somebody
+    #: for good: the router avoids the way out, so it is never walked again.
+    FADE_AFTER = 86400.0
+
+    def fade_failures(self, now: float | None = None) -> int:
+        """Take a day's worth off every failed mark.  Returns how many faded."""
+        now = time.time() if now is None else now
+        last = float(self.setting("failed:faded", "0") or 0)
+        if not last or now < last:
+            self.set_setting("failed:faded", repr(now))
+            return 0
+        days = int((now - last) // self.FADE_AFTER)
+        if days <= 0:
+            return 0
+        faded = self.db.execute(
+            "UPDATE edge SET failed = max(failed - ?, 0) WHERE failed > 0",
+            (days,)).rowcount
+        self.set_setting("failed:faded", repr(last + days * self.FADE_AFTER))
+        return faded
 
     def forget_personal(self) -> int:
         """Drop every edge that only worked for whoever walked it.  Returns how many.
