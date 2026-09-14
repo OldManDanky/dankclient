@@ -542,6 +542,8 @@ window.renderDeadman = function (d) {
   const box = $('deadman-min');
   if (document.activeElement !== box) box.value = String(Math.round(d.minutes));
   $('deadman-note').hidden = !d.tripped;
+  // And in the Stepper heading, which is all there is of it when rolled up.
+  if (window.setDeadmanPaused) window.setDeadmanPaused(!!d.tripped);
   if (d.tripped) {
     const m = Math.round(d.minutes);
     $('deadman-why').textContent =
@@ -729,21 +731,22 @@ function render(s) {
 
   // Driven by N, the round counter, so the bar steps once per round rather
   // than jittering on both composites the MUD sends each round.
+  // The enemy is the last gauge in the vitals strip, and only while there is
+  // one.  Its name is the label; what 3K marks it with, and the round, are on
+  // hover, where they are looked for rather than read every second.
   const raw = s.enemy_label || p.enemy || '';
   const fighting = raw !== '';
-  $('combat').hidden = !fighting;
+  $('v-enemy').hidden = !fighting;
   if (fighting) {
     const marks = [...raw.matchAll(/[{[]([^}\]]*)[}\]]/g)].map((m) => m[1]);
-    $('enemy-name').textContent = raw.replace(/\s*[{[][^}\]]*[}\]]/g, '').trim();
-    $('enemy-marks').textContent = marks.join(' · ');
+    const name = raw.replace(/\s*[{[][^}\]]*[}\]]/g, '').trim();
+    $('enemy-name').textContent = name || 'ENEMY';
     bar(p.enemy_pct, 'en-n', 'en-b', p.enemy_pct === null ? null : p.enemy_pct + '%');
-    if (p.round !== null && p.round !== lastRound) {
-      lastRound = p.round;
-      $('round').textContent = p.round ? `round ${p.round}` : '';
-    }
+    if (p.round !== null && p.round !== lastRound) lastRound = p.round;
+    $('v-enemy').title = [name, marks.join(' · '), lastRound ? `round ${lastRound}` : '']
+      .filter(Boolean).join(' — ');
   } else {
     lastRound = null;
-    $('round').textContent = '';
   }
 
   $('room-name').textContent = s.room.short || '';

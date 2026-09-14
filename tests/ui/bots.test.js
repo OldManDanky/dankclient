@@ -5,7 +5,8 @@ const { page, load, check, same, finish } = require('./stage');
 
 const sent = [];
 const IDS = ['bot-now', 'bot-name', 'bot-step', 'bot-bar', 'bot-note', 'bot-start',
-  'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect', 'bot-loop', 'bot-cot'];
+  'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect', 'bot-loop', 'bot-cot',
+  'bot-sum'];
 const saved = {};
 const p = page(Object.fromEntries(IDS.map((i) => [i, i === 'bot-find' ? 'input' : 'div'])), saved);
 global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
@@ -57,6 +58,16 @@ rows()[0].children[2].onclick();
 check("a result's own Start starts that one", same(last(), { t: 'routes', op: 'start', id: 'a1' }));
 
 renderBotPanel([route({ running: true, steps_taken: 1 }), ROUTES[1]]);
+check('rolled up, the heading still says which path and which step',
+  el('bot-sum').textContent === 'Section Z · step 1 / 3', el('bot-sum').textContent);
+setDeadmanPaused(true);
+check('and says when the deadman has it held, in the warning colour',
+  el('bot-sum').textContent === 'Section Z · step 1 / 3 · paused by the deadman'
+  && el('bot-sum').classList.contains('held'), el('bot-sum').textContent);
+setDeadmanPaused(false);
+check('until you type again',
+  el('bot-sum').textContent === 'Section Z · step 1 / 3' && !el('bot-sum').classList.contains('held'),
+  el('bot-sum').textContent);
 check('walking: shown, with its step', el('bot-name').textContent === 'Section Z'
   && el('bot-step').textContent === '1 / 3' && el('bot-now').className === 'live');
 check('walking: Pause and Stop, not Start',

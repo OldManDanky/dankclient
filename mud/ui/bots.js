@@ -92,6 +92,27 @@
 
   // --- what it is doing -------------------------------------------------------
 
+  //: Has the deadman stopped everything for want of somebody typing?
+  let deadman = false;
+
+  /* The heading, for when the panel is rolled up: which path, where in it,
+     and whether it is actually moving -- a stepper held by the deadman looks
+     exactly like one walking, from a heading, unless the heading says so. */
+  function summary(text) {
+    const sum = $('bot-sum');
+    if (!sum) return;
+    const held = deadman && !!(walking() || walkingTo());
+    sum.textContent = held ? [text, 'paused by the deadman'].filter(Boolean).join(' · ') : text;
+    sum.classList.toggle('held', held);
+  }
+
+  //: app.js tells us when the deadman trips and lets go.
+  window.setDeadmanPaused = function (on) {
+    if (deadman === !!on) return;
+    deadman = !!on;
+    drawNow();
+  };
+
   function drawNow() {
     // A /go or a click on the map: where to, and Stop.  Nothing to pause --
     // it is a stack, already sent.
@@ -99,6 +120,7 @@
     if (w && !walking()) {
       $('bot-name').textContent = w.goal ? `Walking to ${w.goal}` : 'Walking';
       $('bot-step').textContent = w.steps ? `${w.steps} step${w.steps === 1 ? '' : 's'}` : '';
+      summary([$('bot-name').textContent, $('bot-step').textContent].filter(Boolean).join(' · '));
       $('bot-bar').style.width = '100%';
       $('bot-now').className = 'live';
       $('bot-note').textContent = w.note || '';
@@ -122,6 +144,8 @@
     $('bot-name').textContent = r ? r.name : 'No stepper chosen';
     $('bot-step').textContent = !r ? ''
       : r.running || r.paused ? `${at} / ${all}` : `${all} step${all === 1 ? '' : 's'}`;
+    summary(!r ? '' : [r.name, r.paused ? `paused at ${at} / ${all}`
+      : r.running ? `step ${at} / ${all}` : ''].filter(Boolean).join(' · '));
     // A repeating route walks past its own length, so the bar shows where it
     // is in the current lap rather than filling up and staying full.
     $('bot-bar').style.width = (all ? Math.min(100, (at / all) * 100) : 0) + '%';

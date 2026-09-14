@@ -1,7 +1,7 @@
 // Options -> Layout -> Vitals: which of them show, and where the strip sits.
 'use strict';
 
-const { page, load, check, finish } = require('./stage');
+const { El, page, load, check, finish } = require('./stage');
 
 const saved = {};
 let p;
@@ -11,6 +11,13 @@ function open(renamed) {
     'v-gp2': 'div', guild: 'div', 'lbl-hp': 'b', 'lbl-sp': 'b', 'lbl-gp1': 'b', 'lbl-gp2': 'b',
     'vital-toggles': 'div' }, saved);
   p.els['lbl-gp1'].textContent = renamed || 'GP1';
+  for (const id of ['botpanel', 'roompanel']) {
+    const head = new El('h2');
+    const sign = new El('span');
+    sign.className = 'cm-toggle';
+    head.append(sign);
+    p.els[id].append(head);
+  }
   load('panels.js');
 }
 const box = (name) => p.els['vital-toggles'].querySelector(`input[name=${name}]`);
@@ -44,5 +51,18 @@ check('a reload keeps all of it',
 flip('vitals-strip', true);
 flip('vital-v-gp2', true);
 check('and ticking them again brings them back', !off('vitals') && !off('v-gp2'));
+
+// Rolling the sidebar's panels up to their headings, as the map does.
+const heading = (id) => p.els[id].querySelector('h2');
+const rolled = (id) => p.els[id].classList.contains('collapsed');
+check('open until rolled up', !rolled('botpanel') && !rolled('roompanel'));
+heading('botpanel').onclick();
+check('a click on the Stepper heading rolls it up, and the sign says so',
+  rolled('botpanel') && !rolled('roompanel') && heading('botpanel').querySelector('.cm-toggle').textContent === '+'
+  && saved['cm:botpanel:collapsed'] === '1');
+open();
+check('a reload keeps it rolled up', rolled('botpanel'));
+heading('botpanel').onclick();
+check('and another click opens it again', !rolled('botpanel') && saved['cm:botpanel:collapsed'] === '');
 
 finish();

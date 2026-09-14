@@ -8,4 +8,4 @@
 - **Speedwalk**, also under Keyboard: `.3n2e` walks n, n, n, e, e, as zMUD does; `h` `j` `k` `l` are nw, ne, sw, se.
 - [Options → Fonts](options:fonts) sets the output's font, size and spacing. **Ctrl +** and **Ctrl -** make everything else bigger or smaller.
 - [Options → Colours](options:colours) chooses the terminal's colour scheme -- Dank, Linux Tango, Solarized, Dracula, Nord and more, or your own from a file (Alacritty, iTerm2, Ghostty, Windows Terminal or Xresources, as terminalcolors.com offers them) -- and whether the rest of the window is **Dark**, **Light**, or **matches the terminal**.
-- [Options → Layout](options:panels) shows and hides the panels, and the vitals: any of HP, SP, GP1, GP2 and the guild line, or the whole strip -- which can also sit under the command box instead of above it.
+- [Options → Layout](options:panels) shows and hides the panels, and the vitals: any of HP, SP, GP1, GP2, the enemy (shown last, only while you fight) and the guild line, or the whole strip -- which can also sit under the command box instead of above it.

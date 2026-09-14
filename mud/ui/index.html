@@ -226,6 +226,23 @@
   h2{margin:0 0 8px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
      color:var(--dim);font-weight:600;display:flex;justify-content:space-between}
   h2 span{color:var(--accent);letter-spacing:0}
+  /* The sidebar's panels roll up to their heading, as the map does, and keep
+     in it what is worth seeing rolled up. */
+  #session>h2,#botpanel>h2,#roompanel>h2{cursor:pointer;display:flex;align-items:baseline;gap:6px}
+  h2 .cm-toggle{margin-left:auto;color:var(--dim)}
+  #session>h2 #status{margin-left:auto}
+  #session>h2 .cm-toggle{margin-left:0}
+  #side section.collapsed>*:not(h2){display:none!important}
+  #side section.collapsed>h2{margin-bottom:0}
+  .fold-sum{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+            text-transform:none;font-weight:400;color:var(--ink)}
+  #botpanel.collapsed .fold-sum{display:inline}
+  .fold-sum.held{color:var(--warn)}
+  .dock-sum{display:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+            white-space:nowrap;text-transform:none;letter-spacing:0;font-weight:400;
+            color:var(--ink)}
+  .dock.collapsed .dock-sum{display:block}
+  .dock.collapsed>header b{flex:none}
   .bar{margin-bottom:7px}
   .bar:last-child{margin-bottom:0}
   .bar-top{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
@@ -235,8 +252,9 @@
   .fill{height:100%;width:0;border-radius:3px;transition:width .18s ease}
   .hp .fill{background:var(--hp)} .sp .fill{background:var(--sp)}
   .gp .fill{background:var(--gp)} .en .fill{background:var(--enemy)}
-  #enemy-name{font-size:13px;margin-bottom:6px;color:var(--ink)}
-  #enemy-marks{color:var(--dim);font-size:11px}
+  /* A creature's name can be long: it gives way before the numbers do. */
+  .v.en b{flex:0 1 auto;min-width:0;max-width:14em;overflow:hidden;
+          text-overflow:ellipsis;color:var(--enemy);letter-spacing:0}
   .none{color:var(--dim);font-style:italic}
   ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
   li{display:flex;align-items:baseline;gap:6px;font-size:12px}
@@ -786,6 +804,11 @@
       <div class="v gp" id="v-gp2"><b id="lbl-gp2">GP2</b>
         <div class="track"><div class="fill" id="g2-b"></div></div>
         <i id="g2-n">&ndash;</i></div>
+      <!-- The enemy, last, and only while there is one: its name is the label,
+           and what 3K marks it with and the round are on hover. -->
+      <div class="v en" id="v-enemy" hidden><b id="enemy-name">ENEMY</b>
+        <div class="track"><div class="fill" id="en-b"></div></div>
+        <i id="en-n">&ndash;</i></div>
       <div id="guild" hidden><div id="gline"></div></div>
     </div>
     <form id="bar" autocomplete="off">
@@ -817,7 +840,7 @@
     <!-- Above the map: who is playing and whether the line is good.  The
          disconnected notice only shows when it is not, and then first. -->
     <section id="session">
-      <h2>Session <span id="status">connecting&hellip;</span></h2>
+      <h2 title="Click to collapse">Session <span id="status">connecting&hellip;</span><span class="cm-toggle">&minus;</span></h2>
       <div id="link" hidden>
         <b>Disconnected</b><span id="link-why"></span>
         <button id="link-again" type="button" hidden>Choose character</button>
@@ -840,7 +863,7 @@
 
     <aside id="mapmon" class="dock">
       <header title="Click to collapse">
-        <b>Map</b><span class="cm-toggle">&minus;</span>
+        <b>Map</b><span class="dock-sum"></span><span class="cm-toggle">&minus;</span>
       </header>
       <div class="map-body"><canvas></canvas></div>
       <div class="map-where"></div>
@@ -848,7 +871,7 @@
 
     <!-- Under the map: what is walking you, and the three things you do to it. -->
     <section id="botpanel">
-      <h2>Stepper</h2>
+      <h2 title="Click to collapse">Stepper <span class="fold-sum" id="bot-sum"></span><span class="cm-toggle">&minus;</span></h2>
       <div id="deadman-note" hidden>
         <b>Paused</b> &mdash; <span id="deadman-why"></span>
       </div>
@@ -883,18 +906,10 @@
       <div id="bot-found" hidden></div>
     </section>
 
-    <section id="combat" hidden>
-      <h2>Combat <span id="round"></span></h2>
-      <div id="enemy-name"></div>
-      <div class="bar en"><div class="bar-top"><b>ENEMY</b><i id="en-n">&ndash;</i></div>
-        <div class="track"><div class="fill" id="en-b"></div></div></div>
-      <div id="enemy-marks"></div>
-    </section>
-
     <!-- Off unless it is asked for, and last when it is: it is the panel you
          consult rather than the one you watch. -->
     <section id="roompanel" hidden>
-      <h2>Room <span id="room-name"></span></h2>
+      <h2 title="Click to collapse">Room <span id="room-name"></span><span class="cm-toggle">&minus;</span></h2>
       <div id="exits"></div>
       <ul id="contents"></ul>
     </section>

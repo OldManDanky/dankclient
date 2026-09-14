@@ -408,7 +408,30 @@ def test_the_room_panel_is_off_until_it_is_asked_for():
     assert '<section id="roompanel" hidden>' in page
     assert "roompanel" in js and "on: false" in js
     # and last, so it is the panel you consult rather than the one you watch
-    assert page.index('id="roompanel"') > page.index('id="combat"')
+    assert page.index('id="roompanel"') > page.index('id="botpanel"')
+
+
+def test_the_enemy_is_the_last_gauge_in_the_vitals_strip():
+    """Beside HP rather than across the room in the sidebar: after GP2, before
+    the guild line, and only while there is something to fight."""
+    page, js = html(), scripts()
+    strip = page[page.index('<div id="vitals">'):page.index('<form id="bar"')]
+    order = [strip.index(f'id="{i}"') for i in ("v-hp", "v-sp", "v-gp1", "v-gp2",
+                                                  "v-enemy", "guild")]
+    assert order == sorted(order), "HP, SP, GP1, GP2, enemy, guild line"
+    assert '<div class="v en" id="v-enemy" hidden>' in strip
+    assert 'id="combat"' not in page, "the sidebar panel is gone"
+    assert "$('v-enemy').hidden = !fighting" in js["app.js"]
+    assert "id: 'v-enemy'" in js["panels.js"], "and Layout can hide it"
+
+
+def test_a_rolled_up_stepper_says_when_the_deadman_holds_it():
+    """Rolled up, the heading is all there is of the panel, and a held stepper
+    reads as a walking one unless it says otherwise."""
+    js = scripts()
+    dead = js["app.js"][js["app.js"].index("window.renderDeadman = function"):]
+    assert "window.setDeadmanPaused(!!d.tripped)" in dead[:dead.index("\n};")]
+    assert "'paused by the deadman'" in js["bots.js"]
 
 
 def test_the_sidebar_reads_top_to_bottom():

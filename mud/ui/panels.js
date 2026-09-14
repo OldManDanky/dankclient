@@ -128,6 +128,7 @@
     { id: 'v-sp', label: 'lbl-sp', name: 'SP' },
     { id: 'v-gp1', label: 'lbl-gp1', name: 'GP1' },
     { id: 'v-gp2', label: 'lbl-gp2', name: 'GP2' },
+    { id: 'v-enemy', label: '', name: 'The enemy, while you fight' },
     { id: 'guild', label: '', name: 'The guild line' },
   ];
   const vitalKey = (id) => `vital:${id}:shown`;
@@ -198,6 +199,31 @@
     into.append(row);
   }
 
+  // --- rolling the sidebar's panels up ---------------------------------------
+
+  /* Session, Stepper and Room roll up to their heading, as the map does: a
+     click on the heading, remembered in this browser.  What is worth seeing
+     rolled up stays in the heading -- whether you are connected, the path and
+     its step, the room. */
+  const FOLDS = ['session', 'botpanel', 'roompanel'];
+
+  function foldable(id) {
+    const section = $(id);
+    const head = section && section.querySelector('h2');
+    if (!head) return;
+    const saved = `cm:${id}:collapsed`;
+    const roll = (up) => {
+      section.classList.toggle('collapsed', up);
+      const sign = head.querySelector('.cm-toggle');
+      if (sign) sign.textContent = up ? '+' : '−';
+      head.title = up ? 'Click to open' : 'Click to collapse';
+      if (store) store.set(saved, up ? '1' : '');
+    };
+    roll(!!store && store.get(saved, '') === '1');
+    head.onclick = () => roll(!section.classList.contains('collapsed'));
+  }
+
+  FOLDS.forEach(foldable);
   for (const p of PANELS) apply(p);
   applyVitals();
   render();

@@ -174,6 +174,7 @@
   }
 
   function paint() {
+    sayWhere();
     if (collapsed()) return;
     let box = canvas.parentElement.getBoundingClientRect();
     if (box.width < 8 || box.height < 8) {
@@ -347,14 +348,25 @@
       hits.push({ x, y, r: dot, id, name: room.name, exits: room.exits,
                  unwalked: room.unwalked, area: room.area });
     }
+  }
 
-
-    const room = state.rooms[state.centre];
-    label.textContent = (state.name || 'unnamed room') +
-      (room ? `  ·  ${Object.keys(room.exits).length} known exits` : '');
+  /* The room line under the map -- and in the header while the map is rolled
+     up, which is exactly when it needs keeping up to date, since the header is
+     then all there is.  So paint() says it before a rolled-up map stops. */
+  function sayWhere() {
+    if (!state || state.centre == null) return;       // null, or an older server's none
+    const room = state.rooms ? state.rooms[state.centre] : null;
+    let text = (state.name || 'unnamed room') +
+      (room ? `  \u00b7  ${Object.keys(room.exits).length} known exits` : '');
     const area = (state.region || []).join(' \u203a ');
-    if (area) label.textContent = area + '  \u00b7  ' + label.textContent;
+    if (area) text = area + '  \u00b7  ' + text;
+    label.textContent = text;
     label.title = area;
+    const sum = root.querySelector('.dock-sum');
+    if (sum) {
+      sum.textContent = text;
+      sum.title = text;
+    }
   }
 
   // --- interaction ----------------------------------------------------------
