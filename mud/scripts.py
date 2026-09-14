@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import events, patrol
-from .outbound import HIGH, LOW, NORMAL, NOW, PACED, PANIC, ROUND
+from .outbound import HIGH, LOW, NORMAL, NOW, PACED, PANIC, ROUND, answering
 from .triggers import Trigger, TriggerSet
 
 
@@ -269,8 +269,11 @@ class ScriptHost:
     # --- dispatch -----------------------------------------------------------
 
     def _on_line(self, raw: str, plain: str) -> None:
-        for trig, captured in self.triggers.fire(plain):
-            self._call(trig.fn, captured, raw=raw, plain=plain)
+        # Rules' triggers fire here too.  What they send answers 3K, which
+        # the deadman lets through -- unless it is a move.
+        with answering():
+            for trig, captured in self.triggers.fire(plain):
+                self._call(trig.fn, captured, raw=raw, plain=plain)
 
     def _on_state(self, name: str, new: Any, old: Any) -> None:
         player = self.session.world.player
@@ -283,7 +286,8 @@ class ScriptHost:
                 fired = now and (not watch.last or not watch.edge)
                 watch.last = now
                 if fired:
-                    self._call(watch.fn, None)
+                    with answering():
+                        self._call(watch.fn, None)
 
     def _on_tick(self) -> None:
         now = time.monotonic()
@@ -335,7 +339,9 @@ class ScriptHost:
             def deco(fn):
                 def wrapper(*args):
                     payload = args[0] if len(args) == 1 else (args or None)
-                    self._call(fn, payload)
+                    # An answer to 3K, except the beat: on("tick") is a timer.
+                    with answering(kind != events.TICK):
+                        self._call(fn, payload)
                 self.bus.on(kind, wrapper)
                 registry.handlers.append((kind, wrapper))
                 return fn

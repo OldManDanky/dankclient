@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .outbound import NOW, PACED, PACES, ROUND
+from .outbound import NOW, PACED, PACES, ROUND, answering
 from .paths import set_aside, write_atomically
 from .triggers import Trigger
 
@@ -514,7 +514,8 @@ class RuleStore:
                                cond.get("op", "contains"),
                                str(cond.get("value", ""))):
                     return
-            run(fields)
+            with answering():             # the deadman lets answers through
+                run(fields)
 
         return handle
 
@@ -531,7 +532,8 @@ class RuleStore:
             now = left is not None and compare(left, rule.op, str(rule.value))
             entry[1] = now
             if now and (not was or not rule.edge):
-                self._runner(rule)(self._player_fields(player))
+                with answering():         # the deadman lets answers through
+                    self._runner(rule)(self._player_fields(player))
 
     @staticmethod
     def _read(player, field_name: str):
@@ -554,8 +556,9 @@ class RuleStore:
 
         A wait hands the rest to the event loop and returns, so nothing else
         is held up while it counts: the line that fired it is shown, other
-        rules fire, and the rest follows when the time is up.  Sends queued
-        then are held by the deadman like any other, and /stop drops them.
+        rules fire, and the rest follows when the time is up.  The rest of a
+        trigger is still an answer to 3K when it comes, so the deadman lets it
+        through unless it is a move; a timer's rest it holds.  /stop drops them.
         """
         session, host = self.host.session, self.host
         for i in range(start, len(rule.actions)):

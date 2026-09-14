@@ -24,6 +24,8 @@ import heapq
 import itertools
 import time
 from collections import deque
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Callable, Iterable
 
 #: lower sorts first
@@ -42,6 +44,25 @@ PACES = (NOW, PACED, ROUND)
 #: clock instead of the keyboard -- and it is what stops a disconnection from
 #: keeping a night of timers and firing them all when the socket comes back.
 STALE = 60.0
+
+#: Is what is being sent an answer to something 3K just said -- a trigger, an
+#: event, a watch -- rather than the client acting of its own accord, as a
+#: timer or a stepper does?  The deadman lets answers through, but never a
+#: move: a corpse trigger after a kill is support, a trigger that walks on
+#: "Obvious exits" is a stepper.  A context variable, so a task started while
+#: answering (a rule's wait, a script's coroutine) is still answering; a
+#: stepper clears it for itself.
+ANSWERING: ContextVar[bool] = ContextVar("answering", default=False)
+
+
+@contextmanager
+def answering(yes: bool = True):
+    """Mark what is sent inside as an answer to 3K (or, with False, not)."""
+    token = ANSWERING.set(yes)
+    try:
+        yield
+    finally:
+        ANSWERING.reset(token)
 
 #: Movement, which 3k.org does not count.  Room exits are added at runtime.
 DIRECTIONS = {
@@ -98,8 +119,8 @@ class SendQueue:
         #: Is there a socket to send down?  Anything put while there is not
         #: waits in the heap for one, rather than raising at the caller.
         self.ready = ready or (lambda: True)
-        #: Has the deadman tripped?  Then nothing automated goes out, and
-        #: nothing is kept for later either.
+        #: Has the deadman tripped?  Then nothing automated goes out but an
+        #: answer that is not a move, and nothing is kept for later either.
         self.held = held or (lambda: False)
         self._clock = clock
         self.apm = apm or APMMeter()
@@ -110,10 +131,10 @@ class SendQueue:
         #: how long a line may wait before it is dropped instead of sent
         self.stale = stale
         self._now = now or time.monotonic
-        #: (priority, seq, queued at, line).  The time sits before the line so
-        #: that reading the line as the last field goes on working; seq already
+        #: (priority, seq, queued at, answering, line).  The line stays last so
+        #: that reading it as the last field goes on working; seq already
         #: makes every entry unique, so nothing is ever compared past it.
-        self._heap: list[tuple[int, int, float, str]] = []
+        self._heap: list[tuple[int, int, float, bool, str]] = []
         self._seq = itertools.count()
         self._task: asyncio.Task | None = None
         self.sent = 0
@@ -141,13 +162,13 @@ class SendQueue:
 
     def auto_now(self, line: str) -> None:
         """Send at once, for a script rather than a person: held like put()."""
-        if self.held():
+        if self._held(line, ANSWERING.get()):
             self.dropped += 1
             return
         self.now(line)
 
     def put(self, line: str, priority: int = NORMAL, pace: str = PACED) -> None:
-        if self.held():
+        if self._held(line, ANSWERING.get()):
             # Nobody has typed for a while: nothing automated goes out, and it
             # is dropped rather than saved -- twenty stale commands going out
             # the moment somebody comes back is the opposite of the point.
@@ -168,14 +189,32 @@ class SendQueue:
             return
         self._hold(priority, line)
 
+    def _held(self, line: str, answer: bool) -> bool:
+        """Does the deadman keep this back?  While it has tripped, everything
+        but an answer to 3K that is not a move."""
+        if not self.held():
+            return False
+        return not answer or self.apm.is_directional(line, self.exits())
+
     def _hold(self, priority: int, line: str) -> None:
-        heapq.heappush(self._heap, (priority, next(self._seq), self._now(), line))
+        heapq.heappush(self._heap, (priority, next(self._seq), self._now(),
+                                    ANSWERING.get(), line))
 
     def flush(self) -> int:
         n = len(self._heap)
         self._heap.clear()
         self.dropped += n
         return n
+
+    def drop_automated(self) -> int:
+        """The deadman has tripped: drop what waits, keeping only answers."""
+        keep = [item for item in self._heap if not self._held(item[-1], item[3])]
+        gone = len(self._heap) - len(keep)
+        if gone:
+            self._heap[:] = keep
+            heapq.heapify(self._heap)
+            self.dropped += gone
+        return gone
 
     # --- draining -----------------------------------------------------------
 
@@ -203,10 +242,20 @@ class SendQueue:
         for _ in range(self.per_tick):
             if not self._heap or self.apm.headroom() <= 0:
                 break
-            if not self.ready() or self.held():
+            if not self.ready():
                 break
-            *_, line = heapq.heappop(self._heap)
-            self.now(line)
+            if self.held():
+                # Only an answer goes while the deadman has tripped.
+                free = [item for item in self._heap
+                        if not self._held(item[-1], item[3])]
+                if not free:
+                    break
+                item = min(free)
+                self._heap.remove(item)
+                heapq.heapify(self._heap)
+            else:
+                item = heapq.heappop(self._heap)
+            self.now(item[-1])
 
     async def run(self) -> None:
         while True:

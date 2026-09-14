@@ -22,6 +22,9 @@
   const MOST = 8;
 
   let routes = [];
+  //: has the server's list arrived yet?  Until it has, a search says so
+  //: rather than "no path matches" -- a slow start is not an empty library
+  let loaded = false;
   //: a /go or map-click walk the server says is going
   let walk = null;
   let chosen = store ? store.get('bot:route', '') : '';
@@ -156,7 +159,7 @@
     const q = $('bot-find').value.trim();
     const hits = q ? found(q) : [];
     const busy = busyWith();
-    const key = JSON.stringify([q, busy && busy.id,
+    const key = JSON.stringify([q, loaded, busy && busy.id,
       hits.slice(0, MOST).map((r) => [r.id, r.name, r.step_count])]);
     if (key === drawn) return;
     drawn = key;
@@ -165,6 +168,13 @@
     box.replaceChildren();
     box.hidden = !q;
     if (!q) return;
+    if (!loaded) {
+      const wait = document.createElement('p');
+      wait.className = 'bf-none bf-loading';
+      wait.textContent = 'Loading paths…';
+      box.append(wait);
+      return;
+    }
     if (!hits.length) {
       const none = document.createElement('p');
       none.className = 'bf-none';
@@ -266,6 +276,7 @@
 
   window.renderBotPanel = function (list, w) {
     routes = list || [];
+    loaded = true;
     walk = w || null;
     draw();
   };

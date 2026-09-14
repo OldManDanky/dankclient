@@ -19,6 +19,15 @@ const route = (over) => ({ id: 'a1', name: 'Section Z', path: 'n e s', targets: 
 const ROUTES = [route(), route({ id: 'b2', name: 'Treehouse', path: 'u, {pick fruit;d}',
   targets: ['rat'], step_count: 2 })];
 
+el('bot-find').value = 'rat';
+el('bot-find').oninput();
+check('before the server has sent the list, a search says it is loading, not that nothing matches',
+  el('bot-found').children.length === 1
+  && el('bot-found').children[0].className === 'bf-none bf-loading'
+  && el('bot-found').children[0].textContent === 'Loading paths…');
+el('bot-find').value = '';
+el('bot-find').oninput();
+
 renderBotPanel(ROUTES);
 check('nothing chosen: nothing to press', el('bot-name').textContent === 'No stepper chosen'
   && el('bot-start').disabled && el('bot-pause').disabled && el('bot-stop').disabled);

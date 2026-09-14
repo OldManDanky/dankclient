@@ -46,7 +46,7 @@ In each room it kills one target at a time. After every kill it glances, and mov
 
 ## Stay at the keyboard
 
-3K expects a person to be playing. **The deadman** keeps a stepper to that: if you type nothing for 15 minutes, steppers pause and nothing automated is sent until you type again. The 15 minutes is fixed: it cannot be changed or turned off.
+3K expects a person to be playing. **The deadman** keeps a stepper to that: if you type nothing for 15 minutes, steppers and timers pause until you type again. Triggers still answer what 3K says, so your corpse trigger still fires after the last kill, but nothing a trigger sends will move you. You can set it shorter under **Options → Paths & steppers**, from 1 to 15 minutes, or 0 to turn it off, but never longer than 15.
 
 - `/stop` stops every stepper, empties the queue, and drops any rule that is waiting.
 - `/steppers` lists what is running.

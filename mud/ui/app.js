@@ -524,17 +524,26 @@ window.renderBrief = function (b) {
     $('brief-map').value = b.mapping;
   }
 };
-/* The deadman: whether the steppers have paused for want of a person.  The
-   time is fixed at fifteen minutes; there is nothing here to set. */
+/* The deadman: how long before steppers pause for want of a person, and
+   whether they have.  1 to 15 minutes (3K's rule is the most), 0 for off.
+   The box is left alone while somebody is typing in it. */
 window.renderDeadman = function (d) {
   if (!d) return;
+  const box = $('deadman-min');
+  if (document.activeElement !== box) box.value = String(Math.round(d.minutes));
   $('deadman-note').hidden = !d.tripped;
   if (d.tripped) {
     const m = Math.round(d.minutes);
     $('deadman-why').textContent =
-      `${m} minutes without you typing. Type anything to carry on.`;
+      `${m} minute${m === 1 ? '' : 's'} without you typing. Type anything to carry on.`;
   }
 };
+$('deadman-min').addEventListener('change', () => {
+  const typed = parseInt($('deadman-min').value, 10);
+  const n = Number.isNaN(typed) || typed < 0 ? 15 : Math.min(15, typed);
+  $('deadman-min').value = String(n);
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'deadman', minutes: n }));
+});
 
 $('brief-send').addEventListener('click', () =>
   send(`brief ${$('brief-desc').value} ${$('brief-map').value}`, true));
@@ -848,5 +857,14 @@ function render(s) {
 
 window.focusInput = () => cmd.focus();
 
-connect();          // independent of the terminal, so data flows regardless
+// Independent of the terminal, so data flows regardless -- but not until every
+// script on the page has run.  Connecting from here, halfway down the list,
+// let the server's answers arrive before the panels after this file had
+// loaded: a routes list that came before bots.js was never shown in the
+// Stepper panel, which found nothing until Options -> Paths asked again.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', connect, { once: true });
+} else {
+  connect();
+}
 cmd.focus();

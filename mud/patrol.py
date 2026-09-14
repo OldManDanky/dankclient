@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from . import events
-from .outbound import HIGH, NORMAL, NOW
+from .outbound import ANSWERING, HIGH, NORMAL, NOW
 from .rules import MOST_WAIT
 
 #: Below this, stop.  A percentage, because max hp changes with the character.
@@ -176,6 +176,9 @@ class Bots:
         self.bots[name] = bot
 
         async def run() -> None:
+            # Never an answer to 3K, even when a trigger started it: the
+            # deadman holds a walk however it began.  The task's own copy.
+            ANSWERING.set(False)
             try:
                 await coro_fn()
                 # Only if it did not say anything more useful: a route that

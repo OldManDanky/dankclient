@@ -411,6 +411,11 @@
            white-space:nowrap;font-size:10px;color:var(--dim)}
   .bf-go{flex:none;font-size:10.5px;padding:2px 7px}
   .bf-none{margin:2px 0;font-size:10.5px;color:var(--dim)}
+  .bf-loading::before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;
+    border:1.5px solid var(--dim);border-top-color:transparent;border-radius:50%;
+    vertical-align:-1px;animation:bfspin .8s linear infinite}
+  @keyframes bfspin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.bf-loading::before{animation:none}}
   #apm{margin:8px 0 4px}
   #apm .fill{background:var(--gp)}
   #apm.warn .fill{background:var(--enemy)}
@@ -1029,11 +1034,16 @@
           <div class="fset">
             <h5>Deadman</h5>
             <div class="in">
-              <div class="frow one">
-                <p id="deadman-rule" class="fhint">After <b>15 minutes</b> without you
-                  typing, steppers pause and nothing automated is sent until you type
-                  again. 3K expects a person at the keyboard, so this cannot be
-                  changed or turned off.</p>
+              <div class="frow">
+                <label for="deadman-min">Pause after</label>
+                <div class="ctl">
+                  <input id="deadman-min" type="number" min="0" max="15" step="1"
+                         value="15" class="num"> <span class="hint">minutes without you typing</span>
+                </div>
+                <p id="deadman-rule" class="fhint">Steppers and timers pause until you type
+                  again. Triggers still answer what 3K says, but never with a move.
+                  1 to 15 minutes, or 0 for off. 3K expects a person at the keyboard, so
+                  it cannot be longer than 15.</p>
               </div>
             </div>
           </div>

@@ -778,12 +778,24 @@ driving the server's `routes` op, not by the store's own tests.
 
 A stepper left walking with nobody at the keyboard keeps walking into whatever
 changed while nobody was looking, and 3K expects a person to be playing.  So
-after fifteen minutes without a command typed by a person, everything
-automated stops: steppers pause where they are, and triggers, timers
-and script sends are dropped.  **Fifteen minutes is fixed.**  It was once a
-setting, 0 for off; it is the game's rule rather than a preference, so there
-is nothing to set, and a time an older client saved with the map is not read.  The first command typed brings it all back and
-the steppers carry on from the step they were on.
+after fifteen minutes (or less, if set) without a command typed by a person,
+what the client does of its own accord stops: steppers and walks pause where
+they are, and timers, a script's `every` and its `on("tick")` are dropped.
+What *answers* 3K does not: a trigger, an event or a watch -- in rules or in
+scripts -- still sends, because the corpse trigger after the kill a stepper
+was in the middle of is support, not stepping.  An answer is never a move,
+though (a direction or one of the room's exits is dropped), or a trigger on
+"Obvious exits" would be a stepper the deadman cannot stop.  The mark is a
+context variable, `outbound.ANSWERING`, set around trigger, event and watch
+dispatch; a task started from inside inherits it (a rule's wait, a script's
+coroutine), except a stepper or walk, which clears it, so a trigger that runs
+`/go` still walks nothing.  **Fifteen minutes is the most.**  The
+time is a setting from 1 to 15 minutes, or 0 for off, kept with the map as
+`deadman:minutes`; nothing -- the page, a script, a saved value -- can make it
+longer than fifteen, the game's rule.  0.2.21 and 0.2.22 had no setting at
+all; before them it went up to a day, so an old saved time past fifteen reads
+as fifteen, while an old 0 is still off.  The first command typed brings it
+all back and the steppers carry on from the step they were on.
 
 What counts as a person is what only a person does: a line typed in the box
 (numpad included), a click on the map to walk there, starting a path.  What

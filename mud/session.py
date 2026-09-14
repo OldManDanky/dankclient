@@ -40,7 +40,7 @@ from .state import World
 from .telnet import TelnetFilter
 from .gags import HOLD, LineGate
 from . import gaglib
-from .deadman import Deadman
+from .deadman import MINUTES, Deadman
 from .party import Party
 from .triggers import TriggerSet
 
@@ -155,10 +155,12 @@ class Session:
                              keep=(n for n, _ in self.prefixes.pairs))
         if self.mapper is not None:
             self.bus.on(events.ROOM, self._on_room)
-        #: Pauses everything automated once nobody has typed for fifteen
-        #: minutes.  Fixed: a `deadman:minutes` an older client saved with the
-        #: map is not read.
-        self.deadman = Deadman(on_change=self._deadman_changed)
+        #: Pauses everything automated once nobody has typed for a while: 15
+        #: minutes unless set shorter, or 0 for off.  Kept with the map,
+        #: because it is the client enforcing it.
+        self.deadman = Deadman(
+            store.setting("deadman:minutes", "") if store is not None else MINUTES,
+            on_change=self._deadman_changed)
         #: Who is in your party, from pwho and 3K's [PARTY] lines: whether a
         #: player in the room is a partymate or a stranger whose mob a stepper
         #: leaves alone.
@@ -597,11 +599,12 @@ class Session:
 
     def _deadman_changed(self, tripped: bool) -> None:
         if tripped:
-            self.queue.flush()            # nothing waiting goes out later
+            # Nothing waiting goes out later, but a trigger's answer to 3K.
+            self.queue.drop_automated()
             minutes = self.deadman.minutes
             said = (f"deadman: {minutes:g} minute{'s' if minutes != 1 else ''} "
-                    f"without you typing -- steppers paused, and nothing automated "
-                    f"will be sent until you type a command.")
+                    f"without you typing -- steppers and timers paused until you "
+                    f"type a command.  Triggers still answer, but never with a move.")
         else:
             said = "deadman: you're back -- carrying on."
         self.bus.emit(events.TEXT,

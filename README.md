@@ -141,9 +141,12 @@ Xresources file and add it.  The rest of the window can be **Dark**, **Light**,
 or **match the terminal**.
 
 **Deadman.**  3K expects a person at the keyboard.  If you haven't typed a
-command for 15 minutes, steppers pause where they are and nothing automated is sent -- no triggers, no
-timers -- until you type something, and then everything carries on.  The 15
-minutes is fixed; it cannot be changed or turned off.
+command for 15 minutes, steppers pause where they are and timers stop until
+you type something, and then everything carries on.  Triggers still answer
+what 3K says -- your corpse trigger still fires after the last kill -- but
+nothing a trigger sends will move you.  You can
+set it shorter under **Options -> Paths & steppers**, down to 1 minute, or 0
+to turn it off, but never longer than 15.
 
 To walk with the **numpad**, turn it on under **Options -> Keyboard**:
 8 is north, 2 south, 7 north-west and so on, 5 is `look` then `search`, and

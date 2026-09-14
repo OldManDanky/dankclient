@@ -187,14 +187,19 @@ def test_slash_stop_drops_waiting_rules_and_stops_bots():
     asyncio.run(go())
 
 
-def test_the_deadman_holds_what_a_wait_lets_out():
+def test_after_a_wait_a_trigger_still_answers_through_the_deadman_but_never_moves():
+    """The wait's rest is still the trigger's answer to 3K: it goes, unless a move."""
     async def go():
         session, host, store = make()
         store.upsert({"kind": "trigger", "pattern": "arrives", "actions": LOOT})
+        store.upsert({"kind": "trigger", "pattern": "leaves",
+                      "actions": acts(("send", "glance"), ("wait", "0.05"),
+                                      ("send", "north"))})
         fire(host, "A rat arrives.")
+        fire(host, "A rat leaves.")
         session.queue.held = lambda: True
         await asyncio.sleep(0.1)
-        assert out(session) == ["kill rat"]
+        assert out(session) == ["kill rat", "glance", "get all"]
     asyncio.run(go())
 
 

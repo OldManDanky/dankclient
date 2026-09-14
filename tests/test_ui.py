@@ -508,6 +508,23 @@ def test_a_running_route_says_which_step_of_how_many():
     assert "id: 'botpanel'" in scripts()["panels.js"]
 
 
+def test_the_page_connects_only_once_every_script_has_loaded():
+    """A tester's Stepper panel found nothing until Options -> Paths was opened.
+
+    app.js connected while the scripts after it were still loading, so the
+    path list could arrive before bots.js was there to be given it, and
+    nothing sent it again.  Every script is a plain one, so DOMContentLoaded
+    is after the last of them.
+    """
+    page, js = html(), scripts()["app.js"]
+    tags = re.findall(r'<script src="([^"]+)"', page)
+    assert tags.index("app.js") < tags.index("bots.js"), "the race needs app.js first"
+    assert not re.search(r"<script[^>]*\b(defer|async|type=\"module\")", page), \
+        "a deferred script would run after DOMContentLoaded, after the connect"
+    assert "document.addEventListener('DOMContentLoaded', connect, { once: true })" in js
+    assert not re.search(r"^connect\(\);", js, re.M), "still connects halfway down the page"
+
+
 def test_the_map_cannot_be_dragged_or_scaled():
     """It is a thing you glance at, not a thing you operate.  A map you can
     drag off centre or zoom out of is one that needs putting back before it

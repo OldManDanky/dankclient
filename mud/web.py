@@ -960,6 +960,9 @@ class WebServer:
         if kind == "open":
             self._open_link(msg.get("url"))
             return
+        if kind == "deadman":
+            self._set_deadman(msg.get("minutes"))
+            return
         if kind == "sound":
             self._sound_op(msg)
             return
@@ -1088,6 +1091,17 @@ class WebServer:
             problem = None
         self.push({"t": "sounds", "slots": self.sounds.listing(),
                    "error": problem or "", "slot": slot})
+
+    def _set_deadman(self, minutes) -> None:
+        """Options -> Paths & steppers: 1 to 15 minutes, 0 for off."""
+        deadman = getattr(self.session, "deadman", None)
+        if deadman is None:
+            return
+        minutes = deadman.set_minutes(minutes)
+        store = getattr(self.session, "store", None)
+        if store is not None:
+            store.set_setting("deadman:minutes", f"{minutes:g}")
+        self._dirty = True
 
     def _open_link(self, url) -> None:
         """Open an address from the output in the player's own browser.
