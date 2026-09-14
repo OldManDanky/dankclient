@@ -329,8 +329,10 @@ function handle(m) {
 // scrollback as you type, so what you are composing never gets shredded by
 // output arriving mid-keystroke.
 const cmd = $('cmd');
-const history = [];
-let histPos = 0;
+//: How far ↑ and ↓ have gone back through history.js's list; null until the
+//: first ↑, since that list is loaded after this file.
+let histPos = null;
+const past = () => (window.cmdHistory ? window.cmdHistory.list() : []);
 
 /* Keep the last command: it stays in the box, selected, so Enter sends it
    again and typing anything replaces it.  Portal did this, and it is what
@@ -375,12 +377,10 @@ $('bar').addEventListener('submit', (e) => {
   const typed = cmd.value;
   const walk = speedCmd && speedCmd.checked ? speedwalk(typed) : null;
   const text = walk || typed;
-  // One entry for a command sent ten times running, not ten.
-  if (typed && history[history.length - 1] !== typed) {
-    history.push(typed);
-    if (history.length > 500) history.shift();
-  }
-  histPos = history.length;
+  // Kept for ↑ and for the History list.  Saved across a reload only once MIP
+  // is live: before that, what is typed may be the answer to 3K's password.
+  if (typed && window.cmdHistory) window.cmdHistory.add(typed, !!window.mipLive);
+  histPos = past().length;
   if (keepCmd && keepCmd.checked && typed) {
     cmd.select();
   } else {
@@ -390,16 +390,24 @@ $('bar').addEventListener('submit', (e) => {
 });
 
 cmd.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowUp') {
+  if (e.key === 'ArrowUp' && (e.ctrlKey || e.metaKey)) {
+    // The whole list, to search and pick from.
+    if (window.cmdHistory) window.cmdHistory.open();
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    const list = past();
+    if (histPos === null || histPos > list.length) histPos = list.length;
     if (histPos > 0) {
       histPos -= 1;
-      cmd.value = history[histPos];
+      cmd.value = list[histPos];
       cmd.setSelectionRange(cmd.value.length, cmd.value.length);
     }
     e.preventDefault();
   } else if (e.key === 'ArrowDown') {
-    histPos = Math.min(histPos + 1, history.length);
-    cmd.value = histPos === history.length ? '' : history[histPos];
+    const list = past();
+    if (histPos === null) histPos = list.length;
+    histPos = Math.min(histPos + 1, list.length);
+    cmd.value = histPos === list.length ? '' : list[histPos];
     e.preventDefault();
   } else if (e.key === 'PageUp' || e.key === 'PageDown') {
     if (term) term.scrollPages(e.key === 'PageUp' ? -1 : 1);
@@ -859,6 +867,8 @@ function render(s) {
     box.hidden = true;
   }
 
+  // history.js keeps only what is typed once MIP flows: before, it may be a login.
+  window.mipLive = !!(s.mip && s.mip.seen);
   const mip = $('mip');
   if (s.quiet && s.quiet.length) {
     // A code the MUD has stopped sending says nothing about itself; the only

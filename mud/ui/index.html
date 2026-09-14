@@ -193,6 +193,25 @@
        color:var(--ink);font:var(--term-size)/1.4 var(--term-font);
        padding:7px 9px;border-radius:3px}
   #cmd:focus{outline:none;border-color:var(--accent)}
+  /* Your commands, to search and pick from: over the output, just above the
+     box, so the eye does not travel to find it. */
+  #hist-open{flex:none;font-size:11px;padding:5px 9px}
+  #hist{position:absolute;left:var(--gut);right:var(--gut);bottom:60px;z-index:20;
+        max-width:640px;display:flex;flex-direction:column;gap:6px;padding:6px;
+        background:var(--panel);border:1px solid var(--line);border-radius:4px;
+        box-shadow:0 8px 24px rgba(0,0,0,.45)}
+  #hist[hidden]{display:none}
+  #hist-find{background:var(--sunk);border:1px solid var(--line);color:var(--ink);
+             font:var(--term-size)/1.4 var(--term-font);padding:5px 8px;border-radius:3px}
+  #hist-find:focus{outline:none;border-color:var(--accent)}
+  #hist-list{max-height:min(50vh,360px);overflow-y:auto;display:flex;flex-direction:column}
+  .hist-row{all:unset;box-sizing:border-box;display:block;width:100%;padding:3px 8px;
+            border-radius:3px;cursor:pointer;color:var(--ink);
+            font:var(--term-size)/1.4 var(--term-font);
+            white-space:pre;overflow:hidden;text-overflow:ellipsis}
+  .hist-row:hover,.hist-row.on{background:var(--sunk);color:var(--accent)}
+  .hist-row:focus-visible{outline:2px solid var(--accent)}
+  .hist-none{margin:4px 8px;color:var(--dim);font-size:11px}
   #cmd::placeholder{color:var(--placeholder)}
   aside{width:330px;flex:none;border-left:1px solid var(--line);background:var(--panel);
         overflow-y:auto;padding:var(--gut);display:flex;flex-direction:column;
@@ -274,6 +293,10 @@
   #gline div{display:flex;align-items:baseline;gap:5px}
   #gline b{font-weight:400;color:var(--dim);letter-spacing:.06em}
   .g-good{color:var(--good)} .g-bad{color:var(--bad)}
+  /* Options -> Layout -> Vitals: any of them hidden, the whole strip hidden,
+     or the strip under the command box rather than over it. */
+  #vitals.v-off,.v.v-off,#guild.v-off{display:none!important}
+  body.vitals-below #vitals{order:1}
   #chrome{font-size:10px;color:var(--dim);display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
   #version{font-size:10px;color:var(--dim);margin-top:8px}
   #version:not(:empty)+#chrome{margin-top:3px}
@@ -751,24 +774,33 @@
 
     </div>
     <div id="vitals">
-      <div class="v hp"><b id="lbl-hp">HP</b>
+      <div class="v hp" id="v-hp"><b id="lbl-hp">HP</b>
         <div class="track"><div class="fill" id="hp-b"></div></div>
         <i id="hp-n">&ndash;</i></div>
-      <div class="v sp"><b id="lbl-sp">SP</b>
+      <div class="v sp" id="v-sp"><b id="lbl-sp">SP</b>
         <div class="track"><div class="fill" id="sp-b"></div></div>
         <i id="sp-n">&ndash;</i></div>
-      <div class="v gp"><b id="lbl-gp1">GP1</b>
+      <div class="v gp" id="v-gp1"><b id="lbl-gp1">GP1</b>
         <div class="track"><div class="fill" id="g1-b"></div></div>
         <i id="g1-n">&ndash;</i></div>
-      <div class="v gp"><b id="lbl-gp2">GP2</b>
+      <div class="v gp" id="v-gp2"><b id="lbl-gp2">GP2</b>
         <div class="track"><div class="fill" id="g2-b"></div></div>
         <i id="g2-n">&ndash;</i></div>
       <div id="guild" hidden><div id="gline"></div></div>
     </div>
     <form id="bar" autocomplete="off">
       <input id="cmd" type="text" spellcheck="false" autocomplete="off"
-             placeholder="type a command, up/down for history">
+             placeholder="type a command: ↑↓ for history, Ctrl+↑ to search it">
+      <button id="hist-open" type="button"
+              title="Your commands: search them, and click one to put it in the box (Ctrl+↑)">History</button>
     </form>
+    <!-- Not inside the form: a second text field there and Enter no longer
+         submits the command box. -->
+    <div id="hist" hidden>
+      <input id="hist-find" type="text" spellcheck="false" autocomplete="off"
+             placeholder="Search your commands" aria-label="Search your commands">
+      <div id="hist-list"></div>
+    </div>
   </main>
   <aside id="side">
     <!-- Above the map, because these are the three things you reach for
@@ -1215,6 +1247,10 @@
           <div class="fset">
             <h5>Show</h5>
             <div class="in" id="panel-toggles"></div>
+          </div>
+          <div class="fset">
+            <h5>Vitals</h5>
+            <div class="in" id="vital-toggles"></div>
           </div>
           <div class="fset">
             <h5>Terminal</h5>
@@ -1926,6 +1962,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="panels.js"></script>
   <script src="fonts.js"></script>
   <script src="numpad.js"></script>
+  <script src="history.js"></script>
   <script src="sound.js"></script>
   <script src="guide.js"></script>
   <script src="ttimport.js"></script>

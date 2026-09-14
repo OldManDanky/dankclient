@@ -118,11 +118,94 @@
     if (now) now.textContent = cols ? `now ${cols}` : '';
   }
 
+  // --- the vitals strip ------------------------------------------------------
+
+  /* Which of the numbers between the output and the command box show, and
+     whether the strip sits above the box or under it.  Listed by the names
+     you have given the gauges, if you have renamed any by clicking them. */
+  const VITALS = [
+    { id: 'v-hp', label: 'lbl-hp', name: 'HP' },
+    { id: 'v-sp', label: 'lbl-sp', name: 'SP' },
+    { id: 'v-gp1', label: 'lbl-gp1', name: 'GP1' },
+    { id: 'v-gp2', label: 'lbl-gp2', name: 'GP2' },
+    { id: 'guild', label: '', name: 'The guild line' },
+  ];
+  const vitalKey = (id) => `vital:${id}:shown`;
+  const isOn = (k) => !store || store.get(k, '1') === '1';
+
+  function applyVitals() {
+    for (const v of VITALS) {
+      const el = $(v.id);
+      if (el) el.classList.toggle('v-off', !isOn(vitalKey(v.id)));
+    }
+    const strip = $('vitals');
+    if (strip) strip.classList.toggle('v-off', !isOn('vitals:shown'));
+    const below = !!store && store.get('vitals:where', 'above') === 'below';
+    document.body.classList.toggle('vitals-below', below);
+  }
+
+  function toggle(text, key, name) {
+    const row = document.createElement('div');
+    row.className = 'frow one';
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.name = name;
+    box.checked = isOn(key);
+    box.onchange = () => {
+      if (store) store.set(key, box.checked ? '1' : '');
+      applyVitals();
+    };
+    label.append(box, document.createTextNode(text));
+    row.append(label);
+    return row;
+  }
+
+  function renderVitals() {
+    const into = $('vital-toggles');
+    if (!into) return;
+    into.replaceChildren();
+    into.append(toggle('The strip itself', 'vitals:shown', 'vitals-strip'));
+    for (const v of VITALS) {
+      const own = v.label && $(v.label) ? $(v.label).textContent.trim() : '';
+      into.append(toggle(own || v.name, vitalKey(v.id), `vital-${v.id}`));
+    }
+
+    const row = document.createElement('div');
+    row.className = 'frow';
+    const label = document.createElement('label');
+    label.textContent = 'Put it';
+    label.htmlFor = 'vitals-where';
+    const ctl = document.createElement('div');
+    ctl.className = 'ctl';
+    const where = document.createElement('select');
+    where.id = 'vitals-where';
+    for (const [value, text] of [['above', 'above the command box'],
+      ['below', 'under the command box']]) {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      where.append(o);
+    }
+    where.value = store ? store.get('vitals:where', 'above') : 'above';
+    where.onchange = () => {
+      if (store) store.set('vitals:where', where.value === 'below' ? 'below' : 'above');
+      applyVitals();
+    };
+    ctl.append(where);
+    row.append(label, ctl);
+    into.append(row);
+  }
+
   for (const p of PANELS) apply(p);
+  applyVitals();
   render();
+  renderVitals();
   renderWidth();
   window.renderPanels = () => {
     render();
+    renderVitals();
     renderWidth();
   };
 })();

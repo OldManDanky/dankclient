@@ -155,6 +155,11 @@ separated by `;`.  With something typed in the command box the keys type
 numbers as usual.  `/numpad off` and `/numpad on` switch it, so an alias or a
 trigger can too; `/numpad` alone switches it.
 
+**Your commands**: up and down go back through them, and **Ctrl+Up** (or
+**History** beside the command box) lists them with a search box -- click one
+to put it in the box.  **Options -> Layout -> Vitals** hides any of the
+vitals, or the whole strip, and can put it under the command box.
+
 To send the same command over and over, tick **keep the last command in the
 box** under **Options -> Keyboard**: it stays there selected, so Enter sends it
 again and typing replaces it.

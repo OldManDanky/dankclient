@@ -510,6 +510,17 @@ def test_the_session_panel_has_a_version_line_above_uptime():
     assert "window.renderVersion = function (release, version)" in scripts()["about.js"]
 
 
+def test_enter_still_sends_the_command_box():
+    """A form with two text fields and no submit button is one Enter does not
+    submit.  History's search box inside it stopped every typed command."""
+    page = html()
+    start = page.index('<form id="bar"')
+    form = page[start:page.index("</form>", start)]
+    fields = re.findall(r'<input\b(?![^>]*type="(?:checkbox|radio|hidden|submit|button)")', form)
+    assert len(fields) == 1, f"{len(fields)} text fields in the command box's form"
+    assert 'id="hist-find"' in page and 'id="hist-find"' not in form
+
+
 def test_a_running_route_says_which_step_of_how_many():
     """"Walking" on its own does not tell you whether to wait for it or go and
     do something else.  Said in the sidebar's Bot panel, with its buttons."""
