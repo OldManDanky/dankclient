@@ -275,6 +275,10 @@
   #gline b{font-weight:400;color:var(--dim);letter-spacing:.06em}
   .g-good{color:var(--good)} .g-bad{color:var(--bad)}
   #chrome{font-size:10px;color:var(--dim);display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  #version{font-size:10px;color:var(--dim);margin-top:8px}
+  #version:not(:empty)+#chrome{margin-top:3px}
+  #version.new{color:var(--accent)}
+  #version a{color:inherit;text-decoration:underline;cursor:pointer}
   /* What a route is doing, where you are already watching the connection.
      Which step of how many, because "walking" on its own does not tell you
      whether to wait or to go and do something else. */
@@ -798,6 +802,7 @@
         <div class="bar-top"><b>APM</b><i id="apm-n">0</i></div>
         <div class="track"><div class="fill" id="apm-b"></div></div>
       </div>
+      <div id="version" title="Asking GitHub…"></div>
       <div id="chrome"></div>
     </section>
 

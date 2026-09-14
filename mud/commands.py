@@ -40,6 +40,7 @@ HELP = [
         ('/delay <secs> <command>', 'send it once, later'),
         ('/group <name> on|off', 'switch a folder on or off, rules and paths; /groups lists them'),
         ('/folders', 'every folder, and what is filed in it'),
+        ('/numpad on|off', 'walk with the numpad or not -- an alias or trigger can send it; alone it switches'),
         ('/alias <word> <cmd;cmd>', 'make an alias; {args} or {1} for what follows it'),
         ('/alias', 'the aliases you have made; /alias <word> shows one'),
         ('/unalias <word>', 'remove one'),
@@ -88,15 +89,26 @@ def stack(line: str) -> list[str]:
     command, or 3K -- so `n;/go bank` works.  `\\;` is a semicolon that stays
     in the command (`say hi\\; bye`).  A line that starts with `/` is left
     whole: it is the client's, and its own `;` belong to it --
-    `/alias gk kill {1};glance`.  A line with no `;` is not touched at all,
-    spaces and all, and an empty one is still one empty command: Enter on
-    nothing is how you ask 3K for a prompt.
+    `/alias gk kill {1};glance`.  So is a line that starts with `\\`: it goes
+    to 3K as typed (see `verbatim`).  A line with no `;` is not touched at
+    all, spaces and all, and an empty one is still one empty command: Enter
+    on nothing is how you ask 3K for a prompt.
     """
-    if line.startswith("/") or ";" not in line:
+    if line.startswith(("/", "\\")) or ";" not in line:
         return [line]
     pieces = [p.replace("\x00", ";").strip()
               for p in line.replace("\\;", "\x00").split(";")]
     return [p for p in pieces if p] or [""]
+
+
+def verbatim(line: str) -> str | None:
+    """What to send 3K untouched, if the line starts with `\\`; else None.
+
+    TinTin++'s way: `\\tell buddy n;w;s` goes out as `tell buddy n;w;s` -- not
+    split on `;`, not an alias, not a client command.  The one backslash is
+    taken off, so `\\\\` sends a line that really starts with one.
+    """
+    return line[1:] if line.startswith("\\") else None
 
 
 def handle(text: str, session, scripts, note) -> bool:
@@ -306,6 +318,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb in ("group", "groups"):
         _group(rest, scripts, note)
+
+    elif verb == "numpad":
+        _numpad(rest, session, note)
 
     elif verb in ("folder", "folders"):
         _folders(rest, scripts, note)
@@ -704,6 +719,26 @@ def _mapsum(verb: str, rest: str, session, note) -> None:
         note(f"could not read {rest.strip()}: {exc}")
         return
     note("\n".join(mapsum.compare(mapsum.summarize(store), theirs)))
+
+
+#: What /numpad can be followed by, and what the page is asked to do.
+NUMPAD = {"": "toggle", "on": "on", "off": "off", "empty": "empty", "always": "always"}
+
+
+def _numpad(rest: str, session, note) -> None:
+    """Numpad walking on or off -- typed, or sent by an alias or a trigger.
+
+    The numpad belongs to the browser: its keys and its mode are kept there,
+    like fonts.  So this only asks every open window to change it, and each
+    window says what it did.  `on` is whichever of "when the command box is
+    empty" and "always" was last chosen; alone, it switches.
+    """
+    op = NUMPAD.get(rest.strip().lower())
+    if op is None:
+        note("usage: /numpad [on|off|empty|always] -- alone, it switches on or off")
+        return
+    from . import events
+    session.bus.emit(events.PAGE, {"t": "numpad", "op": op})
 
 
 def _group(rest: str, scripts, note) -> None:

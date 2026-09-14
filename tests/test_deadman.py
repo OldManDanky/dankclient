@@ -311,3 +311,18 @@ def test_the_page_is_told_and_has_the_setting():
     js = (UI / "app.js").read_text()
     assert "t: 'deadman', minutes: n" in js
     assert "Math.min(15, typed)" in js
+
+
+def test_the_session_panel_is_told_how_long_you_have_been_idle():
+    """Right after mudlag: seconds since you typed, not since 3K last heard a stepper."""
+    s, _, clock = session()
+    web = WebServer(s)
+    clock.now = 125
+    chrome = web.snapshot()["chrome"]
+    keys = list(chrome)
+    assert keys[keys.index("mudlag") + 1] == "idle", keys
+    assert chrome["idle"] == 125
+    s.queue.put("xp")                 # a timer: you are no less idle
+    assert web.snapshot()["chrome"]["idle"] == 125
+    web._on_client_message(b'{"t": "cmd", "d": "look"}')
+    assert web.snapshot()["chrome"]["idle"] == 0

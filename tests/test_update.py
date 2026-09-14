@@ -295,3 +295,46 @@ def test_what_is_remembered_says_how_it_was_read():
     update.remember(store, got, ["bots"])
     kept = store.setting("3kdb:bots", "")
     assert kept.endswith(f"/{update.IMPORTERS['bots']}"), kept
+
+
+# --- asked again while the client runs ------------------------------------------
+
+def test_the_client_asks_at_start_and_again_every_so_often():
+    """A client left running for days still hears that there is a newer one,
+    and the Session panel can say when it last asked."""
+    import asyncio
+    import re
+    from mud.session import Session
+    from mud.web import WebServer
+
+    web = WebServer(Session("127.0.0.1", 1, sec_code=1))
+    calls: list[int] = []
+
+    def fake(timeout=15.0, have=""):
+        calls.append(1)
+        if len(calls) == 1:
+            return {"error": "offline", "have": "0.1.0"}
+        return {"error": "", "have": "0.1.0", "latest": "0.2.0", "newer": True}
+
+    async def until(cond):
+        for _ in range(200):
+            if cond():
+                return
+            await asyncio.sleep(0.01)
+
+    async def go():
+        task = asyncio.ensure_future(web._keep_asking_about_releases(every=0.05))
+        await until(lambda: web._release)
+        first = dict(web._release)
+        await until(lambda: len(calls) >= 2 and web._release.get("newer"))
+        task.cancel()
+        return first
+
+    was, update.newer_release = update.newer_release, fake
+    try:
+        first = asyncio.run(go())
+    finally:
+        update.newer_release = was
+    assert first["error"] == "offline" and re.fullmatch(r"\d\d:\d\d", first["checked"]), first
+    assert len(calls) >= 2 and web._release["newer"] is True, (calls, web._release)
+    assert web.snapshot()["release"]["checked"]

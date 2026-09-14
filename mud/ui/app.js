@@ -293,6 +293,8 @@ function handle(m) {
     if (window.setSounds) window.setSounds(m.slots, m.error);
   } else if (m.t === 'play') {
     if (window.ding) window.ding(m.slot);
+  } else if (m.t === 'numpad') {
+    if (window.setNumpad) window.setNumpad(m.op);
   } else if (m.t === 'tell' || m.t === 'chat') {
     if (m.t === 'tell') noteTell(m.d);
     // The MUD prints these in the main output already; echoing them into the
@@ -611,8 +613,37 @@ $('hangup').addEventListener('click', () => {
   cmd.focus();
 });
 
+/* The Session panel's idle: how long since you last typed a command.  The
+   server says at each push, and the page counts on between them, because
+   nothing is pushed while nothing is happening -- which is exactly when
+   idle is going up. */
+let idleFrom = null;
+//: the span it is written in, rebuilt with the rest of the row at each push
+let idleSpan = null;
+function idleText(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m}m ${String(sec % 60).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+}
+function paintIdle() {
+  if (idleSpan && idleFrom !== null) {
+    idleSpan.textContent = `idle: ${idleText((Date.now() - idleFrom) / 1000)}`;
+  }
+}
+function idleTitle(d) {
+  const since = 'Since you last typed a command. Steppers and triggers do not count.';
+  if (!d) return since;
+  if (!d.minutes) return `${since} The deadman is off.`;
+  return `${since} The deadman pauses steppers at ${Math.round(d.minutes)} minutes.`;
+}
+setInterval(paintIdle, 1000);
+
 function send(text, echo) {
   if (ws) ws.send(JSON.stringify({ t: 'cmd', d: text }));
+  idleFrom = Date.now();              // you, typing: not idle any more
+  paintIdle();
   // Back to the bottom, where the answer is going to be.  A terminal left
   // scrolled up stays there while output arrives beneath it, which from the
   // chair looks exactly like the game having stopped.
@@ -786,6 +817,7 @@ function render(s) {
     }
   }
   if (s.release && window.renderRelease) window.renderRelease(s.release);
+  if (window.renderVersion) window.renderVersion(s.release, s.where && s.where.version);
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {
     mipLabels = s.labels;
@@ -848,6 +880,18 @@ function render(s) {
   const chrome = $('chrome');
   chrome.replaceChildren();
   for (const [k, v] of Object.entries(s.chrome)) {
+    if (k === 'idle') {
+      // 0 is a real answer here, so not skipped like an empty field.
+      if (v === null || v === undefined) continue;
+      idleFrom = Date.now() - v * 1000;
+      const span = document.createElement('span');
+      span.id = 'idle';
+      span.title = idleTitle(s.deadman);
+      chrome.append(span);
+      idleSpan = span;
+      paintIdle();
+      continue;
+    }
     if (!v) continue;
     const span = document.createElement('span');
     span.textContent = `${k}: ${v}`;
@@ -856,6 +900,11 @@ function render(s) {
 }
 
 window.focusInput = () => cmd.focus();
+/* A line from the client itself, for something only this page did -- written
+   the way the server's own [client] notes are. */
+window.clientNote = (text) => {
+  if (term) term.write(`\r\n\x1b[33m[client] ${text}\x1b[0m\r\n`);
+};
 
 // Independent of the terminal, so data flows regardless -- but not until every
 // script on the page has run.  Connecting from here, halfway down the list,

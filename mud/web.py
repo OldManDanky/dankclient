@@ -242,9 +242,10 @@ class WebServer:
         self._rules_seen = 0
         self._map_centre = None
         self._server: asyncio.base_events.Server | None = None
-        #: What the latest release is, once we have asked.  Asked once, in the
-        #: background: nobody wants their MUD client stopping to talk to
-        #: GitHub, and the answer does not change while they play.
+        #: What the latest release is, once we have asked.  Asked in the
+        #: background, at start and then once an hour: nobody wants their MUD
+        #: client stopping to talk to GitHub, but a client left running for
+        #: days should still hear that there is a newer one.
         self._release: dict = {}
 
     # --- lifecycle ----------------------------------------------------------
@@ -274,22 +275,31 @@ class WebServer:
         self.port = self._server.sockets[0].getsockname()[1]
         self._wire_session()
         events.spawn(self._pump(), "the UI pump")
-        events.spawn(self._ask_about_releases(), "the release check")
+        events.spawn(self._keep_asking_about_releases(), "the release check")
         return self.port
 
-    async def _ask_about_releases(self) -> None:
-        """Find out whether there is a newer client, once, quietly.
+    async def _keep_asking_about_releases(self, every: float = 3600.0) -> None:
+        """At start, and then once an hour, for the Session panel's version line."""
+        while True:
+            await self._ask_about_releases()
+            await asyncio.sleep(every)
 
-        A failure is an empty answer, not a message: somebody playing offline
-        does not need to be told that GitHub was unreachable.
+    async def _ask_about_releases(self) -> None:
+        """Find out whether there is a newer client, quietly.
+
+        A failure is an answer, not a message: somebody playing offline does
+        not need GitHub's unreachability printed at them, only the version
+        line saying it could not check.
         """
         from . import update
 
         try:
-            self._release = await asyncio.to_thread(update.newer_release)
+            got = await asyncio.to_thread(update.newer_release)
         except Exception:
             log("release check failed:\n" + traceback.format_exc())
-            self._release = {"error": "could not ask"}
+            got = {"error": "could not ask"}
+        got["checked"] = time.strftime("%H:%M")
+        self._release = got
         self._dirty = True
 
     async def stop(self) -> None:
@@ -316,6 +326,12 @@ class WebServer:
             self._dirty = True
             if name == "deadman" and new:
                 self.push({"t": "play", "slot": "idle"})
+
+        @bus.on(events.PAGE)
+        def _(msg: dict) -> None:
+            # Something only the browser keeps, like the numpad's mode: every
+            # open window is told, and each acts on it.
+            self.push(msg)
 
         @bus.on(events.BOT_ENDED)
         def _(bot) -> None:
@@ -447,7 +463,13 @@ class WebServer:
             },
             "chrome": {
                 "uptime": w.uptime, "reboot": w.reboot,
-                "mudlag": w.mudlag, "editing": w.editing,
+                "mudlag": w.mudlag,
+                # Seconds since you last typed a command -- the deadman's
+                # clock, not 3K's: a stepper walking does not make you less
+                # idle.  The page counts on from here between pushes.
+                "idle": (round(self.session.deadman.idle())
+                         if getattr(self.session, "deadman", None) else None),
+                "editing": w.editing,
                 "caption": w.caption,
             },
             "who": self._who(),
@@ -1014,9 +1036,15 @@ class WebServer:
     def _command(self, text: str) -> None:
         """One line from the input box: the client's, an alias's, or the MUD's."""
         self._touched()
+        from .commands import verbatim
+        raw = verbatim(text)
+        if raw is not None:
+            # `\` at the front: exactly this to 3K -- no alias, no "/".
+            if self._is_up():
+                self.session.queue.now(raw)
         # "/" commands are for the client, not the MUD.  Without this, typing
         # /js in the browser sends it to 3K as a game command.
-        if text.startswith("/"):
+        elif text.startswith("/"):
             self._client_command(text[1:].strip())
         elif not self._is_up():
             return

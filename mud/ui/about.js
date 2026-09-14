@@ -93,6 +93,43 @@
     return link;
   }
 
+  /* The Session panel's line above uptime: the version you have, and whether
+     there is a newer one.  The server asks at start and once an hour; this
+     only draws the answer, and only when it changes -- a link rebuilt on every
+     snapshot is one that is gone between the press and the release. */
+  let lined = '';
+  window.renderVersion = function (release, version) {
+    const box = $('version');
+    if (!box) return;
+    const r = release || {};
+    const have = r.have || version || '';
+    const key = JSON.stringify([have, r.latest, r.newer, r.error, r.url, r.page, r.checked]);
+    if (key === lined) return;
+    lined = key;
+
+    box.replaceChildren();
+    box.className = '';
+    if (!have) return;
+    box.title = r.checked ? `Checked at ${r.checked}, and again every hour.` : 'Asking GitHub…';
+    let said;
+    if (r.error) {
+      said = 'could not check for updates';
+      box.title = `Could not ask GitHub at ${r.checked || 'start'}; it tries again every hour.`;
+    } else if (!('latest' in r)) {
+      said = 'checking for updates…';
+    } else if (!r.newer) {
+      said = 'up to date';
+    }
+    box.append(document.createTextNode(`v${have} · `));
+    if (said) {
+      box.append(document.createTextNode(said));
+      return;
+    }
+    box.className = 'new';
+    box.append(document.createTextNode(`${r.latest} is out — `),
+      outside(r.url || r.page, 'download'));
+  };
+
   // The static link at the foot of the pane, for the same reason.
   const repo = $('about-repo');
   if (repo) repo.onclick = outside(repo.href, '').onclick;

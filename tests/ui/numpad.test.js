@@ -74,4 +74,32 @@ check('a key it leaves alone goes on to the page as usual',
 mode('off');
 check('off: ArrowUp is history again', !key('Numpad8', { key: 'ArrowUp' }).prevented && !stopped);
 
+// /numpad -- typed, or from an alias or a trigger -- by way of the server.
+const notes = [];
+window.clientNote = (t) => notes.push(t);
+window.setNumpad('on');
+box('', 0, 0);
+check('/numpad on: back to how it was last on',
+  p.els['numpad-mode'].value === 'always' && same(key('Numpad8').sent, ['n']));
+check('and says so in the terminal', notes[notes.length - 1] === 'numpad on, always');
+window.setNumpad('off');
+check('/numpad off: 8 is an 8 again',
+  same(key('Numpad8'), { sent: [], prevented: false }) && p.els['numpad-mode'].value === 'off');
+check('and says so', notes[notes.length - 1] === 'numpad off');
+window.setNumpad('toggle');
+check('/numpad alone switches it back on', p.els['numpad-mode'].value === 'always');
+window.setNumpad('toggle');
+check('and off again', p.els['numpad-mode'].value === 'off');
+window.setNumpad('empty');
+check('/numpad empty chooses the mode, and it is kept',
+  p.els['numpad-mode'].value === 'empty' && saved['numpad:mode'] === 'empty');
+const before = notes.length;
+window.setNumpad('sideways');
+check('anything else changes nothing and says nothing',
+  p.els['numpad-mode'].value === 'empty' && notes.length === before);
+window.setNumpad('off');
+open();
+window.setNumpad('on');
+check('after a reload, on is still however it was last on', p.els['numpad-mode'].value === 'empty');
+
 finish();

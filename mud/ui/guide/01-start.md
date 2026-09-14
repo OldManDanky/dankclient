@@ -20,6 +20,8 @@ Type in the box at the bottom and press Enter. Anything you type goes to 3K, exc
 
 Several commands at once: separate them with `;`. `n;w;n;n;e;n` walks six rooms, and `kill rat;get all` does both. Each one goes where it would if typed alone, so an alias or a `/` command can be one of them. For a semicolon you mean to send, type `\;`. A line that starts with `/` keeps its semicolons, because they are part of that command.
 
+To send a whole line exactly as you typed it, start it with `\`: `\tell buddy n;w;s;e` is one tell, not a tell and three steps. The line is not split on `;`, not turned into an alias, and not a client command; only the `\` is taken off. Type `\\` for a line that really starts with a backslash.
+
 Up and Down go back through what you have typed.
 
 ## Options

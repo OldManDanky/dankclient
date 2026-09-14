@@ -43,11 +43,15 @@
   ];
 
   let mode = 'off';
+  //: which way it was last on, for /numpad on to go back to
+  let lastOn = 'empty';
   let map = Object.assign({}, DEFAULTS);
 
   function load() {
     mode = store.get('numpad:mode', 'off');
     if (!['off', 'empty', 'always'].includes(mode)) mode = 'off';
+    lastOn = mode !== 'off' ? mode : store.get('numpad:on', 'empty');
+    if (!['empty', 'always'].includes(lastOn)) lastOn = 'empty';
     map = Object.assign({}, DEFAULTS);
     try {
       const got = JSON.parse(store.get('numpad:map', '{}'));
@@ -60,7 +64,25 @@
   function save() {
     store.set('numpad:mode', mode);
     store.set('numpad:map', JSON.stringify(map));
+    if (mode !== 'off') {
+      lastOn = mode;
+      store.set('numpad:on', mode);
+    }
   }
+
+  /* /numpad, typed or sent by an alias or a trigger.  The server passes it on
+     because the mode is kept here; "toggle" is /numpad on its own, and "on"
+     is however it was last on. */
+  const SAID = { off: 'off', empty: 'on, when the command box is empty', always: 'on, always' };
+  window.setNumpad = function (op) {
+    if (op === 'toggle') op = mode === 'off' ? 'on' : 'off';
+    if (op === 'on') op = lastOn;
+    if (!Object.prototype.hasOwnProperty.call(SAID, op)) return;
+    mode = op;
+    save();
+    if ($('numpad-mode')) $('numpad-mode').value = mode;
+    if (window.clientNote) window.clientNote(`numpad ${SAID[mode]}`);
+  };
 
   // --- the keys --------------------------------------------------------------
 

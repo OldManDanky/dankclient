@@ -152,7 +152,8 @@ To walk with the **numpad**, turn it on under **Options -> Keyboard**:
 8 is north, 2 south, 7 north-west and so on, 5 is `look` then `search`, and
 `+`/`-` are up and down.  Every key can be set to any command, or several
 separated by `;`.  With something typed in the command box the keys type
-numbers as usual.
+numbers as usual.  `/numpad off` and `/numpad on` switch it, so an alias or a
+trigger can too; `/numpad` alone switches it.
 
 To send the same command over and over, tick **keep the last command in the
 box** under **Options -> Keyboard**: it stays there selected, so Enter sends it

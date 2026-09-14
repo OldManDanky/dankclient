@@ -37,6 +37,7 @@ CONNECTED = "connected"
 DISCONNECTED = "disconnected"
 BOT_ENDED = "bot_ended"  # patrol.Bot -- a bot finished or gave up, by itself
 RETRYING = "retrying"    # float -- seconds until the next attempt to reconnect
+PAGE = "page"            # dict -- for the browser alone to act on: /numpad
 
 Handler = Callable[..., Any]
 

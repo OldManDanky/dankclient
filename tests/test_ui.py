@@ -492,6 +492,24 @@ def test_session_sits_above_the_map_and_says_only_what_it_should():
     assert "'MIP live'" in js and "mip.title" in js, "short, detail on hover"
 
 
+def test_the_session_panel_shows_idle_and_counts_on_by_itself():
+    """Nothing is pushed while nothing happens, which is when idle goes up."""
+    js = scripts()["app.js"]
+    assert "if (k === 'idle')" in js, "0 seconds idle must not be skipped as empty"
+    assert "idleFrom = Date.now() - v * 1000;" in js
+    assert "setInterval(paintIdle, 1000);" in js
+    send = js[js.index("function send(text, echo)"):]
+    assert "idleFrom = Date.now();" in send[:send.index("\n}\n")], "typing resets it at once"
+
+
+def test_the_session_panel_has_a_version_line_above_uptime():
+    page = html()
+    session = page[page.index('<section id="session">'):page.index('<aside id="mapmon"')]
+    assert session.index('id="version"') < session.index('id="chrome"'), "above uptime"
+    assert "window.renderVersion(s.release, s.where && s.where.version)" in scripts()["app.js"]
+    assert "window.renderVersion = function (release, version)" in scripts()["about.js"]
+
+
 def test_a_running_route_says_which_step_of_how_many():
     """"Walking" on its own does not tell you whether to wait for it or go and
     do something else.  Said in the sidebar's Bot panel, with its buttons."""

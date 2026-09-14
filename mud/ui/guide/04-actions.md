@@ -10,7 +10,7 @@ Every trigger, alias, event, stat watch and timer ends in the same **Then** list
 
 ## Client commands in an action
 
-A **send** that starts with `/` runs as a client command, exactly as typing it would, and never reaches 3K. So an action can be `/group party off`, `/go bank`, or `/stop`. See [Groups and modes](#groups).
+A **send** that starts with `/` runs as a client command, exactly as typing it would, and never reaches 3K. So an action can be `/group party off`, `/go bank`, `/numpad off`, or `/stop`. See [Groups and modes](#groups).
 
 ## Putting pieces in
 

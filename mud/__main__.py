@@ -242,7 +242,10 @@ async def amain(args: argparse.Namespace) -> int:
             line = line.rstrip("\n")
             session.deadman.touched()          # a person at the keyboard
             for piece in commands.stack(line):
-                if piece.startswith("/"):
+                raw = commands.verbatim(piece)
+                if raw is not None:
+                    session.queue.now(raw)      # `\` at the front: as typed
+                elif piece.startswith("/"):
                     commands.handle(piece, session, host, _note)
                 elif not (host and host.input(piece)):
                     session.queue.now(piece)
