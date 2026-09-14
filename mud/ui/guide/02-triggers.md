@@ -14,7 +14,7 @@ A trigger watches the lines 3K sends, and when one matches, it does something: s
 
 - **Name**: optional, for the list.
 - **Group**: optional. Rules with the same group are switched on and off together. See [Groups and modes](#groups).
-- **Speed**: **normal** waits its turn when you are near 3K's command limit (APM). **immediate** goes at once, whatever the limit. **one per combat round** sends on the next round.
+- **Speed**: **normal** sends at once, behind anything already waiting. **immediate** goes at once, ahead of anything waiting. **one per combat round** sends on the next round.
 - **enabled**: untick to keep the trigger but stop it firing.
 - **stop after this**: no trigger after this one sees the line.
 - **gag**: keep the line off the screen. Other rules and the log still see it.

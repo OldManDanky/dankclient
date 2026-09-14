@@ -518,7 +518,7 @@ mud/codes.py      typed decoders, guild-line markup
 mud/state.py      world state, rebuilt from MIP
 mud/events.py     one bus; everything downstream subscribes here
 mud/clock.py      the 2s server beat, from tag N or tag E
-mud/outbound.py   APM governor (see below)
+mud/outbound.py   the send queue and the APM count (see below)
 mud/login.py      the two questions 3K asks before it lets you in
 mud/profile.py    characters, and which settings follow one
 mud/prefixes.py   the line markers, and taking them back out
@@ -573,12 +573,15 @@ the first kill to walking the whole board.
 so "hp below 35" fires twice a round, forever, if it triggers on level rather
 than on the crossing. That is how you quaff forty potions.
 
-**Pace by APM, not by the round.** 3K counts non-directional commands per
-minute and takes an interest above 100 — that is 1.67/second, where one command
-per 2s round is 30/min. Pacing to the round is three times stricter than the
-rule and adds two seconds of latency to a single trigger. Send immediately;
-throttle near the ceiling. Movement is exempt, and `DDD` tells you what counts
-as movement in the room you are standing in.
+**Count APM; do not govern it.** 3K counts non-directional commands per minute
+and watches for more than 100 — that is 1.67/second, where one command per 2s
+round is 30/min. Pacing to the round was three times stricter than the rule,
+and the client later held automated sends back near the ceiling instead. It
+does neither now: 3K's admins would rather a player knew they had gone over
+than have the client quietly slow them down. So everything is sent at once,
+the Session panel shows the minute's count, and reaching the limit prints one
+warning, armed again once the minute is back under 80. Movement is exempt, and
+`DDD` tells you what counts as movement in the room you are standing in.
 
 **Never parse MIP by line.** Messages arrive back-to-back with no separator,
 split across TCP segments at any byte, and payloads contain newlines. The
@@ -839,8 +842,8 @@ bot it defines; the field is still read, so old paths load, and ignored.
 
 A tick is a rule like any other -- a fifth kind beside triggers, aliases,
 events and stat watches.  So it is stored with the character, editable in the
-panel, renders as a script like the rest, and goes through the same governor:
-a timer is not a reason to trip 3k.org's APM ceiling.  `/tick` is a way of
+panel, renders as a script like the rest, and goes through the same queue and
+the same APM count.  `/tick` is a way of
 writing one rather than a second mechanism doing the same job, and it names the
 timer after what it sends, so `/untick xp` works without anybody naming
 anything and setting the same tick twice replaces it instead of stacking a
@@ -943,7 +946,7 @@ was asked for and the beat would round it to the next tick.  The wait hands
 the rest of the rule to the event loop and returns, so the line is shown and
 other rules fire while it counts; a rule that fires again meanwhile runs
 twice.  What comes out the other end is queued like any send, so the deadman
-holds it and the APM governor paces it.  A rule edited, switched off or
+holds it.  A rule edited, switched off or
 deleted while it waits does not carry on as it was, and `/stop` drops every
 waiting rule along with the steppers.  Up to an hour; longer is a timer.  As a
 script it becomes `await wait(2)` in an `async def`.
@@ -1360,7 +1363,7 @@ knocking, as after any link death.
 sends could carry a line break from somebody else, and a line break is a second
 command.  `send` turns them into spaces, and doubles `0xFF`, which telnet
 reads as the start of a command of its own.  A pasted block from the page goes
-out a line at a time, each through the aliases and the rate governor.
+out a line at a time, each through the aliases and the APM count.
 
 **The page's socket.**  Three malformed messages each closed it, taking every
 panel with it; a message that cannot be handled is now logged and the socket

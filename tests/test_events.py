@@ -70,11 +70,11 @@ def q(sent, *, soft=80, limit=100, exits=(), period=2.0):
                      exits=lambda: exits)
 
 
-# --- the governor is actions per minute, not the combat round ---------------
+# --- APM is counted and told, never waited for -----------------------------
 #
-# 3k.org watches non-directional commands per minute and takes an interest
-# above 100.  That is 1.67/second; one command per 2s round would be 30/min.
-# Pacing to the round was three times stricter than the actual rule.
+# 3k.org watches non-directional commands per minute, above 100.  The client
+# once held automated commands back near that; 3K's admins would rather the
+# player simply knew.  What still waits is the round, and a missing socket.
 
 def test_a_single_command_goes_out_at_once():
     sent = []
@@ -82,7 +82,7 @@ def test_a_single_command_goes_out_at_once():
     assert sent == ["get corpse"]
 
 
-def test_movement_does_not_count_against_the_budget():
+def test_movement_does_not_count():
     sent = []
     queue = q(sent, exits=("omp", "vortex"))
     for cmd in ("n", "south", "up", "omp", "vortex", "enter"):
@@ -100,54 +100,81 @@ def test_named_room_exits_are_movement_too():
     assert m.is_directional("kill orc", exits=["n"]) is False
 
 
-def test_it_throttles_only_as_the_minute_fills():
+def test_it_never_holds_anything_back_for_apm():
+    """Past the limit, it still goes at once: the player is told, not slowed."""
     sent = []
-    queue = q(sent, soft=5)
-    for i in range(5):
+    queue = q(sent, soft=2, limit=3)
+    for i in range(6):
         queue.put(f"cmd {i}")
-    assert sent == [f"cmd {i}" for i in range(5)]     # under budget: immediate
-    assert queue.apm.headroom() == 0
-
-    queue.put("one too many")
-    assert "one too many" not in sent
-    assert queue.pending == ["one too many"]
+    assert sent == [f"cmd {i}" for i in range(6)]
+    assert queue.pending == [] and queue.apm.rate() == 6
 
 
-def test_typed_commands_go_out_but_still_count():
-    """The budget is about the MUD's view, not about who typed it."""
+def test_typed_and_automated_commands_both_count():
+    """The count is 3K's view of it, not who typed what."""
     sent = []
-    queue = q(sent, soft=1)
+    queue = q(sent)
     queue.now("kill orc")
-    assert sent == ["kill orc"]
-    assert queue.apm.rate() == 1
-    queue.put("scripted")                 # budget spent -> queued
-    assert queue.pending == ["scripted"]
+    queue.put("scripted")
+    assert sent == ["kill orc", "scripted"] and queue.apm.rate() == 2
 
 
-def test_now_ignores_the_budget():
+def test_reaching_the_limit_says_so_once_until_the_minute_calms_down():
+    from mud.outbound import APMMeter
+    told = []
+    meter = APMMeter(limit=3, soft=2, on_over=told.append)
+    for i in range(5):
+        meter.record(f"cmd {i}")
+    assert told == [3], "once, at the crossing -- not once a command past it"
+    meter.record("n")
+    assert told == [3], "movement never counts"
+    meter._stamps.clear()                 # the minute passes
+    meter.rate()
+    for i in range(3):
+        meter.record(f"again {i}")
+    assert told == [3, 3], "and again, after it dropped back under soft"
+
+
+def test_the_session_prints_the_warning():
+    from mud import events
+    from mud.session import Session
+    s = Session("127.0.0.1", 1, sec_code=1)
+    said = []
+    s.bus.on(events.TEXT, said.append)
+    s.apm.limit, s.apm.soft = 2, 1
+    s.apm.record("kill orc")
+    assert not said
+    s.apm.record("kill orc")
+    text = b"".join(said).decode("latin-1")
+    assert "[client] APM: 2 commands in the last minute" in text, text
+
+
+def test_now_goes_at_once():
     sent = []
-    queue = q(sent, soft=0)
+    queue = q(sent)
     queue.put("urgent", pace=outbound.NOW)
     assert sent == ["urgent"]
 
 
-def test_panic_ignores_the_budget():
+def test_panic_goes_ahead_of_anything_waiting():
     sent = []
-    queue = q(sent, soft=0)
+    queue = q(sent)
+    queue.put("bash", pace=outbound.ROUND)
     queue.put("quaff heal", outbound.PANIC)
-    assert sent == ["quaff heal"]
+    assert sent == ["quaff heal"] and queue.pending == ["bash"]
 
 
-def test_panic_can_be_governed_when_asked():
+def test_panic_can_wait_its_turn_when_asked():
     sent = []
-    queue = q(sent, soft=0)
+    queue = q(sent)
     queue.panic_immediate = False
+    queue.put("bash", pace=outbound.ROUND)
     queue.put("quaff heal", outbound.PANIC)
-    assert sent == [] and queue.pending == ["quaff heal"]
+    assert sent == [] and queue.pending == ["quaff heal", "bash"]
 
 
 def test_round_pace_always_waits_for_the_beat():
-    """Attack rotations want the round even with budget to spare."""
+    """Attack rotations want the round, whatever else is going on."""
     sent = []
     queue = q(sent)
     queue.put("bash", pace=outbound.ROUND)
@@ -157,22 +184,21 @@ def test_round_pace_always_waits_for_the_beat():
 
 def test_priority_orders_the_backlog():
     sent = []
-    queue = q(sent, soft=0)
+    queue = q(sent)
+    queue.put("bash", pace=outbound.ROUND)    # something waiting
     queue.put("walk north")
     queue.put("walk east")
     queue.put("cast shield", outbound.HIGH)
-    assert queue.pending == ["cast shield", "walk north", "walk east"]
+    assert queue.pending == ["cast shield", "bash", "walk north", "walk east"]
 
 
 def test_order_is_preserved_once_anything_is_queued():
-    """A later command must not overtake a queued one just because the budget
-    recovered in between."""
+    """A later command must not overtake one already waiting."""
     sent = []
-    queue = q(sent, soft=1)
+    queue = q(sent)
     queue.put("one")                      # immediate
-    queue.put("two")                      # budget gone -> queued
-    queue.apm.soft = 80                   # budget recovers
-    queue.put("three")                    # queue non-empty -> still behind two
+    queue.put("two", pace=outbound.ROUND) # waits for the round
+    queue.put("three")                    # queue non-empty -> behind two
     assert sent == ["one"]
     assert queue.pending == ["two", "three"]
 
@@ -180,9 +206,8 @@ def test_order_is_preserved_once_anything_is_queued():
 def test_backlog_drains_on_the_tick():
     async def scenario():
         sent = []
-        queue = q(sent, soft=0, period=0.02)
-        queue.put("a"); queue.put("b")
-        queue.apm.soft = 80               # budget frees up
+        queue = q(sent, period=0.02)
+        queue.put("a", pace=outbound.ROUND); queue.put("b")
         queue.start()
         await asyncio.sleep(0.15)
         queue.stop()
@@ -193,9 +218,9 @@ def test_backlog_drains_on_the_tick():
 
 def test_flush_is_the_panic_button():
     sent = []
-    queue = q(sent, soft=0)
+    queue = q(sent)
     for i in range(5):
-        queue.put(f"cmd {i}")
+        queue.put(f"cmd {i}", pace=outbound.ROUND)    # waiting for the round
     assert queue.flush() == 5
     assert len(queue) == 0 and queue.dropped == 5
 

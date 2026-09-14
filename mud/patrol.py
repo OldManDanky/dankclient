@@ -25,9 +25,9 @@ and the declarative form builds exactly that loop for the common case::
 Two things are enforced rather than left to the script.  A bot stops when it
 drops below a health floor, because an unattended walker that keeps stepping
 into rooms at ten percent is how a character dies.  And every command still
-goes through the pacing queue, so a route cannot outrun the APM ceiling: 3K
-does not count movement, but it counts everything else, and a bot that fights
-its way round a circuit is spending that budget like anyone else.
+goes through the queue and is counted: 3K does not count movement, but it
+counts everything else, and a stepper that fights its way round a circuit
+shows in the APM count like anyone else -- told, not held back.
 """
 
 from __future__ import annotations

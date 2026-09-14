@@ -148,13 +148,12 @@ def test_rule_pace_reaches_the_queue():
     from mud.outbound import NOW, ROUND
 
     session, host, store = make()
-    session.apm.soft = 0                      # budget exhausted
 
     store.upsert({"pattern": "killing blow", "pace": NOW,
                   "actions": [{"type": "send", "text": "get corpse"}]})
     trig, cap = host.triggers.fire("Player dealt the killing blow to Gabriel.")[0]
     trig.fn(cap)
-    assert session.sent_lines == ["get corpse"], "immediate must ignore the budget"
+    assert session.sent_lines == ["get corpse"], "immediate goes at once"
 
     store.upsert({"pattern": "round start", "pace": ROUND,
                   "actions": [{"type": "send", "text": "bash"}]})

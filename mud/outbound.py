@@ -1,20 +1,19 @@
-"""Outbound commands, governed by actions per minute.
+"""Outbound commands: sent at once, and counted.
 
 3k.org measures APM -- non-directional commands entered per minute -- and
-takes an interest above 100.  That is the real constraint, and it is much
-looser than the combat round: 100/min is 1.67 commands per second, where one
-command per 2s round would be 30/min.  Pacing everything to the round is three
-times more conservative than the rule it was trying to respect, and it adds up
-to two seconds of latency to a single trigger firing a single command.
-
-So: send immediately, and throttle only as the minute budget gets tight.
+watches for more than 100.  The client used to hold automated commands back
+as the minute filled.  It no longer does: 3K's admins would rather a player
+knew they had gone over than have the client quietly slow them down.  So the
+count is shown in the Session panel, and reaching the limit says so, once
+(`APMMeter.on_over`).
 
 Movement is free.  Compass directions and the exits of the room you are
-standing in do not count against APM, which matters because walking is most of
-what an automated session does -- and we know the exits, because DDD tells us.
+standing in do not count, which matters because walking is most of what an
+automated session does -- and we know the exits, because DDD tells us.
 
-Two paths remain separate: what a human types goes out at once and is counted;
-what scripts send is governed.
+What still waits: anything put while there is no socket (it goes when there is
+one, unless it has gone stale), a command paced to the combat round, and
+anything behind one of those, so that nothing overtakes it.
 """
 
 from __future__ import annotations
@@ -31,15 +30,14 @@ from typing import Callable, Iterable
 #: lower sorts first
 PANIC, HIGH, NORMAL, LOW = -100, -10, 0, 10
 
-#: how a command relates to the governor
-NOW = "now"          # send at once, ignore the budget
+#: how a command relates to what is already waiting
+NOW = "now"          # send at once, ahead of anything waiting
 PACED = "paced"      # send at once unless the minute is tight  (default)
 ROUND = "round"      # at most one per combat round, always queued
 PACES = (NOW, PACED, ROUND)
 
-#: How long a queued command may wait before it has lost its moment.  Tied to
-#: the APM window on purpose: the budget is what makes a backlog wait at all,
-#: so a line the budget could not fit inside a whole minute was never going to
+#: How long a queued command may wait before it has lost its moment.  A minute:
+#: a line that could not go out inside a whole minute was never going to
 #: arrive in time to mean anything.  It is the deadman's rule, applied to the
 #: clock instead of the keyboard -- and it is what stops a disconnection from
 #: keeping a night of timers and firing them all when the socket comes back.
@@ -74,13 +72,21 @@ DIRECTIONS = {
 
 
 class APMMeter:
-    """Rolling count of non-directional commands over the last minute."""
+    """Rolling count of non-directional commands over the last minute.
 
-    def __init__(self, limit: int = 100, soft: int = 80, window: float = 60.0):
+    It counts and it tells; it holds nothing back.  Reaching `limit` calls
+    `on_over` once, and it is armed again when the minute has dropped back
+    under `soft` -- one warning per busy spell, not one per command in it.
+    """
+
+    def __init__(self, limit: int = 100, soft: int = 80, window: float = 60.0,
+                 on_over: Callable[[int], None] | None = None):
         self.limit = limit
-        #: start throttling here, leaving headroom for what the player types
+        #: where the Session panel's bar turns amber, and a warning re-arms
         self.soft = soft
         self.window = window
+        self.on_over = on_over
+        self._over = False
         self._stamps: deque[float] = deque()
 
     @staticmethod
@@ -95,17 +101,21 @@ class APMMeter:
         if self.is_directional(line, exits):
             return False
         self._stamps.append(time.monotonic())
+        count = self.rate()
+        if not self._over and count >= self.limit:
+            self._over = True
+            if self.on_over is not None:
+                self.on_over(count)
         return True
 
     def rate(self) -> int:
         cutoff = time.monotonic() - self.window
         while self._stamps and self._stamps[0] < cutoff:
             self._stamps.popleft()
+        if self._over and len(self._stamps) < self.soft:
+            self._over = False                  # calmed down: warn again next time
         return len(self._stamps)
 
-    def headroom(self) -> int:
-        """How many more actions fit under the soft limit."""
-        return max(0, self.soft - self.rate())
 
 
 class SendQueue:
@@ -125,7 +135,7 @@ class SendQueue:
         self._clock = clock
         self.apm = apm or APMMeter()
         self.exits = exits
-        #: most a backlog may drain per tick, still subject to the budget
+        #: most a backlog may drain per tick
         self.per_tick = per_tick
         self.panic_immediate = panic_immediate
         #: how long a line may wait before it is dropped instead of sent
@@ -155,7 +165,7 @@ class SendQueue:
     # --- sending ------------------------------------------------------------
 
     def now(self, line: str) -> None:
-        """Send at once.  Still counted -- the budget is about the MUD's view."""
+        """Send at once, and count it: the count is 3K's view, whoever sent it."""
         self._send(line)
         self.apm.record(line, self.exits())
         self.sent += 1
@@ -184,7 +194,9 @@ class SendQueue:
         if pace == NOW or (self.panic_immediate and priority <= PANIC):
             self.now(line)
             return
-        if pace != ROUND and not self._heap and self.apm.headroom() > 0:
+        # At once -- unless something is already waiting, which it must not
+        # overtake.  APM is counted, never waited for.
+        if pace != ROUND and not self._heap:
             self.now(line)
             return
         self._hold(priority, line)
@@ -237,10 +249,10 @@ class SendQueue:
         return gone
 
     def drain_once(self) -> None:
-        """One beat's worth: drop what went stale, then send what fits."""
+        """One beat's worth: drop what went stale, then send what is waiting."""
         self.drop_stale()
         for _ in range(self.per_tick):
-            if not self._heap or self.apm.headroom() <= 0:
+            if not self._heap:
                 break
             if not self.ready():
                 break

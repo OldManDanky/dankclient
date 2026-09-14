@@ -162,7 +162,7 @@ def handle(text: str, session, scripts, note) -> bool:
         c = session.clock
         a = session.apm
         note(f"tick source={c.source} period={c.period:.2f}s ticks={c.ticks}\n"
-             f"  apm {a.rate()}/{a.limit} (throttles at {a.soft}) "
+             f"  apm {a.rate()}/{a.limit} (warns at {a.limit}, holds nothing back) "
              f"queued={len(session.queue)} sent={session.queue.sent}")
 
     elif verb == "flush":
@@ -487,7 +487,7 @@ def _tick(session, verb: str, rest: str, scripts, note) -> None:
     """Timers, in the shape tt++ players already have in their fingers.
 
     A timer is a rule like any other -- stored with the character, editable in
-    the panel, and paced by the same governor -- so "/tick 290 xp" is a way of
+    the panel, and counted like the rest -- so "/tick 290 xp" is a way of
     writing one rather than a second mechanism that does the same job.
     """
     store = getattr(scripts, "rules", None)

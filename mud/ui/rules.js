@@ -226,8 +226,8 @@
   }
 
   const PACE_HINTS = {
-    now: 'Sends the moment it matches, even if the minute is busy.',
-    paced: 'Sends at once, but holds back as you approach the APM limit.',
+    now: 'Sends the moment it matches, ahead of anything waiting.',
+    paced: 'Sends at once, behind anything already waiting.',
     round: 'At most one per 2s combat round. For attack rotations.',
   };
 

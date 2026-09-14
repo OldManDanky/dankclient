@@ -13,8 +13,8 @@ Two things were wrong, and both are fixed here:
 * the queue must not keep for later what has lost its moment.  It is the
   same rule the deadman already follows -- "twenty stale commands going out
   the moment somebody comes back is the opposite of the point" -- and it now
-  applies to a line that has sat in the heap longer than the APM budget's own
-  minute, however it got there.
+  applies to a line that has sat in the heap longer than a minute, however it
+  got there.
 
 A blip still works: a rule that fires while the socket is away for a second
 or two goes out when it comes back.  That is worth keeping, and is what the

@@ -131,8 +131,8 @@ OPS = {
 }
 #: how quickly the actions reach the MUD
 PACE_LABELS = {
-    NOW: "immediate (ignores the APM budget)",
-    PACED: "normal (throttles near the APM limit)",
+    NOW: "immediate (ahead of anything waiting)",
+    PACED: "normal (at once, behind anything waiting)",
     ROUND: "one per combat round",
 }
 ACTIONS = ("send", "log", "wait")

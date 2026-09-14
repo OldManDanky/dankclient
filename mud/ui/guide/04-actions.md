@@ -23,7 +23,7 @@ A name the rule does not know is left as it is, braces and all.
 
 ## Speed
 
-3K watches how many commands you send in a minute (APM). **normal** sends at once when there is room and waits its turn near the limit. **immediate** goes at once regardless. **one per combat round** waits for the next round. Moving is free, and does not count.
+3K watches how many commands you send in a minute (APM), and the Session panel counts them. When a minute reaches 3K's limit of 100 the client tells you, once -- it never holds anything back. Moving is free, and does not count. **normal** sends at once, behind anything already waiting. **immediate** goes at once, ahead of anything waiting. **one per combat round** waits for the next round.
 
 ## When nothing goes out
 

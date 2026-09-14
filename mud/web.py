@@ -1019,7 +1019,7 @@ class WebServer:
             return
         # One command per line.  The input box is a single line, but anything
         # else talking to this socket need not be, and each line should meet
-        # the aliases and the rate governor on its own rather than go out as
+        # the aliases and the APM count on its own rather than go out as
         # one write with line breaks inside it.
         # And one command per `;`, as every MUD client has done: n;w;n;n;e;n.
         from .commands import stack

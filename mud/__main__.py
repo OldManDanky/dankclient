@@ -101,7 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="serve the browser UI (default: 8080, or the next free "
                         "one; 0 = let the machine choose)")
     p.add_argument("--apm", type=int, default=100, metavar="N",
-                   help="actions-per-minute ceiling 3k.org watches for "
+                   help="actions per minute 3k.org watches for; the client "
+                        "warns when you reach it and holds nothing back "
                         "(default 100; movement does not count)")
     p.add_argument("--map", default=str(here / "map.sqlite"), metavar="FILE",
                    help="map and log database (default: %(default)s)")

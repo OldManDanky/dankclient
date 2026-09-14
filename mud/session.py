@@ -128,7 +128,9 @@ class Session:
         self.bus = Bus()
         self.clock = Clock()
         self.world = World(self.bus)
-        self.apm = APMMeter()
+        #: Counts what 3K counts, and says so once when a minute reaches the
+        #: limit.  It never holds anything back.
+        self.apm = APMMeter(on_over=self._apm_over)
         #: Long-running tasks that drive the character -- routes, hunts, a
         #: speedwalk.  On the session rather than the script host, because
         #: walking somewhere should work with scripting switched off, and
@@ -587,13 +589,24 @@ class Session:
         """The queue threw away commands that had waited too long.
 
         Worth a line on screen either way.  After a disconnection it explains
-        the gap; at any other time it means the APM budget could not fit a
-        minute's backlog, which is worth knowing about the script that made it.
+        the gap; at any other time it means something waited a whole minute
+        behind a round-paced command, which is worth knowing about the script
+        that made it.
         """
         self.bus.emit(events.TEXT,
                       f"\r\n\x1b[33m[client] dropped {many} queued command(s) "
                       f"that had waited more than a minute -- too old to mean "
                       f"anything now.\x1b[0m\r\n".encode("latin-1"))
+
+    # --- APM -----------------------------------------------------------------
+
+    def _apm_over(self, count: int) -> None:
+        """A minute has reached 3K's limit: say so, once.  Awareness, not a
+        governor -- nothing is held back."""
+        said = (f"APM: {count} commands in the last minute -- 3K watches for more "
+                f"than {self.apm.limit}.  Moving does not count.")
+        self.bus.emit(events.TEXT,
+                      f"\r\n\x1b[33m[client] {said}\x1b[0m\r\n".encode("latin-1"))
 
     # --- the deadman ---------------------------------------------------------
 
