@@ -8,7 +8,8 @@ let p;
 function open(renamed) {
   p = page({ msgmon: 'div', mapmon: 'div', botpanel: 'div', roompanel: 'div',
     'panel-toggles': 'div', vitals: 'div', 'v-hp': 'div', 'v-sp': 'div', 'v-gp1': 'div',
-    'v-gp2': 'div', guild: 'div', 'lbl-hp': 'b', 'lbl-sp': 'b', 'lbl-gp1': 'b', 'lbl-gp2': 'b',
+    'v-gp2': 'div', glines: 'div', gline1: 'div', gline2: 'div',
+    'lbl-hp': 'b', 'lbl-sp': 'b', 'lbl-gp1': 'b', 'lbl-gp2': 'b',
     'vital-toggles': 'div' }, saved);
   p.els['lbl-gp1'].textContent = renamed || 'GP1';
   for (const id of ['botpanel', 'roompanel']) {
@@ -26,26 +27,26 @@ const flip = (name, on) => { const b = box(name); b.checked = on; b.onchange(); 
 
 open('Endurance');
 check('everything shows until asked otherwise',
-  ['vitals', 'v-hp', 'v-sp', 'v-gp1', 'v-gp2', 'guild'].every((id) => !off(id))
+  ['vitals', 'v-hp', 'v-sp', 'v-gp1', 'v-gp2', 'glines', 'gline1', 'gline2'].every((id) => !off(id))
   && !document.body.classList.contains('vitals-below'));
 check('a gauge you renamed is listed by your name for it',
   box('vital-v-gp1') && box('vital-v-gp1').parent.children[1].textContent === 'Endurance');
 
 flip('vital-v-gp2', false);
 check('unticking GP2 hides it, and only it', off('v-gp2') && !off('v-hp') && !off('vitals'));
-flip('vital-guild', false);
-check('the guild line can go too', off('guild'));
+flip('vital-gline1', false);
+check('either guild line can go too, on its own', off('gline1') && !off('gline2'));
 const where = p.els['vital-toggles'].querySelector('select');
 where.value = 'below';
 where.onchange();
 check('the strip can sit under the command box',
   document.body.classList.contains('vitals-below') && saved['vitals:where'] === 'below');
 flip('vitals-strip', false);
-check('or not be there at all', off('vitals'));
+check('or not be there at all, and the guild lines with it', off('vitals') && off('glines'));
 
 open();
 check('a reload keeps all of it',
-  off('v-gp2') && off('guild') && off('vitals') && !off('v-hp')
+  off('v-gp2') && off('gline1') && off('vitals') && off('glines') && !off('v-hp')
   && document.body.classList.contains('vitals-below')
   && !box('vital-v-gp2').checked && box('vital-v-hp').checked);
 flip('vitals-strip', true);

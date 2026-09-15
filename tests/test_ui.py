@@ -417,12 +417,53 @@ def test_the_enemy_is_the_last_gauge_in_the_vitals_strip():
     page, js = html(), scripts()
     strip = page[page.index('<div id="vitals">'):page.index('<form id="bar"')]
     order = [strip.index(f'id="{i}"') for i in ("v-hp", "v-sp", "v-gp1", "v-gp2",
-                                                  "v-enemy", "guild")]
-    assert order == sorted(order), "HP, SP, GP1, GP2, enemy, guild line"
+                                                  "v-enemy", "glines")]
+    assert order == sorted(order), "HP, SP, GP1, GP2, enemy, then the guild lines"
     assert '<div class="v en" id="v-enemy" hidden>' in strip
     assert 'id="combat"' not in page, "the sidebar panel is gone"
     assert "$('v-enemy').hidden = !fighting" in js["app.js"]
     assert "id: 'v-enemy'" in js["panels.js"], "and Layout can hide it"
+
+
+def test_the_two_guild_lines_sit_side_by_side_under_the_vitals():
+    """Their own row, not squeezed into the strip behind a divider, and drawn
+    as 3K sends them rather than as the pairs a parser could find."""
+    page, js = html(), scripts()
+    assert ('\n    <div id="glines" hidden><div id="gline1" hidden></div>'
+            '<div id="gline2" hidden></div></div>\n    <form id="bar"') in page
+    assert 'id="guild"' not in page and 'id="gline"' not in page
+    assert "const glines = p.glines || [[], []];" in js["app.js"]
+    assert "span.className = 'gl-' + colour" in js["app.js"]
+    assert "id: 'gline1'" in js["panels.js"] and "id: 'gline2'" in js["panels.js"]
+    style = page[page.index("<style>"):page.index("</style>")]
+    assert "body.vitals-below #glines{order:1}" in style.replace("body.vitals-below #vitals,", "")
+    for letter in "yrbgcv":
+        assert f".gl-{letter}{{color:var(--gl-{letter})}}" in style, letter
+        assert f"--gl-{letter}:" in style, f"--gl-{letter} has a default"
+
+
+def test_the_vitals_do_not_stretch_to_fill_a_wide_window():
+    """Four cells edge to edge on a wide screen read as stretched: each grows to
+    a cap and they stay together, and the guild lines are as wide as their text."""
+    page = html()
+    style = page[page.index("<style>"):page.index("</style>")]
+    cell = re.search(r"\n  \.v\{([^}]*)\}", style).group(1)
+    assert "max-width:260px" in cell and "flex:1 1 0" in cell
+    assert ".v.en{max-width:340px}" in style
+    assert "#glines>div{flex:0 1 auto;min-width:0}" in style
+
+
+def test_triggers_aliases_and_paths_can_be_reordered_but_not_while_searching():
+    js = scripts()
+    assert "onMove: window.options && window.options.query() ? null" in js["rules.js"]
+    assert "rq('move', { id: r.id, before: before ? before.id : '', group: folder })" in js["rules.js"]
+    assert "send({ op: 'move', id: r.id, before: before ? before.id : '', group: folder })" in js["routes.js"]
+    routes = js["routes.js"]
+    search = routes[routes.index("if (q) {"):routes.index("} else {", routes.index("if (q) {"))]
+    assert "onMove" not in search, "a searched list is flat: no moving there"
+    page = html()
+    for rule in (".rule .top>.grip", ".rule.drop-before", ".rule.drop-after", ".folder.drop-into"):
+        assert rule in page, rule
 
 
 def test_a_rolled_up_stepper_says_when_the_deadman_holds_it():

@@ -686,6 +686,35 @@ class RuleStore:
         self.register()
         return True
 
+    def move(self, rule_id: str, before_id: str = "", group: str | None = None) -> bool:
+        """Put a rule before another, or last in its folder -- dragged in Options.
+
+        Not cosmetic: triggers of equal priority are tried in list order, and a
+        stop rule ends the rest there.  Dropped among another folder's rules,
+        it is filed in that folder.
+        """
+        from .botstore import folder
+
+        rule = next((r for r in self.rules if r.id == rule_id), None)
+        if rule is None or rule_id == before_id:
+            return False
+        rest = [r for r in self.rules if r is not rule]
+        if group is not None:
+            rule.group = folder(group)
+        if before_id:
+            at = next((i for i, r in enumerate(rest) if r.id == before_id), None)
+            if at is None:
+                return False
+        else:
+            low = (rule.group or "").lower()
+            same = [i for i, r in enumerate(rest) if (r.group or "").lower() == low]
+            at = same[-1] + 1 if same else len(rest)
+        rest.insert(at, rule)
+        self.rules = rest
+        self.save()
+        self.register()
+        return True
+
     # --- views --------------------------------------------------------------
 
     def listing(self) -> dict:

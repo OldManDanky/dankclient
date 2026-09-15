@@ -146,6 +146,9 @@
         folderOf: (r) => r.group || '',
         card: card,
         onRename: (from, to) => send({ op: 'rename_folder', from, to }),
+        // Dragged, or moved with its grip's arrow keys.
+        onMove: (r, before, folder) =>
+          send({ op: 'move', id: r.id, before: before ? before.id : '', group: folder }),
         redraw: render,
       }));
     }

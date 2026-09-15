@@ -294,6 +294,8 @@
     '--ink': '#d8dde6', '--dim': '#7d8698', '--accent': '#6f9beb',
     '--hp': '#c8553d', '--sp': '#4a90d9', '--gp': '#5aa66f', '--enemy': '#b8863b',
     '--good': '#5aa66f', '--bad': '#c8553d', '--warn': '#f2cc60',
+    '--gl-y': '#fce94f', '--gl-r': '#ef2929', '--gl-b': '#729fcf',
+    '--gl-g': '#8ae234', '--gl-c': '#34e2e2', '--gl-v': '#ad7fa8',
     '--scroll': '#39404f', '--scroll-hover': '#4a5365', '--placeholder': '#4b525f',
     '--track': '#000000', '--room': '#333a48', '--room-unnamed': '#262b36', '--area-light': '34%',
   };
@@ -302,6 +304,9 @@
     '--ink': '#1e232d', '--dim': '#5d6676', '--accent': '#2f6bd1',
     '--hp': '#c0392b', '--sp': '#2a6db5', '--gp': '#2e8b57', '--enemy': '#a0620f',
     '--good': '#2e8b57', '--bad': '#c0392b', '--warn': '#9a6700',
+    // The guild lines' colours, dark enough to read on white.
+    '--gl-y': '#8a6d00', '--gl-r': '#b3261e', '--gl-b': '#2a5db0',
+    '--gl-g': '#2e7d32', '--gl-c': '#00787a', '--gl-v': '#7b4d8a',
     '--scroll': '#c3c9d3', '--scroll-hover': '#aab2bf', '--placeholder': '#9aa2af',
     '--track': '#dde1e7', '--room': '#c9d0dc', '--room-unnamed': '#dde2ea', '--area-light': '78%',
   };
@@ -319,6 +324,10 @@
       '--ink': fg, '--dim': mix(fg, bg, 0.42), '--accent': light ? s.blue : s.brightBlue,
       '--hp': s.red, '--sp': s.blue, '--gp': s.green, '--enemy': s.yellow,
       '--good': s.green, '--bad': s.red, '--warn': light ? s.yellow : s.brightYellow,
+      // 3K's guild-line colours in the scheme's own, bright on a dark ground.
+      '--gl-y': light ? s.yellow : s.brightYellow, '--gl-r': light ? s.red : s.brightRed,
+      '--gl-b': light ? s.blue : s.brightBlue, '--gl-g': light ? s.green : s.brightGreen,
+      '--gl-c': light ? s.cyan : s.brightCyan, '--gl-v': light ? s.magenta : s.brightMagenta,
       '--scroll': mix(bg, fg, 0.22), '--scroll-hover': mix(bg, fg, 0.32),
       '--placeholder': mix(fg, bg, 0.6), '--track': light ? mix(bg, fg, 0.12) : mix(bg, '#000000', 0.5),
       '--room': mix(bg, fg, 0.2), '--room-unnamed': mix(bg, fg, 0.1),

@@ -796,20 +796,28 @@ function render(s) {
     ul.append(li);
   }
 
-  const g = Object.entries(p.gline || {});
-  $('guild').hidden = g.length === 0;
-  const gl = $('gline');
-  gl.replaceChildren();
-  for (const [label, f] of g) {
-    const row = document.createElement('div');
-    const b = document.createElement('b');
-    b.textContent = label;
-    const v = document.createElement('span');
-    v.textContent = f.value;
-    if (f.status) v.className = 'g-' + f.status;
-    row.append(b, v);
-    gl.append(row);
-  }
+  // 3K's two guild lines, side by side under the vitals, as it sends them --
+  // colours and all, since some of what they say is only in the colour.
+  // Redrawn only when a line changes.
+  const glines = p.glines || [[], []];
+  let anyGuild = false;
+  ['gline1', 'gline2'].forEach((id, i) => {
+    const box = $(id);
+    const pieces = glines[i] || [];
+    const key = JSON.stringify(pieces);
+    if (box.dataset.drawn !== key) {
+      box.dataset.drawn = key;
+      box.replaceChildren(...pieces.map(([text, colour]) => {
+        const span = document.createElement('span');
+        span.textContent = text;
+        if (colour) span.className = 'gl-' + colour;
+        return span;
+      }));
+    }
+    box.hidden = !pieces.some(([text]) => text.trim());
+    anyGuild = anyGuild || !box.hidden;
+  });
+  $('glines').hidden = !anyGuild;
 
   if (window.renderWho) window.renderWho(s.who);
   if (window.renderBrief) window.renderBrief(s.brief);

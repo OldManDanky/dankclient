@@ -59,6 +59,44 @@ def test_gline_plain_strips_markup():
     assert codes.gline_plain("<cMthd>: <yTiger>") == "Mthd: Tiger"
 
 
+# Both as they came off the wire in the captures.  Neither's last part is a
+# "Label: Value" pair, so showing only pairs lost Aura and all of Maintain.
+AURA = "<gSA> : 5/5 <gConf> : <bRock Solid> <gReset> : 61 <gDual> : 0  <bAura>"
+MAINTAIN = "<gMaintain:> Fl Rp Dt Qk Pb"
+
+
+def test_gline_spans_keep_the_whole_line_and_its_colours():
+    spans = codes.gline_spans(AURA)
+    assert "".join(text for text, _ in spans) == codes.gline_plain(AURA), "spacing kept"
+    assert spans[-1] == ["Aura", "b"], "a state said only by its colour"
+    assert ["Rock Solid", "b"] in spans and [" : 5/5 ", ""] in spans
+    assert codes.gline_spans(MAINTAIN) == [["Maintain:", "g"], [" Fl Rp Dt Qk Pb", ""]]
+    assert codes.parse_gline(MAINTAIN) == {}, "which is why pairs alone were not enough"
+    assert codes.gline_spans("") == []
+
+
+def test_gline_spans_know_no_guild():
+    """Every guild's lines say different things in different shapes: another
+    guild's real lines draw just as faithfully, and a colour letter not seen
+    before shows its text rather than its markup."""
+    for line in (GLINE1, GLINE2, AURA, MAINTAIN):
+        assert "".join(t for t, _ in codes.gline_spans(line)) == codes.gline_plain(line), line
+    assert ["Tiger", "y"] in codes.gline_spans(GLINE1)
+    assert ["OFF", "r"] in codes.gline_spans(GLINE1)
+    assert codes.gline_spans("<wWard> : <mUp>") == [["Ward", ""], [" : ", ""], ["Up", ""]]
+
+
+def test_the_page_is_sent_both_guild_lines_as_pieces():
+    from mud.session import Session
+    from mud.web import WebServer
+
+    s = Session("127.0.0.1", 1, sec_code=1)
+    s.world.player.gline1, s.world.player.gline2 = AURA, MAINTAIN
+    player = WebServer(s).snapshot()["player"]
+    assert player["glines"] == [codes.gline_spans(AURA), codes.gline_spans(MAINTAIN)]
+    assert player["gline"]["SA"]["value"] == "5/5", "the pairs are still there for rules"
+
+
 def test_haa_actions_resolve_to_commands():
     obj = codes.parse_haa(
         "npc~Marble Monolith~A huge marble monolith~"

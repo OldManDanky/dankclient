@@ -23,6 +23,12 @@
      regardless; the mirror is the convenience. */
   const folded = new Map();
 
+  //: the card being dragged, { key, item }: only one list's cards drop there
+  let carried = null;
+  //: a card moved from the keyboard, whose grip keeps the focus once the list
+  //: comes back redrawn in the new order
+  let refocus = null;
+
   function open_set(key) {
     if (!folded.has(key)) {
       let was = [];
@@ -79,8 +85,78 @@
 
   window.folderTree = function (opts) {
     const { key, items, folderOf, card, onRename } = opts;
+    //: (item, before-item or null for last in the folder, folder path) -- given
+    //: when the list can be reordered, and not while it is being searched
+    const onMove = opts.onMove || null;
     const shut = open_set(key);
     const out = [];
+
+    const lowerHalf = (el, e) => {
+      const box = el.getBoundingClientRect();
+      return e.clientY > box.top + box.height / 2;
+    };
+    const unmark = (el) => {
+      el.classList.remove('drop-before');
+      el.classList.remove('drop-after');
+      el.classList.remove('drop-into');
+    };
+
+    /* A card that moves: dragged anywhere in its list, or with the arrow keys
+       on its grip -- a touchpad drag is a fiddly thing to be made to do. */
+    function movable(el, item, node, i) {
+      const grip = document.createElement('button');
+      grip.type = 'button';
+      grip.className = 'grip';
+      grip.textContent = '⠿';
+      grip.title = 'Drag to move it up or down, or into a folder -- or press ↑ ↓ here';
+      grip.setAttribute('aria-label', 'Move');
+      grip.onkeydown = (e) => {
+        const up = e.key === 'ArrowUp';
+        if (!up && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        if (up ? i === 0 : i === node.items.length - 1) return;
+        refocus = { key, id: item.id };
+        onMove(item, up ? node.items[i - 1] : node.items[i + 2] || null, node.path);
+      };
+      (el.querySelector('.top') || el).prepend(grip);
+      if (refocus && refocus.key === key && refocus.id === item.id) {
+        refocus = null;
+        setTimeout(() => grip.focus(), 0);
+      }
+
+      el.draggable = true;
+      el.ondragstart = (e) => {
+        carried = { key, item };
+        el.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(item.name || ''));
+        }
+      };
+      el.ondragend = () => {
+        carried = null;
+        el.classList.remove('dragging');
+      };
+      el.ondragover = (e) => {
+        if (!carried || carried.key !== key || carried.item === item) return;
+        e.preventDefault();
+        const below = lowerHalf(el, e);
+        el.classList.toggle('drop-after', below);
+        el.classList.toggle('drop-before', !below);
+      };
+      el.ondragleave = () => unmark(el);
+      el.ondrop = (e) => {
+        if (!carried || carried.key !== key) return;
+        e.preventDefault();
+        const moving = carried.item;
+        carried = null;
+        unmark(el);
+        if (moving === item) return;
+        const before = lowerHalf(el, e) ? node.items[i + 1] || null : item;
+        if (before === moving) return;          // dropped where it already was
+        onMove(moving, before, node.path);
+      };
+    }
 
     function row(node, depth) {
       const head = document.createElement('div');
@@ -131,6 +207,23 @@
         };
         head.append(ren);
       }
+      if (onMove) {
+        // Dropped on a folder's heading: filed last in that folder.
+        head.ondragover = (e) => {
+          if (!carried || carried.key !== key) return;
+          e.preventDefault();
+          head.classList.add('drop-into');
+        };
+        head.ondragleave = () => unmark(head);
+        head.ondrop = (e) => {
+          if (!carried || carried.key !== key) return;
+          e.preventDefault();
+          const moving = carried.item;
+          carried = null;
+          unmark(head);
+          onMove(moving, null, node.path);
+        };
+      }
       return head;
     }
 
@@ -141,14 +234,14 @@
         out.push(row(kid, depth));
         if (!shut.has(kid.path.toLowerCase())) walk(kid, depth + 1);
       }
-      for (const item of node.items) {
+      node.items.forEach((item, i) => {
         const el = card(item);
-        if (el) {
-          el.style.setProperty('--depth', depth);
-          if (depth) el.classList.add('filed');
-          out.push(el);
-        }
-      }
+        if (!el) return;
+        el.style.setProperty('--depth', depth);
+        if (depth) el.classList.add('filed');
+        if (onMove) movable(el, item, node, i);
+        out.push(el);
+      });
     }
 
     walk(build(items, folderOf), 0);

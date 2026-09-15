@@ -185,6 +185,38 @@ def gline_plain(raw: str) -> str:
     return _SPAN.sub(lambda m: m.group(2), raw)
 
 
+def gline_spans(raw: str) -> list[list[str]]:
+    """The guild line as ``[text, colour]`` pieces, for drawing as 3K sends it.
+
+    The colour is a letter (``y r b g c v``) or "" for plain text, and the
+    spacing is kept.  Shown as pieces rather than as `parse_gline`'s pairs,
+    because not everything on a guild line is a pair: ``<bAura>`` says its
+    state with nothing but its colour, and ``<gMaintain:> Fl Rp`` puts the
+    colon inside the colour -- both were lost when only pairs were shown.
+
+    Every guild's lines say different things in different shapes, so nothing
+    here knows any guild.  A tag in a colour letter this does not know is
+    shown as its plain text rather than as ``<x...>``: the letters come from
+    the guilds seen so far, and another may use one more.
+    """
+    pieces: list[list[str]] = []
+    pos = 0
+    for m in _ANY_SPAN.finditer(raw):
+        if m.start() > pos:
+            pieces.append([raw[pos:m.start()], ""])
+        letter = m.group(1).lower()
+        pieces.append([m.group(2), letter if letter in COLOURS else ""])
+        pos = m.end()
+    if pos < len(raw):
+        pieces.append([raw[pos:], ""])
+    return pieces
+
+
+#: A colour tag in any one letter, known or not -- for drawing, where an unknown
+#: one is better shown as its text than left on screen as markup.
+_ANY_SPAN = re.compile(r"<([A-Za-z])([^<>]*)>")
+
+
 # --- structured records ------------------------------------------------------
 
 

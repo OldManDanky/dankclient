@@ -377,6 +377,28 @@ class RouteStore:
                 return route
         return None
 
+    def move(self, route_id: str, before_id: str = "", group: str | None = None) -> bool:
+        """Put a path before another, or last in its folder -- dragged in Options.
+        Dropped among another folder's paths, it is filed in that folder."""
+        route = self.get(route_id)
+        if route is None or route_id == before_id:
+            return False
+        rest = [r for r in self.routes if r is not route]
+        if group is not None:
+            route.group = folder(group)
+        if before_id:
+            at = next((i for i, r in enumerate(rest) if r.id == before_id), None)
+            if at is None:
+                return False
+        else:
+            low = (route.group or "").lower()
+            same = [i for i, r in enumerate(rest) if (r.group or "").lower() == low]
+            at = same[-1] + 1 if same else len(rest)
+        rest.insert(at, route)
+        self.routes = rest
+        self.save()
+        return True
+
     def set_folder(self, name: str, on: bool) -> list[Route]:
         """Switch every route in a folder, and the folders under it.
 

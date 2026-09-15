@@ -66,6 +66,10 @@ class El {
 
   replaceChildren(...kids) { this.children = []; this.append(...kids); }
 
+  prepend(...kids) {
+    for (const k of kids.reverse()) { k.parent = this; this.children.unshift(k); }
+  }
+
   remove() {
     if (this.parent) {
       this.parent.children = this.parent.children.filter((c) => c !== this);

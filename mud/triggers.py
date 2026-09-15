@@ -98,6 +98,10 @@ class Trigger:
     stop: bool = False           # consume the line, skip lower-priority ones
     regex: re.Pattern | None = field(default=None, repr=False)
     literal: str | None = field(default=None, repr=False)
+    #: When it was added to its set: of equal priority, the earlier is tried
+    #: first -- which is the order of the rules list, so moving a rule up the
+    #: list is moving it up the queue.
+    seq: int = field(default=0, repr=False)
 
     def __post_init__(self) -> None:
         if self.mode == "command":
@@ -160,6 +164,7 @@ class TriggerSet:
         #: Triggers that ignore capitals, by their lower-cased literal.
         self._by_folded: dict[str, list[Trigger]] = defaultdict(list)
         self._always: list[Trigger] = []
+        self._added = 0
 
     def _buckets(self):
         return list(self._by_literal.values()) + list(self._by_folded.values())
@@ -168,6 +173,8 @@ class TriggerSet:
         return sum(len(v) for v in self._buckets()) + len(self._always)
 
     def add(self, trigger: Trigger) -> Trigger:
+        self._added += 1
+        trigger.seq = self._added
         if trigger.literal and trigger.fold:
             self._by_folded[trigger.literal].append(trigger)
         elif trigger.literal:
@@ -204,7 +211,10 @@ class TriggerSet:
             for literal, bucket in self._by_folded.items():
                 if literal in low:
                     found.extend(bucket)
-        found.sort(key=lambda t: t.priority)
+        # Priority, then the order they were added.  Priority alone left equal
+        # ones in the order of the buckets they sit in, which is not the order
+        # of anybody's list -- and a list you can reorder has to mean it.
+        found.sort(key=lambda t: (t.priority, t.seq))
         return found
 
     def fire(self, plain: str) -> list[tuple[Trigger, dict]]:

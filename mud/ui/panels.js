@@ -129,7 +129,8 @@
     { id: 'v-gp1', label: 'lbl-gp1', name: 'GP1' },
     { id: 'v-gp2', label: 'lbl-gp2', name: 'GP2' },
     { id: 'v-enemy', label: '', name: 'The enemy, while you fight' },
-    { id: 'guild', label: '', name: 'The guild line' },
+    { id: 'gline1', label: '', name: 'Guild line 1' },
+    { id: 'gline2', label: '', name: 'Guild line 2' },
   ];
   const vitalKey = (id) => `vital:${id}:shown`;
   const isOn = (k) => !store || store.get(k, '1') === '1';
@@ -141,6 +142,9 @@
     }
     const strip = $('vitals');
     if (strip) strip.classList.toggle('v-off', !isOn('vitals:shown'));
+    // The guild lines' row goes with the strip it sits under.
+    const guild = $('glines');
+    if (guild) guild.classList.toggle('v-off', !isOn('vitals:shown'));
     const below = !!store && store.get('vitals:where', 'above') === 'below';
     document.body.classList.toggle('vitals-below', below);
   }

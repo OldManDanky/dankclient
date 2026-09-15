@@ -28,7 +28,7 @@ import webbrowser
 from importlib import resources
 from pathlib import Path
 
-from . import events
+from . import codes, events
 
 def log(*parts: object) -> None:
     print("\x1b[2m[web]\x1b[0m", *parts, file=sys.stderr, flush=True)
@@ -438,6 +438,9 @@ class WebServer:
                     k: {"value": f.value, "colour": f.colour, "status": f.status}
                     for k, f in p.gline.items()
                 },
+                # Both guild lines as 3K sends them, for the row under the
+                # vitals: the pairs above miss what is said only in colour.
+                "glines": [codes.gline_spans(p.gline1), codes.gline_spans(p.gline2)],
             },
             "enemy_label": w.enemy_label,
             "labels": dict(w.labels),
@@ -1352,6 +1355,11 @@ class WebServer:
             store.delete(msg.get("id", ""))
         elif op == "file_in":
             store.file_in(msg.get("id", ""), str(msg.get("group") or ""))
+        elif op == "move":
+            # Dragged in Options: before another path, or last in a folder.
+            group = msg.get("group")
+            store.move(str(msg.get("id") or ""), str(msg.get("before") or ""),
+                       group if isinstance(group, str) else None)
         elif op == "rename_folder":
             store.rename_folder(str(msg.get("from") or ""),
                                 str(msg.get("to") or ""))
@@ -1416,6 +1424,11 @@ class WebServer:
                                str(msg.get("to") or ""))
         elif op == "delete":
             store.delete(msg.get("id", ""))
+        elif op == "move":
+            # Dragged in the panel: before another rule, or last in a folder.
+            group = msg.get("group")
+            store.move(str(msg.get("id") or ""), str(msg.get("before") or ""),
+                       group if isinstance(group, str) else None)
         elif op == "test":
             line = msg.get("line", "")
             # try it both ways: the same text may be a MUD line or something

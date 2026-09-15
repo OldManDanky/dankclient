@@ -418,6 +418,11 @@
       card: card,
       redraw: render,
       onRename: (from, to) => rq('rename_group', { from, to }),
+      // Dragged, or moved with its grip's arrow keys.  The order is the order
+      // triggers of the same priority are tried in.  Not while searching: the
+      // list is then not the whole of any folder.
+      onMove: window.options && window.options.query() ? null
+        : (r, before, folder) => rq('move', { id: r.id, before: before ? before.id : '', group: folder }),
       // Everything at or under this folder, not only what a search shows:
       // switching half a group off because the other half is hidden is not
       // what the button says it does.
