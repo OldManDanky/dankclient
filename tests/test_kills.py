@@ -86,7 +86,7 @@ def test_a_kill_is_a_death_line_then_its_killing_blow_and_xp_says_what_it_gave()
         [k] = kills_of(host)
         assert (k["mob"], k["killer"], k["rounds"], k["xp"], k["coins"]) == (
             "Red rat", "Player", 4, 500, 12)
-        assert status(session) == ["kills: 1  30K xp/hr"]
+        assert status(session) == ["kills: 1  30K xp/hr\nlast: Red rat  4 rounds  500 xp"]
 
 
 def test_the_answers_it_asked_for_are_hidden_and_yours_are_not():
@@ -109,7 +109,7 @@ def test_deaths_that_are_not_kills_are_not_counted():
         host.input(".kills ask off")
         rounds(session, 1, 2)
         kill(session, mob="Undead")
-        line(session, "Player dealt the killing blow to Red rat.")        # no death line
+        kill(session, mob="Celestial Lion")
         kill(session, mob="Angel", killer="red rat")                      # it killed a summon
         assert kills_of(host) == [] and sent(session) == []
         assert json.loads((Path(tmp) / "kills.json").read_text()) == {"ask": False}
@@ -151,7 +151,7 @@ def test_the_report_totals_filters_and_clears():
         host.input(".kills 1")
         assert "3 kills (the last 1)" in screen(session)
         host.input("3kReport-clear")
-        assert kills_of(host) == [] and status(session) == []
+        assert kills_of(host) == [] and status(session) == ["kills: 0"]
 
 
 def test_short_numbers_read_as_players_write_them():
@@ -180,3 +180,19 @@ def test_damage_dealt_and_taken_are_counted_for_each_kill():
         out = screen(session)
         assert "Dealt" in out and "Taken" in out
         assert "damage dealt 11.2K, 5,580 a kill  |  taken 2,537, 1,268 a kill" in out
+
+
+def test_the_killing_blow_is_the_kill_however_the_creature_died():
+    """3kdb wanted one of three death lines first; a gun does not gurgle in
+    its own blood, and its kill went uncounted."""
+    with tempfile.TemporaryDirectory() as tmp:
+        session, host = make(tmp)
+        assert status(session) == ["kills: 0"], "loaded, and shown to be"
+        host.input(".kills ask off")
+        rounds(session, 1, 2, enemy="Spiral Gun")
+        line(session, "You hit Spiral Gun 1 time for 9161 damage.")
+        line(session, "Spiral Gun explodes in a shower of sparks.")
+        line(session, "Player dealt the killing blow to Spiral Gun.")
+        [k] = kills_of(host)
+        assert (k["mob"], k["killer"], k["rounds"], k["dealt"]) == ("Spiral Gun", "Player", 2, 9161)
+        assert status(session) == ["kills: 1\nlast: Spiral Gun  2 rounds  9,161 dealt"]

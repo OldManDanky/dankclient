@@ -311,3 +311,18 @@ def test_block_asks_every_window_and_says_how_when_wrong():
                      {"t": "block", "op": "clear", "name": ""},
                      {"t": "block", "op": "list", "name": ""}]
     assert said == ["usage: /block <name>"] * 2
+
+
+def test_tracking_has_a_panel_of_its_own_not_the_session_panels():
+    """A player: the kill and xp trackers do not belong in the Session panel."""
+    ui = Path(__file__).resolve().parents[1] / "mud" / "ui"
+    html = (ui / "index.html").read_text()
+
+    def section(sid):
+        part = html[html.index(f'<section id="{sid}"'):]
+        return part[:part.index("</section>")]
+
+    assert 'id="pack-status"' not in section("session")
+    assert 'id="pack-status"' in section("trackpanel") and "Combat tracking" in section("trackpanel")
+    assert "'trackpanel'" in (ui / "panels.js").read_text()
+    assert "$('trackpanel').hidden = !lines.length" in (ui / "app.js").read_text()

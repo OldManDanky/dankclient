@@ -229,7 +229,7 @@
   h2 span{color:var(--accent);letter-spacing:0}
   /* The sidebar's panels roll up to their heading, as the map does, and keep
      in it what is worth seeing rolled up. */
-  #session>h2,#botpanel>h2,#roompanel>h2{cursor:pointer;display:flex;align-items:baseline;gap:6px}
+  #session>h2,#botpanel>h2,#trackpanel>h2,#roompanel>h2{cursor:pointer;display:flex;align-items:baseline;gap:6px}
   h2 .cm-toggle{margin-left:auto;color:var(--dim)}
   #session>h2 #status{margin-left:auto}
   #session>h2 .cm-toggle{margin-left:0}
@@ -237,7 +237,7 @@
   #side section.collapsed>h2{margin-bottom:0}
   .fold-sum{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
             text-transform:none;font-weight:400;color:var(--ink)}
-  #botpanel.collapsed .fold-sum{display:inline}
+  #botpanel.collapsed .fold-sum,#trackpanel.collapsed .fold-sum{display:inline}
   .fold-sum.held{color:var(--warn)}
   .dock-sum{display:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
             white-space:nowrap;text-transform:none;letter-spacing:0;font-weight:400;
@@ -513,7 +513,7 @@
              display:flex;flex-direction:column;gap:12px}
   #char-form h3{margin:0;font-size:13px;font-weight:600}
   #c-extras{display:flex;flex-wrap:wrap;gap:6px 16px}
-  #pack-status{font-size:11px;color:var(--dim);margin-top:4px}
+  #pack-status{display:flex;flex-direction:column;gap:3px;font-variant-numeric:tabular-nums}
   #pack-status:empty{display:none}
   .cm-hide{font:inherit;font-size:11px;padding:3px 8px;border:1px solid var(--line);
            border-radius:3px;background:var(--sunk);color:inherit;cursor:pointer}
@@ -882,7 +882,6 @@
       </div>
       <div id="version" title="Asking GitHub…"></div>
       <div id="chrome"></div>
-      <div id="pack-status"></div>
     </section>
 
     <aside id="mapmon" class="dock">
@@ -932,6 +931,13 @@
              placeholder="find a path: name, step or creature"
              aria-label="Find a path">
       <div id="bot-found" hidden></div>
+    </section>
+
+    <!-- What a tracking pack keeps count of -- kills, corpses -- in a panel of
+         its own rather than the Session panel's, and only while one is loaded. -->
+    <section id="trackpanel" hidden>
+      <h2 title="Click to collapse">Combat tracking <span class="fold-sum" id="track-sum"></span><span class="cm-toggle">&minus;</span></h2>
+      <div id="pack-status"></div>
     </section>
 
     <!-- Off unless it is asked for, and last when it is: it is the panel you

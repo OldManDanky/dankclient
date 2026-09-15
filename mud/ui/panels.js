@@ -205,11 +205,12 @@
 
   // --- rolling the sidebar's panels up ---------------------------------------
 
-  /* Session, Stepper and Room roll up to their heading, as the map does: a
+  /* Session, Stepper, Combat tracking and Room roll up to their heading, as
+     the map does: a
      click on the heading, remembered in this browser.  What is worth seeing
      rolled up stays in the heading -- whether you are connected, the path and
      its step, the room. */
-  const FOLDS = ['session', 'botpanel', 'roompanel'];
+  const FOLDS = ['session', 'botpanel', 'trackpanel', 'roompanel'];
 
   function foldable(id) {
     const section = $(id);

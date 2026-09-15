@@ -920,14 +920,18 @@ function render(s) {
     span.textContent = `${k}: ${v}`;
     chrome.append(span);
   }
-  // Lines a pack keeps up to date, such as the corpse counts.
+  // What a tracking pack keeps up to date -- kills, corpses -- in the Combat
+  // tracking panel, which is there only while a pack has something to say.
   const packLines = $('pack-status');
+  const lines = (s.status || []).flatMap((text) => String(text).split('\n'));
   packLines.replaceChildren();
-  for (const text of s.status || []) {
+  for (const text of lines) {
     const div = document.createElement('div');
     div.textContent = text;
     packLines.append(div);
   }
+  $('trackpanel').hidden = !lines.length;
+  $('track-sum').textContent = lines[0] || '';
 }
 
 window.focusInput = () => cmd.focus();

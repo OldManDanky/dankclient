@@ -4,7 +4,7 @@ Written from 3kdb's modules/corpsemanager/corpsemanager.tin.  The counts move
 with 3K's own lines -- a corpse into the coffin, out of the freezer, handed
 over by a packmule -- and are set outright whenever an inventory, or a look
 inside a container, shows them.  The total and what is where sit in the
-Session panel.
+Combat tracking panel.
 
 `corpse_select` uses the next corpse in 3kdb's order: coffin, freezer,
 cooler, golem or servant, inventory, and the smuggled ones only when there is

@@ -14,7 +14,7 @@ A pack is a script like any other, with a few more names in its globals:
 
     say(text)              one line, marked with the pack's name
     show(*lines)           lines as they are, for a table
-    status(text)           a line in the Session panel; "" takes it away
+    status(text)           lines in the Combat tracking panel; "" takes them away
     owner                  its own name, for gags it adds and takes away
     level()                a profession's level, once `profs` has said it
     await fresh_level()    sends `profs` and waits for the answer
@@ -86,7 +86,7 @@ PROFESSIONS = (
 
 EXTRAS = (
     Pack("corpses", "Corpse counts",
-         "where your corpses are, in the Session panel",
+         "where your corpses are, in the Combat tracking panel",
          (".corpses", "corpse_select"), "extra"),
     Pack("crafting", "Crafting helpers",
          "assembling, smelting, the forge, gems and tomes",

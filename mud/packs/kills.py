@@ -1,9 +1,10 @@
 """Kill stats: every kill, what it took and what it gave -- 3kdb's 3kReport.
 
 Written from 3kdb's common/corpsetrig.tin, which notices a death, and
-common/3kReport.tin, which tables them.  A kill is 3K's death line followed
-by "Someone dealt the killing blow to it." -- in sixty captures, 136 of 137
-killing blows came straight after one.  3K's round counter and the clock say
+common/3kReport.tin, which tables them.  A kill is 3K's "Someone dealt the
+killing blow to it." -- every kill in sixty captures has one.  3kdb also
+wanted one of three death lines before it, and a creature that dies any
+other way, a gun that does not gurgle in its own blood, was never counted.  3K's round counter and the clock say
 how long it took; `xp` and `coins`, asked after each kill as 3kdb asks them,
 say what it gave.  Their answers are kept off the screen when the pack asked,
 never when you did.
@@ -11,7 +12,7 @@ never when you did.
 `.kills` shows the last fifteen with totals and rates; `.kills 40`, `.kills
 <mob>`, `.kills clear`, and `.kills ask off` to stop asking.  3kdb's
 `3kReport` and `3kReport-clear` do the same.  The count and the xp an hour
-sit in the Session panel.
+sit in the Combat tracking panel, with the last kill.
 
 Damage is 3K's own numbers, with its numbers setting on: "You hit Cur 1 time
 for 9161 damage." dealt, "Cur hits you for 2537 damage!" taken -- raw, before
@@ -28,9 +29,6 @@ import time
 
 from mud.triggers import Trigger
 
-DEATH = (r"^(.+?) (?:screeches in agony and falls to the ground, dead|"
-         r"gasps for breath, then slumps into death|"
-         r"gurgles in (?:his|her|its) own blood as (?:he|she|it) dies)\.$")
 KILLING_BLOW = r"^(.+?) dealt the killing blow to (.+?)\.$"
 #: 3K's numbers: what you dealt, and what was dealt you before defenses
 HIT = r"^You hit .+ \d+ times? for ([\d,]+) damage\.$"
@@ -39,8 +37,6 @@ HURT = r"^.+ hits you for ([\d,]+) damage!$"
 NOT_KILLS = {"undead", "celestial lion", "undead wraith", "shadow panther",
              "something"}
 SHOWN = 15
-#: how long after a death its killing blow may come
-BLOW_WITHIN = 2.0
 #: how long the answers to xp and coins are waited for, and kept hidden
 ANSWER_WITHIN = 5.0
 #: the answers hidden while the pack is the one asking
@@ -55,7 +51,6 @@ ANSWERS = (r"^You have [\d,]+ total xp\.$",
 
 kills = []
 fight = {"base": 0, "last": 0, "began": None, "enemy": "", "dealt": 0, "taken": 0}
-death = {"mob": "", "at": 0.0}
 last = {"xp": None, "coins": None}
 waiting = {"kill": None, "want": set(), "until": 0.0}
 
@@ -91,11 +86,23 @@ def xp_rate(chosen):
 
 
 def paint():
-    if not kills:
-        status("")
-        return
-    rate = xp_rate(kills)
-    status(f"kills: {len(kills)}" + (f"  {short(rate)} xp/hr" if rate else ""))
+    # "kills: 0" from the start, so a loaded pack can be seen to be loaded.
+    rate = xp_rate(kills) if kills else None
+    lines = [f"kills: {len(kills)}" + (f"  {short(rate)} xp/hr" if rate else "")]
+    if kills:
+        k = kills[-1]
+        said = [k["mob"][:24]]
+        if k["rounds"]:
+            said.append(f"{k['rounds']} rounds")
+        if k.get("dealt"):
+            said.append(f"{short(k['dealt'])} dealt")
+        if k["xp"] is not None:
+            said.append(f"{short(k['xp'])} xp")
+        lines.append("last: " + "  ".join(said))
+    status("\n".join(lines))
+
+
+paint()
 
 
 # --- asking 3K what a kill gave ----------------------------------------------------
@@ -190,22 +197,12 @@ def hurt(m):
     fight["taken"] += number(m[1])
 
 
-@trigger(DEATH)
-def died(m):
-    mob = m[1].strip()
-    lower = mob.lower()
-    if lower in NOT_KILLS or lower.endswith("jugger support mech"):
-        death["mob"] = ""
-        return
-    death["mob"], death["at"] = mob, time.monotonic()
-
-
 @trigger(KILLING_BLOW)
 def blow(m):
-    mob, killer = death["mob"], m[1].strip()
-    if not mob or time.monotonic() - death["at"] > BLOW_WITHIN:
+    killer, mob = m[1].strip(), m[2].strip()
+    lower = mob.lower()
+    if lower in NOT_KILLS or lower.endswith("jugger support mech"):
         return
-    death["mob"] = ""
     if fight["enemy"] and killer.lower() == fight["enemy"].lower():
         return                                   # the creature killed a summon
     now = time.monotonic()
