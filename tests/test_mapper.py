@@ -953,3 +953,15 @@ def test_the_title_prefers_the_room_next_door():
     m.arrived(["n"], [], name="A road", at=0.0)
     m.here, m._was = None, start                 # something moved us
     assert m.arrived(["out"], [], name="The Tree of Life", at=1.0) == near
+
+
+def test_commands_waiting_for_a_room_are_kept_to_a_number():
+    """Only a room block trims them, so standing still while timers send grew
+    the list for hours: 50,000 sends measured at 6.8 MB."""
+    from mud.mapper import MOST_PENDING, Mapper
+    from mud.store import Store
+    mapper = Mapper(Store())
+    for i in range(MOST_PENDING * 4):
+        mapper.sent(f"say waiting {i}")
+    assert len(mapper._pending) == MOST_PENDING
+    assert mapper._pending[-1][1] == f"say waiting {MOST_PENDING * 4 - 1}"

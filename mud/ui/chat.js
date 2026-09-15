@@ -98,6 +98,10 @@
     store.set(`cm:${ID}:blocked`, JSON.stringify([...blocked].sort()));
   }
 
+  /* Is this message one the window shows, as filtered now? */
+  const shows = (m) => !muted.has(m.channel || 'other')
+    && !(hideMine && isMine(m)) && !isBlocked(m);
+
   function isMine(m) {
     return !!m.mine || (!!me && !!m.who && personKey(m.who) === me);
   }
@@ -255,7 +259,15 @@
     refresh();
   }
 
+  /* What the tag row was last drawn from: a message that changes none of it
+     can be added as a row without redrawing anything else. */
+  let drawnKey = '';
+  function tagKey() {
+    return `${tags().join('\n')}|${hideMine || messages.some(isMine)}|${messages.length > 0}`;
+  }
+
   function renderTags() {
+    drawnKey = tagKey();
     const all = tags();
     filterEl.replaceChildren();
     const anyMine = hideMine || messages.some(isMine);
@@ -318,13 +330,60 @@
 
   document.addEventListener('themechange', () => render());
 
+  /* One message as a row: its colour, its menu, and a click to reply. */
+  function makeRow(m) {
+    const row = document.createElement('div');
+    row.className = 'cm-msg' + (m.kind === 'tell' ? ' tell' : '') +
+      (m.soul ? ' soul' : '') + (m.mine ? ' mine' : '');
+    row.title = new Date((m.at || 0) * 1000).toLocaleTimeString() +
+      '  |  ' + (m.channel || '') + '  |  ' + (m.text || '') +
+      '\nright-click to colour';
+
+    const txt = document.createElement('span');
+    txt.className = 'cm-txt';
+    txt.textContent = m.text || '';
+    const colour = colourOf(m);
+    if (colour) txt.style.color = onGround(colour);
+
+    row.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openMenu(e.clientX, e.clientY, m);
+    };
+
+    row.onclick = () => {
+      const prefix = replyFor(m);
+      if (!prefix) return;
+      const cmd = document.getElementById('cmd');
+      cmd.value = prefix;
+      cmd.focus();
+    };
+
+    // BAB is the other way round from CAA: its message often omits the name
+    // ("moos at you."), so a tell still needs a speaker beside it.  A soul
+    // is one line, 3K's own; yours already starts "you moo at ...".
+    if (m.kind === 'tell' && m.soul) {
+      txt.textContent = m.mine ? `From afar, ${m.text || ''}`
+        : `From afar, ${m.who} ${m.text || ''}`;
+      row.append(txt);
+    } else if (m.kind === 'tell') {
+      const who = document.createElement('span');
+      who.className = 'cm-who';
+      who.textContent = speaker(m);
+      if (colour) who.style.color = onGround(colour);
+      row.append(who, txt);
+    } else {
+      row.append(txt);
+    }
+    return row;
+  }
+
   function render() {
     const atBottom =
       bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 24;
     bodyEl.replaceChildren();
 
-    const shown = messages.filter((m) => !muted.has(m.channel || 'other')
-      && !(hideMine && isMine(m)) && !isBlocked(m));
+    const shown = messages.filter(shows);
     const hidden = messages.length - shown.length;
     countEl.textContent = shown.length
       ? String(shown.length) + (hidden ? ` of ${messages.length}` : '')
@@ -339,52 +398,7 @@
       return;
     }
 
-    for (const m of shown.slice(-LIMIT)) {
-      const row = document.createElement('div');
-      row.className = 'cm-msg' + (m.kind === 'tell' ? ' tell' : '') +
-        (m.soul ? ' soul' : '') + (m.mine ? ' mine' : '');
-      row.title = new Date((m.at || 0) * 1000).toLocaleTimeString() +
-        '  |  ' + (m.channel || '') + '  |  ' + (m.text || '') +
-        '\nright-click to colour';
-
-      const txt = document.createElement('span');
-      txt.className = 'cm-txt';
-      txt.textContent = m.text || '';
-      const colour = colourOf(m);
-      if (colour) txt.style.color = onGround(colour);
-
-      row.oncontextmenu = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openMenu(e.clientX, e.clientY, m);
-      };
-
-      row.onclick = () => {
-        const prefix = replyFor(m);
-        if (!prefix) return;
-        const cmd = document.getElementById('cmd');
-        cmd.value = prefix;
-        cmd.focus();
-      };
-
-      // BAB is the other way round from CAA: its message often omits the name
-      // ("moos at you."), so a tell still needs a speaker beside it.  A soul
-      // is one line, 3K's own; yours already starts "you moo at ...".
-      if (m.kind === 'tell' && m.soul) {
-        txt.textContent = m.mine ? `From afar, ${m.text || ''}`
-          : `From afar, ${m.who} ${m.text || ''}`;
-        row.append(txt);
-      } else if (m.kind === 'tell') {
-        const who = document.createElement('span');
-        who.className = 'cm-who';
-        who.textContent = speaker(m);
-        if (colour) who.style.color = onGround(colour);
-        row.append(who, txt);
-      } else {
-        row.append(txt);
-      }
-      bodyEl.append(row);
-    }
+    for (const m of shown.slice(-LIMIT)) bodyEl.append(makeRow(m));
     if (atBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
   }
 
@@ -556,8 +570,28 @@
       window.ding(latest.kind === 'tell' ? 'tell' : 'channel');
     }
     if (messages.length > LIMIT * 2) messages = messages.slice(-LIMIT);
-    refresh();
+    // One more line on a window already showing its channel: add its row
+    // rather than rebuild three hundred, which a busy channel did every line.
+    // A new channel, a hidden line or an empty window redraws as before.
+    const first = bodyEl.children[0];
+    if (shows(latest) && first && first.className !== 'cm-empty' && tagKey() === drawnKey) {
+      appendRow(latest);
+    } else {
+      refresh();
+    }
   };
+
+  function appendRow(m) {
+    const atBottom =
+      bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 24;
+    bodyEl.append(makeRow(m));
+    while (bodyEl.children.length > LIMIT) bodyEl.children[0].remove();
+    const shownCount = messages.filter(shows).length;
+    const hidden = messages.length - shownCount;
+    countEl.textContent = shownCount
+      ? String(shownCount) + (hidden ? ` of ${messages.length}` : '') : '';
+    if (atBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
+  }
 
   /* /block, /unblock and /blocked, from the command line, an alias or a
      trigger: the server asks every window, and each says what it did. */

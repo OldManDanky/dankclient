@@ -138,7 +138,9 @@ try {
     fontFamily: fontStack(window.prefs.get('font:family', '')),
     fontSize: parseInt(window.prefs.get('font:size', '14'), 10) || 14,
     lineHeight: parseFloat(window.prefs.get('font:line', '1')) || 1,
-    scrollback: 50000,
+    // Hours of 3K; the log and /find keep the rest.  50,000 lines of a wide
+    // window was a hundred megabytes and more once a long session filled it.
+    scrollback: 20000,
     cursorBlink: false,
     // Output only -- the input bar owns the keyboard.  Without this xterm
     // swallows keystrokes into its hidden textarea and typing appears to do
@@ -245,6 +247,8 @@ function connect() {
    wanted it. It comes from the log, which stores lines with the ANSI stripped
    out, so it comes back without colour. Dimmed and ruled off rather than
    dressed up as live text: this is what happened, not what is happening. */
+let restored = false;
+
 function restore(lines) {
   if (!term || !lines || !lines.length) return;
   for (const line of lines) {
@@ -285,7 +289,12 @@ function handle(m) {
   if (m.t === 'text') {
     if (term) term.write(m.d);
   } else if (m.t === 'back') {
-    restore(m.lines);
+    // Once a page: a reconnect -- a laptop waking, a blip -- sends it again,
+    // and the terminal already has those lines.
+    if (!restored) {
+      restored = true;
+      restore(m.lines);
+    }
   } else if (m.t === 'state') {
     render(m);
     if (m.sounds && window.setSounds) window.setSounds(m.sounds);
@@ -920,18 +929,9 @@ function render(s) {
     span.textContent = `${k}: ${v}`;
     chrome.append(span);
   }
-  // What a tracking pack keeps up to date -- kills, corpses -- in the Combat
-  // tracking panel, which is there only while a pack has something to say.
-  const packLines = $('pack-status');
-  const lines = (s.status || []).flatMap((text) => String(text).split('\n'));
-  packLines.replaceChildren();
-  for (const text of lines) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    packLines.append(div);
-  }
-  $('trackpanel').hidden = !lines.length;
-  $('track-sum').textContent = lines[0] || '';
+  // What a tracking pack keeps up to date -- kills, corpses -- drawn in the
+  // Combat tracking panel by tracking.js.
+  if (window.renderTracking) window.renderTracking(s.status || []);
 }
 
 window.focusInput = () => cmd.focus();

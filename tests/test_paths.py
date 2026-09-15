@@ -431,3 +431,28 @@ def test_the_installer_source_is_valid_xml():
     import tools.build_msi as msi
 
     parseString(msi.source(Path(__file__).resolve().parents[1] / "mud"))
+
+
+def test_client_log_is_moved_aside_once_it_grows_past_its_size():
+    """Opened only when there is no console; a client failing on every start
+    would otherwise add to it for good."""
+    import tempfile
+    from mud import __main__ as main
+    with tempfile.TemporaryDirectory() as tmp:
+        # home() itself, not DANK_HOME: a map.sqlite beside the tests makes
+        # home() the checkout, and the log would be written there.
+        was = (main.home, sys.stdout, sys.stderr)
+        main.home = lambda: Path(tmp)
+        big = Path(tmp) / "client.log"
+        big.write_bytes(b"x" * ((5 << 20) + 1))
+        try:
+            sys.stdout = sys.stderr = None
+            handle = main.speak_to_a_file()
+        finally:
+            main.home, sys.stdout, sys.stderr = was
+        try:
+            assert (Path(tmp) / "client.log.1").stat().st_size == (5 << 20) + 1
+            assert (Path(tmp) / "client.log").stat().st_size < 1 << 20
+        finally:
+            if handle is not None:
+                handle.close()

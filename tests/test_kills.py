@@ -86,7 +86,8 @@ def test_a_kill_is_a_death_line_then_its_killing_blow_and_xp_says_what_it_gave()
         [k] = kills_of(host)
         assert (k["mob"], k["killer"], k["rounds"], k["xp"], k["coins"]) == (
             "Red rat", "Player", 4, 500, 12)
-        assert status(session) == ["kills: 1  30K xp/hr\nlast: Red rat  4 rounds  500 xp"]
+        assert status(session) == [{"label": "Kills", "value": "1", "note": "30K xp/hr",
+                                    "rows": [["Last", "Red rat", ["4 rounds", "500 xp"]]]}]
 
 
 def test_the_answers_it_asked_for_are_hidden_and_yours_are_not():
@@ -151,7 +152,8 @@ def test_the_report_totals_filters_and_clears():
         host.input(".kills 1")
         assert "3 kills (the last 1)" in screen(session)
         host.input("3kReport-clear")
-        assert kills_of(host) == [] and status(session) == ["kills: 0"]
+        assert kills_of(host) == [] and status(session) == [
+            {"label": "Kills", "value": "0", "note": ""}]
 
 
 def test_short_numbers_read_as_players_write_them():
@@ -187,7 +189,8 @@ def test_the_killing_blow_is_the_kill_however_the_creature_died():
     its own blood, and its kill went uncounted."""
     with tempfile.TemporaryDirectory() as tmp:
         session, host = make(tmp)
-        assert status(session) == ["kills: 0"], "loaded, and shown to be"
+        assert status(session) == [{"label": "Kills", "value": "0", "note": ""}], \
+            "loaded, and shown to be"
         host.input(".kills ask off")
         rounds(session, 1, 2, enemy="Spiral Gun")
         line(session, "You hit Spiral Gun 1 time for 9161 damage.")
@@ -195,4 +198,43 @@ def test_the_killing_blow_is_the_kill_however_the_creature_died():
         line(session, "Player dealt the killing blow to Spiral Gun.")
         [k] = kills_of(host)
         assert (k["mob"], k["killer"], k["rounds"], k["dealt"]) == ("Spiral Gun", "Player", 2, 9161)
-        assert status(session) == ["kills: 1\nlast: Spiral Gun  2 rounds  9,161 dealt"]
+        assert status(session) == [{"label": "Kills", "value": "1", "note": "",
+                                    "rows": [["Last", "Spiral Gun", ["2 rounds", "9,161 dealt"]]]}]
+
+
+def test_a_stop_rule_ends_your_own_triggers_but_never_a_packs():
+    """A corpse trigger with stop ticked, on the killing blow, hid every kill
+    from Kill stats: the pack's trigger comes after the player's rules."""
+    from mud.triggers import Trigger
+
+    with tempfile.TemporaryDirectory() as tmp:
+        session = Session("127.0.0.1", 1, sec_code=12345)
+        session.sent_lines = []
+        session.send = session.sent_lines.append
+        session.queue._send = session.sent_lines.append
+        session._writer = object()
+        host = ScriptHost(session, Path(tmp) / "scripts")
+        corpse, later = [], []
+        host.triggers.add(Trigger(r"dealt the killing blow", lambda m: corpse.append(1),
+                                  "regex", "rules", 0, True))
+        host.triggers.add(Trigger(r"killing blow", lambda m: later.append(1),
+                                  "regex", "rules", 1, False))
+        packs.use_extras(host, ["kills"], Path(tmp))
+        host.input(".kills ask off")
+        line(session, "Someone dealt the killing blow to rat.")
+        assert corpse == [1], "the corpse trigger still fires"
+        assert later == [], "and still stops the player's own triggers after it"
+        assert [k["mob"] for k in kills_of(host)] == ["rat"], "but not the pack's"
+
+
+def test_only_the_newest_kills_are_kept_but_every_one_is_counted():
+    with tempfile.TemporaryDirectory() as tmp:
+        session, host = make(tmp)
+        host.input(".kills ask off")
+        g = host.aliases.fire(".kills")[0][0].fn.__globals__
+        g["MOST_KEPT"] = 50
+        for i in range(120):
+            line(session, f"Someone dealt the killing blow to rat {i}.")
+        kept = kills_of(host)
+        assert len(kept) == 50 and kept[0]["mob"] == "rat 70" and kept[-1]["mob"] == "rat 119"
+        assert status(session)[0]["value"] == "120"

@@ -37,6 +37,9 @@ HURT = r"^.+ hits you for ([\d,]+) damage!$"
 NOT_KILLS = {"undead", "celestial lion", "undead wraith", "shadow panther",
              "something"}
 SHOWN = 15
+#: Kills kept for the report.  Counted past this, but the oldest are let go:
+#: a stepper left running for days would keep every one.
+MOST_KEPT = 5000
 #: how long the answers to xp and coins are waited for, and kept hidden
 ANSWER_WITHIN = 5.0
 #: the answers hidden while the pack is the one asking
@@ -50,6 +53,7 @@ ANSWERS = (r"^You have [\d,]+ total xp\.$",
            r"^You have [\d,]+ coins in the bank\.$")
 
 kills = []
+dropped = {"n": 0}
 fight = {"base": 0, "last": 0, "began": None, "enemy": "", "dealt": 0, "taken": 0}
 last = {"xp": None, "coins": None}
 waiting = {"kill": None, "want": set(), "until": 0.0}
@@ -86,20 +90,21 @@ def xp_rate(chosen):
 
 
 def paint():
-    # "kills: 0" from the start, so a loaded pack can be seen to be loaded.
+    # A count of 0 from the start, so a loaded pack can be seen to be loaded.
     rate = xp_rate(kills) if kills else None
-    lines = [f"kills: {len(kills)}" + (f"  {short(rate)} xp/hr" if rate else "")]
+    item = {"label": "Kills", "value": f"{len(kills) + dropped['n']:,}",
+            "note": f"{short(rate)} xp/hr" if rate else ""}
     if kills:
         k = kills[-1]
-        said = [k["mob"][:24]]
+        bits = []
         if k["rounds"]:
-            said.append(f"{k['rounds']} rounds")
+            bits.append(f"{k['rounds']} rounds")
         if k.get("dealt"):
-            said.append(f"{short(k['dealt'])} dealt")
+            bits.append(f"{short(k['dealt'])} dealt")
         if k["xp"] is not None:
-            said.append(f"{short(k['xp'])} xp")
-        lines.append("last: " + "  ".join(said))
-    status("\n".join(lines))
+            bits.append(f"{short(k['xp'])} xp")
+        item["rows"] = [["Last", k["mob"], bits]]
+    status(item)
 
 
 paint()
@@ -216,6 +221,9 @@ def blow(m):
     fight["base"], fight["began"] = fight["last"], now
     fight["dealt"] = fight["taken"] = 0
     kills.append(kill)
+    if len(kills) > MOST_KEPT:
+        del kills[0]
+        dropped["n"] += 1
     paint()
     if asking():
         ask(kill, ("xp", "coins"))
@@ -233,6 +241,7 @@ def report(arg):
     low = arg.strip().lower()
     if low == "clear":
         kills.clear()
+        dropped["n"] = 0
         paint()
         say("kill stats cleared.")
         return

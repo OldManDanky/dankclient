@@ -68,6 +68,9 @@ def flags(url: str, profile: Path, width: int = 1280, height: int = 820) -> list
         # phoning home about it.
         "--disable-background-networking",
         "--disable-sync",
+        # Chromium sizes its own cache otherwise, and it only grows over a
+        # player's months of use.
+        "--disk-cache-size=52428800",
     ]
 
 

@@ -513,8 +513,34 @@
              display:flex;flex-direction:column;gap:12px}
   #char-form h3{margin:0;font-size:13px;font-weight:600}
   #c-extras{display:flex;flex-wrap:wrap;gap:6px 16px}
-  #pack-status{display:flex;flex-direction:column;gap:3px;font-variant-numeric:tabular-nums}
+  /* Combat tracking: a block for each pack -- the count big enough to read in
+     a fight, the rate in the accent, the detail and the chips quieter. */
+  #pack-status{display:flex;flex-direction:column;font-variant-numeric:tabular-nums}
   #pack-status:empty{display:none}
+  .trk{padding:8px 0;border-top:1px solid var(--line);min-width:0}
+  .trk:first-child{border-top:0;padding-top:0}
+  .trk:last-child{padding-bottom:0}
+  .trk-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .trk-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+             color:var(--dim);font-weight:600}
+  .trk-note{font-size:11px;color:var(--accent);white-space:nowrap}
+  .trk-value{font-size:22px;line-height:1.15;font-weight:600;color:var(--ink);
+             letter-spacing:-.01em;margin-top:1px}
+  .trk-value.zero{color:var(--dim);font-weight:500}
+  .trk-row{display:grid;grid-template-columns:auto 1fr;column-gap:8px;
+           align-items:baseline;margin-top:5px;min-width:0}
+  .trk-key{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .trk-text{font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trk-bits{grid-column:2;display:flex;flex-wrap:wrap;column-gap:6px;
+            font-size:10.5px;color:var(--dim)}
+  .trk-bit+.trk-bit::before{content:'\00b7';margin-right:6px;color:var(--dim);opacity:.7}
+  .trk-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .trk-chip{display:inline-flex;align-items:baseline;gap:5px;font-size:10.5px;
+            padding:1px 7px;border-radius:9px;border:1px solid var(--line);
+            background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .trk-chip-name{color:var(--dim)}
+  .trk-chip-n{color:var(--ink);font-weight:600}
+  .trk-line{font-size:11px;color:var(--ink)}
   .cm-hide{font:inherit;font-size:11px;padding:3px 8px;border:1px solid var(--line);
            border-radius:3px;background:var(--sunk);color:inherit;cursor:pointer}
   .cm-hide:hover,.cm-hide:focus{border-color:var(--accent)}
@@ -2019,6 +2045,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="help.js"></script>
   <script src="about.js"></script>
   <script src="panels.js"></script>
+  <script src="tracking.js"></script>
   <script src="fonts.js"></script>
   <script src="numpad.js"></script>
   <script src="history.js"></script>

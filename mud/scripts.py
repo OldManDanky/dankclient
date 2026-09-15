@@ -296,8 +296,28 @@ class ScriptHost:
         # Rules' triggers fire here too.  What they send answers 3K, which
         # the deadman lets through -- unless it is a move.
         with answering():
-            for trig, captured in self.triggers.fire(plain):
+            for trig, captured in self.fired(plain):
                 self._call(trig.fn, captured, raw=raw, plain=plain)
+
+    def fired(self, plain: str) -> list:
+        """What fires on a line: the player's triggers up to a stop, and every
+        pack's whatever stopped before it.
+
+        Stop is for the player's own list -- the rest of it does not see the
+        line.  A pack counting kills is watching, not answering, and a corpse
+        trigger with stop ticked hid every killing blow from Kill stats.
+        """
+        hits, stopped = [], False
+        for trig in self.triggers.candidates(plain):
+            if stopped and trig.owner not in self.builtin:
+                continue
+            captured = trig.match(plain)
+            if captured is None:
+                continue
+            hits.append((trig, captured))
+            if trig.stop and trig.owner not in self.builtin:
+                stopped = True
+        return hits
 
     def _on_state(self, name: str, new: Any, old: Any) -> None:
         player = self.session.world.player

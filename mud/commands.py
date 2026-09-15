@@ -212,7 +212,9 @@ def handle(text: str, session, scripts, note) -> bool:
         elif not rest:
             note("usage: /test <a line as the MUD would send it>")
         else:
-            hits = scripts.triggers.fire(rest)
+            # What really fires: a stop rule ends your own, never a pack's.
+            fired = getattr(scripts, "fired", None)
+            hits = fired(rest) if fired else scripts.triggers.fire(rest)
             note(f"{len(hits)} trigger(s) matched {rest!r}"
                  + "".join(f"\n  [{t.owner}] {t.pattern!r} -> {c}" for t, c in hits))
             session.bus.emit(events.LINE, rest, rest)

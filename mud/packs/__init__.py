@@ -14,7 +14,9 @@ A pack is a script like any other, with a few more names in its globals:
 
     say(text)              one line, marked with the pack's name
     show(*lines)           lines as they are, for a table
-    status(text)           lines in the Combat tracking panel; "" takes them away
+    status(item)           a block in the Combat tracking panel -- {label, value,
+                           note, rows: [[key, text, [bits]]], chips: [[name, n]]}
+                           -- or a line of text; "" takes it away
     owner                  its own name, for gags it adds and takes away
     level()                a profession's level, once `profs` has said it
     await fresh_level()    sends `profs` and waits for the answer
@@ -232,7 +234,7 @@ def _load(host, pack: Pack, folder: Path | None) -> bool:
     def say(text: str) -> None:
         show(f"\x1b[36m[{pack.name}]\x1b[0m {text}")
 
-    def status(text: str) -> None:
+    def status(text) -> None:
         lines = session.__dict__.setdefault("pack_status", {})
         if text:
             lines[owner] = text

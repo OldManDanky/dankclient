@@ -114,3 +114,34 @@ def test_every_outbound_line_reaches_the_log():
 
         sent = [line for _, line in read_commands(Path(tmp) / "run")]
         assert sent == ["3klient 12345~" + session.version, "climb pipe"]
+
+
+def test_old_captures_are_pruned_but_never_todays_fixtures_or_strangers():
+    import os
+    import tempfile
+    import time as clock
+    from mud.capture import FIXTURES, prune
+    now = clock.mktime((2026, 10, 20, 12, 0, 0, 0, 0, -1))
+    old = now - 40 * 86400
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+
+        def make(stem, when):
+            for suffix in (".bin", ".idx", ".out"):
+                path = folder / f"{stem}{suffix}"
+                path.write_text("x")
+                os.utime(path, (when, when))
+
+        make("20260910-101010", old)            # a month and more: goes
+        make("20260910-101010-1", old)          # its second run: goes
+        make("20261015-090000", now - 5 * 86400)  # recent: stays
+        make("20261020-080000", old)            # today's name, old clock: stays
+        make("my-notes", old)                   # not the client's: stays
+        assert prune(folder, now=now) == 2
+        left = sorted(p.stem for p in folder.glob("*.bin"))
+        assert left == ["20261015-090000", "20261020-080000", "my-notes"], left
+        assert not (folder / "20260910-101010.idx").exists()
+
+        (folder / FIXTURES).write_text("{}")
+        make("20260901-000000", old)
+        assert prune(folder, now=now) == 0, "a checkout's regression fixtures stay"

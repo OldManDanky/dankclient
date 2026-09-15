@@ -210,10 +210,16 @@ class TriggerSet:
 
     def remove_owner(self, owner: str) -> int:
         n = 0
-        for bucket in self._buckets():
-            before = len(bucket)
-            bucket[:] = [t for t in bucket if t.owner != owner]
-            n += before - len(bucket)
+        for table in (self._by_literal, self._by_folded):
+            for literal in list(table):
+                bucket = table[literal]
+                before = len(bucket)
+                bucket[:] = [t for t in bucket if t.owner != owner]
+                n += before - len(bucket)
+                if not bucket:
+                    # Every line is checked against every key, empty or not:
+                    # 20,000 edited patterns left 20,000 keys behind.
+                    del table[literal]
         before = len(self._always)
         self._always[:] = [t for t in self._always if t.owner != owner]
         return n + before - len(self._always)

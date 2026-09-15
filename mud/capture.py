@@ -25,9 +25,52 @@ commands cannot be mapped, replayed or debugged after the fact.
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from typing import Iterator
+
+
+#: How long a capture is kept.  It is the evidence for a report, and a month
+#: covers any report still being made; after that it is only disk -- three
+#: files a session, for good.
+KEEP_DAYS = 30
+#: What the client names its own captures: 20260915-172925, or -1 after it.
+_OURS = re.compile(r"^\d{8}-\d{6}(?:-\d+)?$")
+#: A captures folder holding this is a checkout's regression fixtures, which
+#: are never pruned however old they are.
+FIXTURES = "regress-baseline.json"
+
+
+def prune(folder: str | Path, keep_days: int = KEEP_DAYS,
+          now: float | None = None) -> int:
+    """Delete the client's own captures older than `keep_days`.  How many sets.
+
+    A set is its .bin, .idx and .out, and goes when the newest of them is old
+    enough.  Never today's, never a file the client did not name, and never
+    a folder of regression fixtures.
+    """
+    folder = Path(folder)
+    if not folder.is_dir() or (folder / FIXTURES).exists():
+        return 0
+    now = time.time() if now is None else now
+    cutoff = now - keep_days * 86400
+    today = time.strftime("%Y%m%d", time.localtime(now))
+    gone = 0
+    for data in sorted(folder.glob("*.bin")):
+        if not _OURS.match(data.stem) or data.stem.startswith(today):
+            continue
+        parts = [data.with_suffix(s) for s in (".bin", ".idx", ".out")]
+        try:
+            newest = max(p.stat().st_mtime for p in parts if p.exists())
+        except (OSError, ValueError):
+            continue
+        if newest >= cutoff:
+            continue
+        for part in parts:
+            part.unlink(missing_ok=True)
+        gone += 1
+    return gone
 
 
 class CaptureWriter:

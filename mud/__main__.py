@@ -25,6 +25,7 @@ from . import update
 from . import NAME, SLUG, __version__
 from .paths import home
 from .capture import CaptureWriter
+from .capture import prune as prune_captures
 from .store import Store
 from . import commands
 from .botstore import RouteStore
@@ -140,11 +141,22 @@ async def amain(args: argparse.Namespace) -> int:
     # Capture by default: forgetting to pass --log is the failure mode, and
     # a session you can't replay is a session you have to play again.
     raw_log = None
+    if not args.no_log and not args.log:
+        # Only the client's own folder, and only its own old captures.
+        try:
+            prune_captures(home() / "captures")
+        except OSError:
+            pass
     if not args.no_log:
         stem = args.log or str(
             home() / "captures" / f"{datetime.now():%Y%m%d-%H%M%S}")
         raw_log = CaptureWriter(stem)
     store = None if args.no_map else Store(args.map)
+    if store is not None:
+        try:
+            store.forget_old_lines()
+        except Exception:                # an old log is never a reason not to start
+            pass
     chars = None if args.no_profiles else Characters(args.profiles, args.scripts)
     session = Session(
         args.host,
@@ -448,6 +460,10 @@ def speak_to_a_file() -> object | None:
     path = home() / "client.log"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Kept to a size: a client that failed on every start would otherwise
+        # add a traceback a start, for good.  One older file is kept beside it.
+        if path.exists() and path.stat().st_size > 5 << 20:
+            path.replace(path.with_name("client.log.1"))
         handle = open(path, "a", encoding="utf-8", errors="replace",
                       buffering=1)
     except OSError:

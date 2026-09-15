@@ -245,3 +245,15 @@ def test_a_pattern_with_alternatives_has_no_literal_to_miss_the_others_by():
         for trig, captured in triggers.fire(line):
             trig.fn(captured)
     assert hits == ["orc", "rat"]
+
+
+def test_removing_triggers_leaves_no_empty_buckets_behind():
+    """Every line is checked against every key: 20,000 edited patterns once
+    left 20,000 empty keys to check."""
+    triggers = TriggerSet()
+    for i in range(500):
+        triggers.add(Trigger(f"unique text number {i}", lambda m: None, "contains", "rules"))
+        triggers.add(Trigger(f"(?i)FOLDED TEXT {i}", lambda m: None, "regex", "rules"))
+        triggers.remove_owner("rules")
+    assert len(triggers) == 0
+    assert not triggers._by_literal and not triggers._by_folded

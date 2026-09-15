@@ -20,8 +20,10 @@ import time
 
 PLACES = ("coffin", "freezer", "cooler", "golem", "servant", "inventory",
           "smuggle")
-SHORT = {"coffin": "C", "freezer": "F", "cooler": "Clr", "golem": "Gol",
-         "servant": "Srv", "inventory": "I", "smuggle": "S"}
+#: what each is called on a chip in the Combat tracking panel
+NAMES = {"coffin": "coffin", "freezer": "freezer", "cooler": "cooler",
+         "golem": "golem", "servant": "servant", "inventory": "carried",
+         "smuggle": "smuggled"}
 #: the most a freezer or a cooler holds
 MOST_HELD = 50
 #: "You have no corpse" looks in the inventory, but not more often than this
@@ -34,9 +36,8 @@ asked = {"at": 0.0}
 
 
 def paint():
-    total = sum(count.values())
-    where = "  ".join(f"{SHORT[p]} {count[p]}" for p in PLACES if count[p])
-    status(f"corpses: {total}" + (f"  ({where})" if where else ""))
+    status({"label": "Corpses", "value": f"{sum(count.values()):,}",
+            "chips": [[NAMES[p], f"{count[p]:,}"] for p in PLACES if count[p]]})
 
 
 def put(place, n):

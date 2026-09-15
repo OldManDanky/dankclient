@@ -192,6 +192,21 @@ clan('Other', 'x');
 check('/block keeps them out', same(texts(), ['[Clan] Friend : back']), texts());
 setBlocked('clear');
 check('/unblock all empties the list', saved['cm:msgmon:blocked'] === '[]', saved['cm:msgmon:blocked']);
+// --- a busy channel ----------------------------------------------------------------
+for (const k of Object.keys(saved)) delete saved[k];
+open();
+clan('Friend', 'one');
+clan('Other', 'two');
+const kept = rows()[0];
+for (let i = 0; i < 400; i++) clan('Friend', `line ${i}`);
+check('lines on a channel already shown add rows rather than rebuild them all',
+  rows().length === 300 && !rows().includes(kept) && texts()[299] === '[Clan] Friend : line 399', rows().length);
+const before = rows()[0];
+clan('Other', 'three');
+check('the next one keeps the rows it had, less the oldest', rows()[0] !== before && rows()[1] !== undefined
+  && rows()[298] !== undefined && texts()[299] === '[Clan] Other : three');
+pushMessage('chat', { who: 'Buddy', channel: 'Public', command: 'pub', message: 'Buddy shouts: hi' });
+check('a new channel still redraws, with its tag', filters().querySelectorAll('button').some((b) => b.textContent === 'Public'));
 void El;
 // --- tells, in words ---------------------------------------------------------------
 for (const k of Object.keys(saved)) delete saved[k];

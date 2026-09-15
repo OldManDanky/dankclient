@@ -6,6 +6,8 @@ Your map, characters, triggers, sounds and logs are in `%LOCALAPPDATA%\dankclien
 
 The program is in `%LOCALAPPDATA%\Programs\Dank Mud Client`. Updating or reinstalling it never touches your things.
 
+Two things are trimmed when the client starts: **captures** are kept for 30 days, and the **session log** that `/find` searches for 180 days. Everything else -- the map, your characters, triggers, paths and sounds -- is kept until you change it.
+
 ## Updates
 
 - **The client**: [Options → About](options:about) says when a new version is out. Run the new installer; you do not need to close the client first.

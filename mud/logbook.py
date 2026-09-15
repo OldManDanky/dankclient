@@ -17,6 +17,9 @@ import sqlite3
 import time
 
 MAX_PENDING = 200
+#: The most lines held while the database cannot be written.  A lock that
+#: never lifted would otherwise keep the whole session in memory.
+MOST_HELD = 20000
 FLUSH_AFTER = 2.0
 #: After a flush the file was too busy for, how long before trying again.
 RETRY_AFTER = 2.0
@@ -100,6 +103,11 @@ class Logbook:
                 or now - self._last_flush >= FLUSH_AFTER):
             self.flush()
 
+    def _hold(self, rows) -> None:
+        """Keep lines that could not be written, to try again shortly."""
+        self._pending = (rows + self._pending)[-MOST_HELD:]
+        self._hold_until = time.monotonic() + RETRY_AFTER
+
     def flush(self) -> None:
         if not self._pending:
             self._last_flush = time.monotonic()
@@ -113,8 +121,7 @@ class Logbook:
             # Somebody else is writing -- Take updates, merging the map.  The
             # lines are kept and tried again shortly: losing them, or stopping
             # the session over it, would both be worse than waiting.
-            self._pending = rows + self._pending
-            self._hold_until = time.monotonic() + RETRY_AFTER
+            self._hold(rows)
             return
         try:
             for row in rows:
@@ -127,8 +134,7 @@ class Logbook:
             db.execute("COMMIT")
         except sqlite3.OperationalError:
             db.execute("ROLLBACK")
-            self._pending = rows + self._pending
-            self._hold_until = time.monotonic() + RETRY_AFTER
+            self._hold(rows)
         except Exception:
             db.execute("ROLLBACK")
             raise

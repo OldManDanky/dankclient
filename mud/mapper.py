@@ -51,6 +51,9 @@ NEW = "new"
 #: without it a `look` would be credited with the next room block and drawn as
 #: an exit leading to where you already stand.
 NON_MOVING = {"look", "l", "glance", "exits", "brief", "map"}
+#: The most commands kept waiting for a room.  A forty-step stack and the
+#: chatter around it fit many times over.
+MOST_PENDING = 256
 
 
 class Stacked(tuple):
@@ -91,7 +94,11 @@ class Mapper:
         #: Only then does "this looks like the room we are already in" mean we
         #: did not move, rather than that we walked somewhere identical.
         self._verifying = False
-        self._pending: deque[tuple[float, str]] = deque()
+        # Only a room block trims this, so standing still while timers and
+        # triggers send would grow it for hours -- 50,000 sends measured at
+        # 6.8 MB, each one scanned on the next arrival.  Nothing older than
+        # a couple of hundred commands can own a room.
+        self._pending: deque[tuple[float, str]] = deque(maxlen=MOST_PENDING)
         #: When a room block last settled.  A walk confirms where it is
         #: before setting off, but not when a room has only just arrived:
         #: the map is at its least sure when nothing has come for a while.

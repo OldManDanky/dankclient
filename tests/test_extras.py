@@ -40,6 +40,12 @@ def screen(session):
     return strip_ansi("".join(session.shown))
 
 
+def corpses_said(session):
+    """The Corpse counts block: its number, and its chips as a dict."""
+    [said] = status(session)
+    return said["value"], {name: int(n) for name, n in said["chips"]}
+
+
 def pack_globals(host, verb):
     return host.aliases.fire(verb)[0][0].fn.__globals__
 
@@ -81,7 +87,7 @@ def test_extras_load_beside_the_profession_and_an_edit_keeps_their_counts():
         edited = Character("Player", profession="trapper", extras=["corpses", "crafting"])
         packs.apply(host, edited, fresh=False)
         assert packs.loaded_extras(host) == ["corpses", "crafting"]
-        assert status(session) == ["corpses: 3  (C 3)"], "kept, not reloaded"
+        assert corpses_said(session) == ("3", {"coffin": 3}), "kept, not reloaded"
         activate(chars.put(Character("Other")), chars, session, host)
         assert packs.loaded(host) is None and packs.loaded_extras(host) == []
         assert status(session) == [], "the Session panel line goes with the pack"
@@ -109,7 +115,7 @@ def test_corpses_follow_3ks_lines_into_the_session_panel():
     with tempfile.TemporaryDirectory() as tmp:
         session, host = make(tmp)
         packs.use_extras(host, ["corpses"])
-        assert status(session) == ["corpses: 0"]
+        assert corpses_said(session) == ("0", {})
         for text in ("A rat corpse is pulled into the coffin's protective hold!",
                      "A rat corpse is pulled into the coffin's protective hold!",
                      "The coffin expels a corpse!",
@@ -117,13 +123,13 @@ def test_corpses_follow_3ks_lines_into_the_session_panel():
                      "The rat corpse hits the frame causing it to get sucked in!",
                      "rat corpse: Taken."):
             line(session, text)
-        assert status(session) == ["corpses: 5  (C 3  F 1  I 1)"]
+        assert corpses_said(session) == ("5", {"coffin": 3, "freezer": 1, "carried": 1})
         line(session, "An enchanted coffin (7 corpses).")
         line(session, "You drop the rat corpse.")
-        assert status(session) == ["corpses: 8  (C 7  F 1)"]
+        assert corpses_said(session) == ("8", {"coffin": 7, "freezer": 1})
         line(session, "The coffin expels a corpse!")
         line(session, "There is no reason to 'deslab' here.")
-        assert status(session) == ["corpses: 6  (C 6)"]
+        assert corpses_said(session) == ("6", {"coffin": 6})
 
 
 def test_corpses_count_what_a_look_inside_shows_and_nothing_after():
@@ -325,4 +331,6 @@ def test_tracking_has_a_panel_of_its_own_not_the_session_panels():
     assert 'id="pack-status"' not in section("session")
     assert 'id="pack-status"' in section("trackpanel") and "Combat tracking" in section("trackpanel")
     assert "'trackpanel'" in (ui / "panels.js").read_text()
-    assert "$('trackpanel').hidden = !lines.length" in (ui / "app.js").read_text()
+    assert "window.renderTracking(s.status || [])" in (ui / "app.js").read_text()
+    assert "$('trackpanel').hidden = !list.length" in (ui / "tracking.js").read_text()
+    assert '<script src="tracking.js"></script>' in html

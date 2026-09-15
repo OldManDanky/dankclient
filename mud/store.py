@@ -180,6 +180,14 @@ _UPGRADES = {
 }
 
 
+#: How long the session log -- what /find searches -- is kept.  Half a year
+#: of play; older lines go when the client starts.
+LOG_KEEP_DAYS = 180
+LOG_FORGET_CHUNK = 5000
+LOG_FORGET_MOST = 100_000
+LOG_VACUUM_AFTER = 50_000
+
+
 class Store:
     """The map and the log.  Safe to open on a path that does not exist yet."""
 
@@ -300,6 +308,43 @@ class Store:
 
     def close(self) -> None:
         self.db.close()
+
+    def forget_old_lines(self, keep_days: int = LOG_KEEP_DAYS,
+                         now: float | None = None,
+                         most: int = LOG_FORGET_MOST) -> int:
+        """Drop session-log lines older than `keep_days`.  How many went.
+
+        The search index is external content, with nothing keeping it in
+        step, so each line's entry is deleted through fts5's own 'delete'
+        before the line -- or /find would turn up text that is not there.
+        In short chunks, so the logbook can write between them, and at most
+        `most` a start, so a year of log does not hold up the first one.
+        """
+        cutoff = (time.time() if now is None else now) - keep_days * 86400
+        gone = 0
+        while gone < most:
+            rows = self.db.execute(
+                "SELECT id, text FROM line WHERE at < ? ORDER BY id LIMIT ?",
+                (cutoff, min(LOG_FORGET_CHUNK, most - gone))).fetchall()
+            if not rows:
+                break
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                self.db.executemany(
+                    "INSERT INTO line_fts (line_fts, rowid, text) "
+                    "VALUES ('delete', ?, ?)", [(r["id"], r["text"]) for r in rows])
+                self.db.executemany("DELETE FROM line WHERE id = ?",
+                                    [(r["id"],) for r in rows])
+                self.db.execute("COMMIT")
+            except sqlite3.Error:
+                self.db.execute("ROLLBACK")
+                raise
+            gone += len(rows)
+        if gone >= LOG_VACUUM_AFTER:
+            # Deleted pages are only reused, not returned; after a big prune
+            # the file is worth shrinking once.
+            self.db.execute("VACUUM")
+        return gone
 
     def __enter__(self) -> "Store":
         return self

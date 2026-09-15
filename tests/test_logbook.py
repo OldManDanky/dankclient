@@ -186,3 +186,38 @@ def test_one_session_does_not_replay_another():
     new = Logbook(store)
     new.add("recv", "today")
     assert [l["text"] for l in new.tail()] == ["today"]
+
+
+def test_lines_held_while_the_database_is_locked_are_kept_to_a_number():
+    from mud import logbook
+    held = logbook.Logbook.__new__(logbook.Logbook)
+    held._pending = []
+    held._hold([("row", i) for i in range(logbook.MOST_HELD + 500)])
+    assert len(held._pending) == logbook.MOST_HELD
+    assert held._pending[-1] == ("row", logbook.MOST_HELD + 499), "the newest are kept"
+
+
+def test_session_log_lines_past_half_a_year_are_forgotten_with_their_search_entries():
+    import time as clock
+    store = Store()
+    now = clock.time()
+
+    def add(text, days_ago):
+        cur = store.db.execute(
+            "INSERT INTO line (session_id, at, kind, text) VALUES (NULL, ?, 'recv', ?)",
+            (now - days_ago * 86400, text))
+        store.db.execute("INSERT INTO line_fts (rowid, text) VALUES (?, ?)",
+                         (cur.lastrowid, text))
+
+    for i in range(7):
+        add(f"ancient dragon number {i}", 200)
+    add("recent dragon", 10)
+    found = lambda word: store.db.execute(
+        "SELECT count(*) FROM line_fts WHERE line_fts MATCH ?", (word,)).fetchone()[0]
+    assert found("dragon") == 8
+
+    assert store.forget_old_lines(now=now, most=5) == 5, "no more than asked for a start"
+    assert store.forget_old_lines(now=now) == 2
+    assert store.db.execute("SELECT text FROM line").fetchall()[0][0] == "recent dragon"
+    assert found("dragon") == 1 and found("ancient") == 0
+    assert store.forget_old_lines(now=now) == 0
