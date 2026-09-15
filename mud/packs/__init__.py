@@ -15,7 +15,8 @@ A pack is a script like any other, with a few more names in its globals:
     say(text)              one line, marked with the pack's name
     show(*lines)           lines as they are, for a table
     status(item)           a block in the Combat tracking panel -- {label, value,
-                           note, rows: [[key, text, [bits]]], chips: [[name, n]]}
+                           note, rows: [[key, text, [bits]]], chips: [[name, n]],
+                           reset: the command its reset button sends}
                            -- or a line of text; "" takes it away
     owner                  its own name, for gags it adds and takes away
     level()                a profession's level, once `profs` has said it

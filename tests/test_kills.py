@@ -86,8 +86,9 @@ def test_a_kill_is_a_death_line_then_its_killing_blow_and_xp_says_what_it_gave()
         [k] = kills_of(host)
         assert (k["mob"], k["killer"], k["rounds"], k["xp"], k["coins"]) == (
             "Red rat", "Player", 4, 500, 12)
-        assert status(session) == [{"label": "Kills", "value": "1", "note": "30K xp/hr",
-                                    "rows": [["Last", "Red rat", ["4 rounds", "500 xp"]]]}]
+        assert status(session) == [{"label": "Kills", "reset": ".kills clear", "value": "1", "note": "30K xp/hr",
+                                    "rows": [["Avg", "4.0 rounds", []],
+                                             ["Last", "Red rat", ["4 rounds", "500 xp"]]]}]
 
 
 def test_the_answers_it_asked_for_are_hidden_and_yours_are_not():
@@ -143,17 +144,22 @@ def test_the_report_totals_filters_and_clears():
             xp_answer(session, 1_000 + sum(k["xp"] or 0 for k in kills_of(host)) + gained, coins=10)
         host.input(".kills")
         out = screen(session)
-        assert "Mob" in out and "Killer" in out and "3 kills  |  2.0 rounds" in out
-        assert "xp 45K: 15K a kill" in out
+        assert "Mob" in out and "Killer" in out
+        total = next(l for l in out.splitlines() if " total " in l)
+        each = next(l for l in out.splitlines() if " each " in l)
+        assert total.startswith("  3 kills") and total.split()[-2] == "45K", total
+        assert each.split()[:2] == ["each", "2.0"] and each.split()[-2] == "15K", each
+        widths = {len(l) for l in out.splitlines() if l.startswith("  Mob") or l.startswith("  ---")}
+        assert len(widths) == 1, "the rule is as wide as the table"
         session.shown.clear()
         host.input("3kReport rat")
         out = screen(session)
         assert "2 kills" in out and "Cur" not in out
         host.input(".kills 1")
-        assert "3 kills (the last 1)" in screen(session)
+        assert "3 kills, last 1" in screen(session)
         host.input("3kReport-clear")
         assert kills_of(host) == [] and status(session) == [
-            {"label": "Kills", "value": "0", "note": ""}]
+            {"label": "Kills", "reset": ".kills clear", "value": "0", "note": ""}]
 
 
 def test_short_numbers_read_as_players_write_them():
@@ -181,7 +187,10 @@ def test_damage_dealt_and_taken_are_counted_for_each_kill():
         host.input(".kills")
         out = screen(session)
         assert "Dealt" in out and "Taken" in out
-        assert "damage dealt 11.2K, 5,580 a kill  |  taken 2,537, 1,268 a kill" in out
+        total = next(l for l in out.splitlines() if " total " in l).split()
+        each = next(l for l in out.splitlines() if " each " in l).split()
+        assert total[-4:-2] == ["11.2K", "2,537"], total
+        assert each[-4:-2] == ["5,580", "1,268"], each
 
 
 def test_the_killing_blow_is_the_kill_however_the_creature_died():
@@ -189,7 +198,7 @@ def test_the_killing_blow_is_the_kill_however_the_creature_died():
     its own blood, and its kill went uncounted."""
     with tempfile.TemporaryDirectory() as tmp:
         session, host = make(tmp)
-        assert status(session) == [{"label": "Kills", "value": "0", "note": ""}], \
+        assert status(session) == [{"label": "Kills", "reset": ".kills clear", "value": "0", "note": ""}], \
             "loaded, and shown to be"
         host.input(".kills ask off")
         rounds(session, 1, 2, enemy="Spiral Gun")
@@ -198,8 +207,9 @@ def test_the_killing_blow_is_the_kill_however_the_creature_died():
         line(session, "Player dealt the killing blow to Spiral Gun.")
         [k] = kills_of(host)
         assert (k["mob"], k["killer"], k["rounds"], k["dealt"]) == ("Spiral Gun", "Player", 2, 9161)
-        assert status(session) == [{"label": "Kills", "value": "1", "note": "",
-                                    "rows": [["Last", "Spiral Gun", ["2 rounds", "9,161 dealt"]]]}]
+        assert status(session) == [{"label": "Kills", "reset": ".kills clear", "value": "1", "note": "",
+                                    "rows": [["Avg", "2.0 rounds", ["4,580 damage a round"]],
+                                             ["Last", "Spiral Gun", ["2 rounds", "9,161 dealt"]]]}]
 
 
 def test_a_stop_rule_ends_your_own_triggers_but_never_a_packs():
@@ -238,3 +248,44 @@ def test_only_the_newest_kills_are_kept_but_every_one_is_counted():
         kept = kills_of(host)
         assert len(kept) == 50 and kept[0]["mob"] == "rat 70" and kept[-1]["mob"] == "rat 119"
         assert status(session)[0]["value"] == "120"
+
+
+def test_without_3ks_numbers_the_damage_columns_are_left_out_and_it_says_why():
+    with tempfile.TemporaryDirectory() as tmp:
+        session, host = make(tmp)
+        host.input(".kills ask off")
+        rounds(session, 1, 2)
+        line(session, "You hit Red rat hard.")
+        kill(session)
+        host.input(".kills")
+        out = screen(session)
+        head = next(l for l in out.splitlines() if l.startswith("  Mob"))
+        rule = next(l for l in out.splitlines() if l.startswith("  ---"))
+        assert "Dealt" not in head and "Taken" not in head and "Coins" in head, head
+        assert len(rule) == len(head)
+        assert "Damage shows when 3K's numbers setting is on." in out
+
+        session.shown.clear()
+        line(session, "You hit Cur 1 time for 900 damage.")
+        kill(session, mob="Cur")
+        host.input(".kills")
+        out = screen(session)
+        head = next(l for l in out.splitlines() if l.startswith("  Mob"))
+        assert "Dealt" in head and "Taken" in head
+        assert "numbers setting" not in out, "one kill with damage brings the columns back"
+
+
+def test_the_panel_averages_rounds_and_damage_a_round_and_reset_clears_them():
+    with tempfile.TemporaryDirectory() as tmp:
+        session, host = make(tmp)
+        host.input(".kills ask off")
+        rounds(session, 1, 2, 3, 4)
+        line(session, "You hit rat 2 times for 4,000 damage.")
+        kill(session, mob="rat")
+        rounds(session, 1, 2)                         # a new fight, two rounds
+        kill(session, mob="Cur")                      # no numbers for this one
+        [said] = status(session)
+        assert said["rows"][0] == ["Avg", "3.0 rounds", ["1,000 damage a round"]], said["rows"]
+        host.input(".kills clear")
+        [said] = status(session)
+        assert said["value"] == "0" and "rows" not in said, "reset clears the averages too"

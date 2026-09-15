@@ -44,4 +44,21 @@ renderTracking(['an older pack says a line']);
 check('a pack that says a line of text still shows',
   text(el('pack-status').children[0].children[0]) === 'an older pack says a line');
 
+// Reset: the pack's own command, two clicks, never from one.
+const said = [];
+global.sendCommand = (text) => said.push(text);
+renderTracking([{ label: 'Kills', value: '3', note: '', reset: '.kills clear' },
+                { label: 'Crafting', value: '1' }]);
+const [withReset, withoutReset] = el('pack-status').children;
+const button = withReset.children[0].children.find((c) => c.className.startsWith('trk-reset'));
+check('a block whose pack can reset has a reset button in its top line', !!button && button.textContent === 'reset');
+check('a block that cannot has none',
+  !withoutReset.children[0].children.some((c) => c.className.startsWith('trk-reset')));
+button.onclick({ stopPropagation() {} });
+check('one click only asks', button.textContent === 'reset?' && button.className === 'trk-reset armed'
+  && said.length === 0);
+button.onclick({ stopPropagation() {} });
+check('the second sends the pack\'s own command, as typed', same(said, ['.kills clear'])
+  && button.textContent === 'reset', said);
+
 finish();

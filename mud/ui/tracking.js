@@ -16,6 +16,33 @@
     return e;
   }
 
+  /* Reset: the pack's own command, sent as typing it would.  Two clicks, as
+     Messages' clear -- what it throws away does not come back. */
+  function resetButton(item) {
+    const b = el('button', 'trk-reset', 'reset');
+    b.type = 'button';
+    b.title = `Clear ${String(item.label || '').toLowerCase()} (${item.reset})`;
+    let armed = null;
+    const disarm = () => {
+      if (armed) clearTimeout(armed);
+      armed = null;
+      b.textContent = 'reset';
+      b.className = 'trk-reset';
+    };
+    b.onclick = (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      if (armed) {
+        disarm();
+        if (window.sendCommand) window.sendCommand(item.reset);
+        return;
+      }
+      b.textContent = 'reset?';
+      b.className = 'trk-reset armed';
+      armed = setTimeout(disarm, 3000);
+    };
+    return b;
+  }
+
   function block(item) {
     const box = el('div', 'trk');
     if (typeof item === 'string') {
@@ -26,6 +53,7 @@
     const head = el('div', 'trk-head');
     head.append(el('span', 'trk-label', item.label || ''));
     if (item.note) head.append(el('span', 'trk-note', item.note));
+    if (item.reset) head.append(resetButton(item));
     box.append(head);
     const value = String(item.value === undefined ? '' : item.value);
     box.append(el('div', 'trk-value' + (value === '0' ? ' zero' : ''), value));

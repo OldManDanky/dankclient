@@ -17,6 +17,7 @@ import json
 import re
 import time
 import uuid
+from collections import deque
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,16 @@ def compare(left, op: str, right: str) -> bool:
     return False
 
 OWNER = "gui"          # so reload can unwind exactly these
+
+#: How deep aliases may call aliases from a rule's send.  Deeper than any
+#: alias anybody writes on purpose; an alias that calls itself stops here.
+MOST_DEPTH = 10
+#: A rule that fires more than STORM_FIRES times in STORM_SECONDS is taken
+#: for a loop -- a trigger answering its own output, two aliases calling
+#: each other through 3K -- and switched off until it is saved again.  A
+#: busy combat trigger stays well under it; a loop passes it in seconds.
+STORM_FIRES = 60
+STORM_SECONDS = 5.0
 
 MODES = ("command", "contains", "glob", "regex")
 
@@ -385,6 +396,13 @@ class RuleStore:
         self._waiting: dict[asyncio.TimerHandle, Rule] = {}
         #: Goes up on every save; see save().
         self.version = 0
+        #: When each rule last fired, for the loop check; and those it stopped.
+        self._fired: dict[str, deque] = {}
+        self._paused: set[str] = set()
+        #: How deep this rule's sends are into aliases, and whether that has
+        #: been said for the chain under way.
+        self._depth = 0
+        self._told_depth = False
 
     # --- persistence --------------------------------------------------------
 
@@ -434,6 +452,10 @@ class RuleStore:
                 del self._waiting[handle]
         self._watches.clear()
         self._timers.clear()
+        # Saved again -- mended, or put back on purpose: a rule stopped as a
+        # loop starts over.
+        self._paused.clear()
+        self._fired.clear()
 
         for rule in self.rules:
             if not rule.enabled or rule.validate():
@@ -546,10 +568,67 @@ class RuleStore:
 
     def _runner(self, rule: Rule):
         def run(captured: dict[str, Any]) -> None:
+            if self._storming(rule):
+                return
             self._carry_on(rule, 0, captured or {})
 
         run.__name__ = re.sub(r"\W+", "_", rule.name or rule.pattern)[:30] or "rule"
         return run
+
+    def _storming(self, rule: Rule) -> bool:
+        """Is this rule firing so fast it can only be a loop?  Stops it if so."""
+        if rule.id in self._paused:
+            return True
+        now = time.monotonic()
+        fired = self._fired.setdefault(rule.id, deque())
+        fired.append(now)
+        while fired and now - fired[0] > STORM_SECONDS:
+            fired.popleft()
+        if len(fired) <= STORM_FIRES:
+            return False
+        self._paused.add(rule.id)
+        fired.clear()
+        self.host.note(
+            f"{rule.name or rule.pattern or rule.kind}: fired more than {STORM_FIRES} "
+            f"times in {STORM_SECONDS:g} seconds, which looks like a loop -- switched "
+            "off for now.  Save it again in Options to switch it back on.")
+        return True
+
+    def _send(self, rule: Rule, text: str) -> None:
+        """What typing the line would do: split on `;`, a leading `\\` sent as
+        written, a leading `/` the client's, and anything else offered to the
+        aliases before it goes to 3K -- a trigger that sends `gk rat` means
+        the alias `gk`, as it would typed.  Aliases calling aliases stop
+        MOST_DEPTH deep.
+        """
+        from . import commands
+
+        session, host = self.host.session, self.host
+        if self._depth == 0:
+            self._told_depth = False
+        for piece in commands.stack(text):
+            raw = commands.verbatim(piece)
+            if raw is not None:
+                session.queue.put(raw, rule.priority, rule.pace)
+                continue
+            if piece.startswith("/"):
+                commands.handle(piece, session, host, host.note)
+                continue
+            if self._depth >= MOST_DEPTH:
+                if not self._told_depth:
+                    self._told_depth = True
+                    host.note(f"{rule.name or rule.pattern or rule.kind}: aliases "
+                              f"called aliases {MOST_DEPTH} deep, so one of them calls "
+                              f"itself -- stopped at {piece!r}")
+                return
+            offer = getattr(host, "input", None)
+            self._depth += 1
+            try:
+                taken = bool(offer(piece)) if offer is not None else False
+            finally:
+                self._depth -= 1
+            if not taken:
+                session.queue.put(piece, rule.priority, rule.pace)
 
     def _carry_on(self, rule: Rule, start: int, captured: dict) -> None:
         """Do the rule's actions from `start`, until a wait or the end.
@@ -580,13 +659,11 @@ class RuleStore:
                 self._waiting[held[0]] = rule
                 return
             text = _safe_format(action["text"], captured)
-            if action["type"] == "send" and text.startswith("/"):
-                # What typing it would do: "/" is the client's, never 3K's.
-                # So an alias can switch groups -- `/group solo off`.
-                from . import commands
-                commands.handle(text, session, host, host.note)
-            elif action["type"] == "send":
-                session.queue.put(text, rule.priority, rule.pace)
+            if action["type"] == "send":
+                # What typing it would do: "/" is the client's, never 3K's, so
+                # an alias can switch groups -- `/group solo off` -- and a
+                # client alias is the alias, from a trigger as much as typed.
+                self._send(rule, text)
             else:
                 host.note(text)
 

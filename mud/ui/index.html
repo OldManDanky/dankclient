@@ -522,7 +522,12 @@
   .trk:last-child{padding-bottom:0}
   .trk-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
   .trk-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-             color:var(--dim);font-weight:600}
+             color:var(--dim);font-weight:600;margin-right:auto}
+  .trk-reset{font:inherit;font-size:10px;line-height:16px;padding:0 6px;
+             border:1px solid var(--line);border-radius:3px;background:transparent;
+             color:var(--dim);cursor:pointer}
+  .trk-reset:hover,.trk-reset:focus{color:var(--ink);border-color:var(--accent)}
+  .trk-reset.armed{color:var(--warn);border-color:var(--warn)}
   .trk-note{font-size:11px;color:var(--accent);white-space:nowrap}
   .trk-value{font-size:22px;line-height:1.15;font-weight:600;color:var(--ink);
              letter-spacing:-.01em;margin-top:1px}

@@ -37,6 +37,7 @@ asked = {"at": 0.0}
 
 def paint():
     status({"label": "Corpses", "value": f"{sum(count.values()):,}",
+            "reset": ".corpses reset",
             "chips": [[NAMES[p], f"{count[p]:,}"] for p in PLACES if count[p]]})
 
 

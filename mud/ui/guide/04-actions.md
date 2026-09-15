@@ -4,13 +4,17 @@ Every trigger, alias, event, stat watch and timer ends in the same **Then** list
 
 ## The actions
 
-- **send to MUD**: send a command, as if you had typed it.
+- **send to MUD**: send a command, as if you had typed it. Your aliases apply -- a trigger that sends `gk rat` runs your `gk` alias -- and `;` splits it into commands. A leading `\` sends it exactly as written.
 - **show in client**: put a note in the output, for you only.
 - **wait (seconds)**: hold back everything below it for that long. `kill rat`, wait `2`, `get all`. Up to an hour; longer than that is a timer.
 
 ## Client commands in an action
 
 A **send** that starts with `/` runs as a client command, exactly as typing it would, and never reaches 3K. So an action can be `/group party off`, `/go bank`, `/numpad off`, or `/stop`. See [Groups and modes](#groups).
+
+## Loops
+
+An alias that ends up calling itself stops after 10 aliases, and the output says which rule it started from. A trigger, alias, event or stat watch that fires more than 60 times in 5 seconds is taken for a loop -- a trigger answering its own output, say -- and switched off, with a note naming it. Mend it and save it in Options, or just save it again, and it is back on.
 
 ## Putting pieces in
 

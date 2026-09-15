@@ -93,8 +93,19 @@ def paint():
     # A count of 0 from the start, so a loaded pack can be seen to be loaded.
     rate = xp_rate(kills) if kills else None
     item = {"label": "Kills", "value": f"{len(kills) + dropped['n']:,}",
+            "reset": ".kills clear",
             "note": f"{short(rate)} xp/hr" if rate else ""}
     if kills:
+        rows = []
+        rounds = [k["rounds"] for k in kills if k["rounds"]]
+        if rounds:
+            # Damage a round only from kills with both: without 3K's numbers
+            # there is no damage, and a round count alone would drag it down.
+            both = [(k["dealt"], k["rounds"]) for k in kills
+                    if k.get("dealt") and k["rounds"]]
+            per = ([f"{short(sum(d for d, _ in both) / sum(r for _, r in both))} "
+                    "damage a round"] if both else [])
+            rows.append(["Avg", f"{sum(rounds) / len(rounds):.1f} rounds", per])
         k = kills[-1]
         bits = []
         if k["rounds"]:
@@ -103,7 +114,8 @@ def paint():
             bits.append(f"{short(k['dealt'])} dealt")
         if k["xp"] is not None:
             bits.append(f"{short(k['xp'])} xp")
-        item["rows"] = [["Last", k["mob"], bits]]
+        rows.append(["Last", k["mob"], bits])
+        item["rows"] = rows
     status(item)
 
 
@@ -234,7 +246,34 @@ def blow(m):
 def seconds(s):
     if s is None:
         return "-"
-    return f"{s}s" if s < 60 else f"{s // 60}m{s % 60:02d}s"
+    s = round(s)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m{s % 60:02d}s"
+    return f"{s // 3600}h{s % 3600 // 60:02d}m"
+
+
+#: The report's columns: width and alignment.  Rows and totals share them,
+#: so the summary sits under the numbers it sums.
+COLUMNS = ((20, "<"), (12, "<"), (4, ">"), (6, ">"), (7, ">"), (7, ">"),
+           (7, ">"), (6, ">"))
+
+
+def columns(keep):
+    """The report's columns, or only those at the indexes in `keep`."""
+    return [c for i, c in enumerate(COLUMNS) if keep is None or i in keep]
+
+
+def table_row(keep, cells):
+    out = []
+    cells = [c for i, c in enumerate(cells) if keep is None or i in keep]
+    for cell, (width, align) in zip(cells, columns(keep)):
+        text = str(cell)
+        if align == "<":
+            text = text[:width]
+        out.append(f"{text:{align}{width}}")
+    return ("  " + " ".join(out)).rstrip()
 
 
 def report(arg):
@@ -259,34 +298,46 @@ def report(arg):
     if not chosen:
         say("no kills yet." if not kills else f"no kills of {arg.strip()!r}.")
         return
-    rows = [f"  {'Mob':<20} {'Killer':<12} {'Rnds':>4} {'Time':>6} {'Dealt':>7} "
-            f"{'Taken':>7} {'XP':>7} {'Coins':>6}"]
+    # Without 3K's numbers setting there is no damage to show, and two columns
+    # of dashes say nothing a line underneath cannot.
+    damage = any(k.get("dealt") or k.get("taken") for k in chosen)
+    # Not `keep`: that name is the pack's settings, and a local of it here
+    # broke `.kills ask off` for the whole function.
+    wanted = None if damage else (0, 1, 2, 3, 6, 7)
+    rows = [table_row(wanted, ["Mob", "Killer", "Rnds", "Time", "Dealt", "Taken", "XP", "Coins"])]
     for k in chosen[-count:]:
-        rows.append(f"  {k['mob'][:20]:<20} {k['killer'][:12]:<12} "
-                    f"{k['rounds'] if k['rounds'] is not None else '-':>4} "
-                    f"{seconds(k['seconds']):>6} {short(k.get('dealt') or None):>7} "
-                    f"{short(k.get('taken') or None):>7} {short(k['xp']):>7} "
-                    f"{short(k['coins']):>6}")
+        rows.append(table_row(wanted, [
+            k["mob"], k["killer"],
+            k["rounds"] if k["rounds"] is not None else "-",
+            seconds(k["seconds"]), short(k.get("dealt") or None),
+            short(k.get("taken") or None), short(k["xp"]), short(k["coins"])]))
     n = len(chosen)
-    rounds = [k["rounds"] for k in chosen if k["rounds"] is not None]
-    times = [k["seconds"] for k in chosen if k["seconds"] is not None]
-    xps = [k["xp"] for k in chosen if k["xp"] is not None]
-    cash = [k["coins"] for k in chosen if k["coins"] is not None]
-    shown = f" (the last {count})" if n > count else ""
-    rows.append(f"  {n} kill{'s' if n != 1 else ''}{shown}"
-                + (f"  |  {sum(rounds) / len(rounds):.1f} rounds" if rounds else "")
-                + (f", {seconds(round(sum(times) / len(times)))} each" if times else ""))
-    dealt = sum(k.get("dealt", 0) for k in chosen)
-    taken = sum(k.get("taken", 0) for k in chosen)
-    if dealt or taken:
-        rows.append(f"  damage dealt {short(dealt)}, {short(dealt / n)} a kill"
-                    + (f"  |  taken {short(taken)}, {short(taken / n)} a kill, "
-                       "before defenses" if taken else ""))
-    if xps:
-        rows.append(f"  xp {short(sum(xps))}: {short(sum(xps) / len(xps))} a kill, "
-                    f"{short(sum(xps) / hours(chosen))} an hour")
-    if cash:
-        rows.append(f"  coins {short(sum(cash))}: {short(sum(cash) / hours(chosen))} an hour")
+    known = lambda key: [k[key] for k in chosen if k.get(key) is not None]
+    rounds, times, xps, cash = known("rounds"), known("seconds"), known("xp"), known("coins")
+    dealt = [k.get("dealt") or 0 for k in chosen]
+    taken = [k.get("taken") or 0 for k in chosen]
+    mean = lambda values: sum(values) / len(values)
+    per_hour = hours(chosen)
+    label = f"{n:,} kill{'s' if n != 1 else ''}" + (f", last {count}" if n > count else "")
+    shown_columns = columns(wanted)
+    rows.append("  " + "-" * (sum(width for width, _ in shown_columns) + len(shown_columns) - 1))
+    rows.append(table_row(wanted, [
+        label, "total",
+        f"{sum(rounds):,}" if rounds else "-", seconds(sum(times)) if times else "-",
+        short(sum(dealt)) if any(dealt) else "-", short(sum(taken)) if any(taken) else "-",
+        short(sum(xps)) if xps else "-", short(sum(cash)) if cash else "-"]))
+    rows.append(table_row(wanted, [
+        "", "each",
+        f"{mean(rounds):.1f}" if rounds else "-", seconds(mean(times)) if times else "-",
+        short(sum(dealt) / n) if any(dealt) else "-", short(sum(taken) / n) if any(taken) else "-",
+        short(mean(xps)) if xps else "-", short(mean(cash)) if cash else "-"]))
+    if xps or cash:
+        rows.append(table_row(wanted, [
+            "", "an hour", "", "", "", "",
+            short(sum(xps) / per_hour) if xps else "-",
+            short(sum(cash) / per_hour) if cash else "-"]))
+    if not damage:
+        rows.append("  Damage shows when 3K's numbers setting is on.")
     show(*rows)
 
 
