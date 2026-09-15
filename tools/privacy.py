@@ -32,10 +32,12 @@ EXTRA = CAPTURES / "private-names.txt"
 
 #: Placeholders the tests use on purpose, and ordinary words that 3K lines
 #: can put where a speaker goes.  "badger" is a folder in 3kdb's own public
-#: repository, which the update tests name.
+#: repository, which the update tests name.  "blunt" is 3K's damage type,
+#: in 3kdb's gem recipes as "Blunt AC" and "Blunt WC".
 ALLOWED = {
     "player", "other", "friend", "someone", "buddy", "speaker", "chosen",
     "typed", "you", "mud", "insert", "see", "everybody", "wave", "badger",
+    "blunt",
 }
 
 TEXT = {".py", ".js", ".html", ".css", ".md", ".txt", ".json", ".cmd",

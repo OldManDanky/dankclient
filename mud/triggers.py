@@ -28,6 +28,27 @@ _QUANT = "?*{"
 _META = set(".^$*+?{}[]\\|()")
 
 
+def _alternates(pattern: str) -> bool:
+    """Does the pattern have a `|` that means "or" -- not escaped, not in []?"""
+    i, n, in_class = 0, len(pattern), False
+    while i < n:
+        c = pattern[i]
+        if c == "\\":
+            i += 2
+            continue
+        if in_class:
+            in_class = c != "]"
+        elif c == "[":
+            in_class = True
+            if pattern.startswith("]", i + 1) or pattern.startswith("^]", i + 1):
+                i += 2 if pattern[i + 1] == "]" else 3     # a leading ] is text
+                continue
+        elif c == "|":
+            return True
+        i += 1
+    return False
+
+
 def literal_hint(pattern: str) -> str | None:
     """Longest fixed substring a candidate line must contain, or None.
 
@@ -35,6 +56,10 @@ def literal_hint(pattern: str) -> str | None:
     treating "(?P<who>" as literal would have us searching lines for "P<who>",
     which matches nothing and silently disables the trigger.
     """
+    if _alternates(pattern):
+        # "(kill|slay) (\w+)" has no text every match contains, and taking
+        # the first branch's "kill" meant "slay orc" never reached the regex.
+        return None
     best = cur = ""
     i, n = 0, len(pattern)
 

@@ -86,6 +86,18 @@
   let me = '';
   let hideMine = store.get(`cm:${ID}:hidemine`, '') === '1';
 
+  /* People kept out of this window: 3kdb's chat blacklist.  Only here -- the
+     output is 3K's text and keeps everything -- and by name, so what they
+     say next is kept out as it arrives. */
+  let blocked = new Set();
+  try {
+    blocked = new Set(JSON.parse(store.get(`cm:${ID}:blocked`, '[]')));
+  } catch (err) { /* a bad preference is no preference */ }
+  const isBlocked = (m) => !!m.who && !m.mine && blocked.has(personKey(m.who));
+  function saveBlocked() {
+    store.set(`cm:${ID}:blocked`, JSON.stringify([...blocked].sort()));
+  }
+
   function isMine(m) {
     return !!m.mine || (!!me && !!m.who && personKey(m.who) === me);
   }
@@ -106,6 +118,7 @@
 
   function wantsDing(m) {
     if (isMine(m) || muted.has(m.channel || 'other')) return false;
+    if (isBlocked(m)) return false;
     return !!((m.who && dings.who[personKey(m.who)])
       || dings.channel[m.channel || 'other']);
   }
@@ -311,7 +324,7 @@
     bodyEl.replaceChildren();
 
     const shown = messages.filter((m) => !muted.has(m.channel || 'other')
-      && !(hideMine && isMine(m)));
+      && !(hideMine && isMine(m)) && !isBlocked(m));
     const hidden = messages.length - shown.length;
     countEl.textContent = shown.length
       ? String(shown.length) + (hidden ? ` of ${messages.length}` : '')
@@ -470,6 +483,31 @@
     return part;
   }
 
+  /* Hide: everything from this person, out of this window. */
+  function hideRow(m) {
+    const part = document.createElement('div');
+    const head = document.createElement('h6');
+    head.textContent = 'Hide';
+    const row = document.createElement('div');
+    row.className = 'cm-dings';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cm-hide';
+    b.textContent = `everything from ${m.who}`;
+    b.onclick = () => {
+      blocked.add(personKey(m.who));
+      saveBlocked();
+      closeMenu();
+      refresh();
+      if (window.clientNote) {
+        window.clientNote(`${m.who} is kept out of the messages window -- /unblock ${m.who} lets them back`);
+      }
+    };
+    row.append(b);
+    part.append(head, row);
+    return part;
+  }
+
   function openMenu(x, y, m) {
     closeMenu();
     menu = document.createElement('div');
@@ -483,6 +521,7 @@
                            colours.who, personKey(m.who)));
     }
     menu.append(dingRow(m, channel));
+    if (m.who && !m.mine) menu.append(hideRow(m));
     document.body.append(menu);
     // Beside the pointer, but never off the edge of the window.
     const box = menu.getBoundingClientRect();
@@ -517,6 +556,29 @@
       window.ding(latest.kind === 'tell' ? 'tell' : 'channel');
     }
     if (messages.length > LIMIT * 2) messages = messages.slice(-LIMIT);
+    refresh();
+  };
+
+  /* /block, /unblock and /blocked, from the command line, an alias or a
+     trigger: the server asks every window, and each says what it did. */
+  window.setBlocked = function (op, name) {
+    const key = personKey(name);
+    const say = (text) => { if (window.clientNote) window.clientNote(text); };
+    if (op === 'add') {
+      blocked.add(key);
+      say(`${name} is kept out of the messages window`);
+    } else if (op === 'remove') {
+      say(blocked.delete(key) ? `${name} is back in the messages window`
+        : `${name} was not kept out`);
+    } else if (op === 'clear') {
+      blocked.clear();
+      say('nobody is kept out of the messages window');
+    } else {
+      say(blocked.size ? `kept out of the messages window: ${[...blocked].sort().join(', ')}`
+        : 'nobody is kept out of the messages window');
+      return;
+    }
+    saveBlocked();
     refresh();
   };
 

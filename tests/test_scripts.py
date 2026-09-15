@@ -226,3 +226,22 @@ def test_command_mode_is_built_for_aliases():
     assert t.match("xgk") is None
     assert t.match("gkk") is None
     assert t.match("say gk please") is None
+
+
+def test_a_pattern_with_alternatives_has_no_literal_to_miss_the_others_by():
+    """ "(kill|slay) (\\w+)" once took "kill" as text every line must contain,
+    so "slay orc" never reached the regex -- nor any other branch but the
+    first, in any rule or imported {a|b} pattern."""
+    assert literal_hint(r"(kill|slay) (\w+)") is None
+    assert literal_hint(r"^(Essence|Fragment) Of") is None
+    assert literal_hint(r"The coffin is full!|The coffin expels") is None
+    # A bar that is only text is still text.
+    assert (literal_hint(r"Health \[\d+\|\d+\]") or "").startswith("Health")
+    assert literal_hint(r"[|]coffin") == "coffin"
+    hits = []
+    triggers = TriggerSet()
+    triggers.add(Trigger(r"(kill|slay) (\w+)", lambda m: hits.append(m[2])))
+    for line in ("You slay orc", "You kill rat", "You hug Buddy"):
+        for trig, captured in triggers.fire(line):
+            trig.fn(captured)
+    assert hits == ["orc", "rat"]

@@ -75,6 +75,8 @@ class ScriptHost:
         self.triggers = TriggerSet()
         self.aliases = TriggerSet()
         self.registries: dict[str, Registry] = {}
+        #: loaded from source rather than the folder: a profession pack
+        self.builtin: set[str] = set()
         self.mtimes: dict[str, float] = {}
         self.errors: dict[str, str] = {}
         self._current: str = ""
@@ -185,14 +187,33 @@ class ScriptHost:
                 self.load(path)
 
     def load(self, path: Path) -> bool:
-        name = path.stem
+        try:
+            text = path.read_text()
+        except OSError:
+            self.errors[path.stem] = traceback.format_exc()
+            self.note(f"\x1b[31m{path.stem}: failed to load\x1b[0m\n"
+                      + self.errors[path.stem])
+            return False
+        if not self.load_source(path.stem, text, str(path)):
+            return False
+        self.mtimes[path.stem] = path.stat().st_mtime
+        return True
+
+    def load_source(self, name: str, text: str, filename: str,
+                    extra: dict | None = None, builtin: bool = False) -> bool:
+        """Run a script that is not a file in the folder -- a profession pack.
+
+        `extra` goes into its globals beside the usual API.  A `builtin` one
+        is left alone when the folder is rescanned: it has no file there, and
+        no file is not the same as a file somebody deleted.
+        """
         self.unload(name)
         registry = Registry()
         self.registries[name] = registry
         self._current = name
         try:
-            code = compile(path.read_text(), str(path), "exec")
-            exec(code, self._namespace(name))          # noqa: S102 -- the point
+            code = compile(text, filename, "exec")
+            exec(code, {**self._namespace(name), **(extra or {})})  # noqa: S102
         except Exception:
             self.errors[name] = traceback.format_exc()
             self.unload(name)
@@ -202,13 +223,16 @@ class ScriptHost:
         finally:
             self._current = ""
         self.errors.pop(name, None)
-        self.mtimes[name] = path.stat().st_mtime
+        if builtin:
+            self.builtin.add(name)
+            return True
         n = (len(registry.handlers) + len(registry.watches)
              + len(registry.periodics) + registry.triggers + len(registry.aliases))
         self.note(f"{name}: {n} hook(s)")
         return True
 
     def unload(self, name: str) -> None:
+        self.builtin.discard(name)
         registry = self.registries.pop(name, None)
         if registry is None:
             return
@@ -240,7 +264,7 @@ class ScriptHost:
                 self.load(path)
                 changed.append(path.stem)
         for name in list(self.registries):
-            if not (self.dir / f"{name}.py").exists():
+            if name not in self.builtin and not (self.dir / f"{name}.py").exists():
                 self.unload(name)
                 changed.append(name)
         # script reloads clear owners wholesale; put the GUI rules back

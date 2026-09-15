@@ -28,7 +28,7 @@ import webbrowser
 from importlib import resources
 from pathlib import Path
 
-from . import codes, events
+from . import codes, events, packs
 
 def log(*parts: object) -> None:
     print("\x1b[2m[web]\x1b[0m", *parts, file=sys.stderr, flush=True)
@@ -475,6 +475,8 @@ class WebServer:
                 "editing": w.editing,
                 "caption": w.caption,
             },
+            # Lines a pack keeps up to date, such as the corpse counts.
+            "status": list(getattr(self.session, "pack_status", {}).values()),
             "who": self._who(),
             "brief": getattr(self.session, "brief", None),
             "start": ({"done": self.session.start_done,
@@ -574,6 +576,9 @@ class WebServer:
             # uses it to tell your own lines from everybody else's.
             "me": getattr(self.session, "who_am_i", "") or "",
             "known": self.characters.public() if self.characters else [],
+            # What the character screen offers: only packs this client has.
+            "professions": packs.listing(),
+            "extras": packs.extras_listing(),
             # The screen offers to log you in only while there is a prompt
             # waiting for it.  An hour into playing, picking a name should
             # load that character's rules, not type their name into the game.
@@ -617,14 +622,27 @@ class WebServer:
                 # An empty password means "leave what is there"; put() knows.
                 password=str(raw.get("password") or "") if keep else "",
                 note=str(raw.get("note") or ""),
+                # Only a pack the client has; anything else is none.
+                profession=getattr(packs.find(raw.get("profession")),
+                                   "id", ""),
+                extras=packs.extra_ids(raw.get("extras")),
             ))
+            held = chars.get(name)
             if not keep:
                 # Asked to forget it, so forget it rather than leaving the old
                 # one in place because the box came back empty.
-                held = chars.get(name)
                 if held is not None and held.password:
                     held.password = ""
                     chars.save()
+            playing = getattr(self.session, "character", None)
+            if (held is not None and playing is not None
+                    and playing.name.lower() == held.name.lower()):
+                # Edited while playing them: the pack changes now, not at the
+                # next login, and the session holds the saved copy.
+                self.session.character = held
+                if not packs.matches(self.scripts, held):
+                    packs.apply(self.scripts, held, chars.dir(held.name),
+                                fresh=False)
             self._dirty = True
             return
 

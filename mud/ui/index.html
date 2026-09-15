@@ -512,6 +512,12 @@
   #char-form{padding:16px 20px 18px;border-top:1px solid var(--line);
              display:flex;flex-direction:column;gap:12px}
   #char-form h3{margin:0;font-size:13px;font-weight:600}
+  #c-extras{display:flex;flex-wrap:wrap;gap:6px 16px}
+  #pack-status{font-size:11px;color:var(--dim);margin-top:4px}
+  #pack-status:empty{display:none}
+  .cm-hide{font:inherit;font-size:11px;padding:3px 8px;border:1px solid var(--line);
+           border-radius:3px;background:var(--sunk);color:inherit;cursor:pointer}
+  .cm-hide:hover,.cm-hide:focus{border-color:var(--accent)}
   #open-login{padding:6px;font-size:11px;letter-spacing:.06em;
               overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Session: who is playing and whether the line is good, in three rows. */
@@ -876,6 +882,7 @@
       </div>
       <div id="version" title="Asking GitHub…"></div>
       <div id="chrome"></div>
+      <div id="pack-status"></div>
     </section>
 
     <aside id="mapmon" class="dock">
@@ -959,6 +966,16 @@
           <input id="c-port" type="text" spellcheck="false" class="num"
                  placeholder="3000">
         </div>
+      </div>
+      <div class="frow">
+        <label for="c-profession">Profession</label>
+        <select id="c-profession"><option value="">None</option></select>
+        <p class="fhint" id="c-profession-hint"></p>
+      </div>
+      <div class="frow">
+        <label>Also load</label>
+        <div id="c-extras"></div>
+        <p class="fhint">3kdb's corpse counts and crafting helpers, for this character.</p>
       </div>
       <div class="frow">
         <label for="c-password">Password</label>

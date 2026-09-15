@@ -12,7 +12,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   let who = { character: null, known: [], asking: false, needed: false,
-              offline: false };
+              offline: false, professions: [], extras: [] };
   let editing = null;             // the character being edited, or null
   let forced = false;             // opened from the sidebar, not by the client
 
@@ -52,9 +52,84 @@
     }
   });
 
+  // --- professions ----------------------------------------------------------
+
+  /* The packs come from the server, so the list is whatever this client can
+     load -- never a name the page made up. */
+  let offered = '';
+  function offerProfessions() {
+    const list = who.professions || [];
+    const key = JSON.stringify(list.map((p) => p.id));
+    if (key === offered) return;
+    offered = key;
+    const sel = $('c-profession');
+    const was = sel.value;
+    sel.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'None';
+    sel.append(none);
+    for (const p of list) {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name;
+      sel.append(o);
+    }
+    sel.value = was;
+    describeProfession();
+  }
+
+  function professionOf(id) {
+    return (who.professions || []).find((p) => p.id === id) || null;
+  }
+
+  function describeProfession() {
+    const p = professionOf($('c-profession').value);
+    $('c-profession-hint').textContent = p
+      ? `${p.gives[0].toUpperCase()}${p.gives.slice(1)}. Adds ${p.commands.join(', ')}.`
+      : 'The first one profs lists. Its 3kdb commands load whenever you play '
+        + 'this character.';
+  }
+  $('c-profession').onchange = describeProfession;
+
+  let offeredExtras = '';
+  function extraOf(id) {
+    return (who.extras || []).find((p) => p.id === id) || null;
+  }
+
+  function chosenExtras() {
+    return Array.from($('c-extras').querySelectorAll('input'))
+      .filter((i) => i.checked).map((i) => i.value);
+  }
+
+  /* The extras -- corpse counts, crafting -- as tick boxes, from the server
+     like the professions. */
+  function offerExtras() {
+    const list = who.extras || [];
+    const key = JSON.stringify(list.map((p) => p.id));
+    if (key === offeredExtras) return;
+    offeredExtras = key;
+    const was = new Set(chosenExtras());
+    const box = $('c-extras');
+    box.replaceChildren();
+    for (const p of list) {
+      const label = document.createElement('label');
+      label.className = 'check';
+      label.title = `${p.gives[0].toUpperCase()}${p.gives.slice(1)}. Adds ${p.commands.join(', ')}.`;
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = p.id;
+      input.checked = was.has(p.id);
+      label.append(input, document.createTextNode(p.name));
+      box.append(label);
+    }
+  }
+
   // --- add / edit -----------------------------------------------------------
 
   function form(char, show) {
+    offerProfessions();
+    offerExtras();
     editing = char || null;
     $('char-form').hidden = !show;
     $('char-error').textContent = '';
@@ -62,6 +137,11 @@
     $('c-name').value = char ? char.name : '';
     $('c-host').value = char ? char.host : '3k.org';
     $('c-port').value = char ? String(char.port) : '3000';
+    $('c-profession').value = (char && professionOf(char.profession)) ? char.profession : '';
+    describeProfession();
+    for (const input of Array.from($('c-extras').querySelectorAll('input'))) {
+      input.checked = !!(char && (char.extras || []).includes(input.value));
+    }
     $('c-password').value = '';
     $('c-remember').checked = !!(char && char.has_password);
     $('c-note').value = (char && char.note) || '';
@@ -90,6 +170,8 @@
         password: $('c-password').value,
         remember: $('c-remember').checked,
         note: $('c-note').value.trim(),
+        profession: $('c-profession').value,
+        extras: chosenExtras(),
       },
     });
     form(null, false);
@@ -129,8 +211,11 @@
     nm.textContent = char.name;
     const sub = document.createElement('div');
     sub.className = 'sub';
+    const prof = professionOf(char.profession);
     sub.textContent = [
       `${char.host}:${char.port}`,
+      prof ? prof.name : '',
+      ...(char.extras || []).map((id) => (extraOf(id) || {}).name),
       char.has_password ? 'password saved' : '',
       char.note,
       who.character === char.name ? 'playing' : '',
@@ -182,6 +267,8 @@
   }
 
   function render() {
+    offerProfessions();
+    offerExtras();
     const list = $('char-list');
     list.replaceChildren();
     for (const c of who.known) list.append(card(c));

@@ -39,7 +39,7 @@ check("right-click opens the menu, and the browser's own is suppressed", !!menu(
 check('the menu stays on screen near a corner',
   menu().style.left === '796px' && menu().style.top === '676px', [menu().style.left, menu().style.top]);
 const heads = menu().querySelectorAll('h6').map((h) => h.textContent);
-check('it offers the channel, the person, and dings', same(heads, ['The Clan channel', 'Everything from Friend', 'Ding']), heads);
+check('it offers the channel, the person, and dings', same(heads, ['The Clan channel', 'Everything from Friend', 'Ding', 'Hide']), heads);
 menu().querySelectorAll('.cm-swatches')[0].querySelectorAll('.cm-swatch')[3].onclick();
 check('picking closes the menu', !menu());
 check('every Clan line takes the colour, nothing else',
@@ -169,6 +169,29 @@ check('a tell you send them does not', hear(() => pushMessage('tell', { who: 'Bu
 p = open(); setMe('Player');
 check('dings survive a reload', same(hear(() => pushMessage('tell', { who: 'buddy', message: 'again', from_me: false })), ['tell']));
 
+// --- hide ------------------------------------------------------------------------
+for (const k of Object.keys(saved)) delete saved[k];
+p = open(); setMe('Player');
+clan('Friend', 'hi');
+clan('Other', 'yo');
+pushMessage('tell', { who: 'Friend', message: 'psst', from_me: false });
+rows()[0].oncontextmenu(click(10, 10));
+const hideHeads = menu().querySelectorAll('h6').map((h) => h.textContent);
+check('the menu offers to hide the person, last', hideHeads[hideHeads.length - 1] === 'Hide', hideHeads);
+menu().querySelectorAll('.cm-hide')[0].onclick();
+check('hiding takes their channel lines and their tells out', same(texts(), ['[Clan] Other : yo']), texts());
+check('the count says so', root.querySelector('.cm-count').textContent === '1 of 3');
+clan('friend', 'again');
+check('what they say next stays out, whatever the case', texts().length === 1, texts());
+p = open(); clan('Friend', 'back');
+check('a reload keeps them out', texts().length === 0, texts());
+setBlocked('remove', 'FRIEND');
+check('/unblock lets them back', same(texts(), ['[Clan] Friend : back']), texts());
+setBlocked('add', 'Other');
+clan('Other', 'x');
+check('/block keeps them out', same(texts(), ['[Clan] Friend : back']), texts());
+setBlocked('clear');
+check('/unblock all empties the list', saved['cm:msgmon:blocked'] === '[]', saved['cm:msgmon:blocked']);
 void El;
 // --- tells, in words ---------------------------------------------------------------
 for (const k of Object.keys(saved)) delete saved[k];

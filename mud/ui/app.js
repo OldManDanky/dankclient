@@ -295,6 +295,8 @@ function handle(m) {
     if (window.ding) window.ding(m.slot);
   } else if (m.t === 'numpad') {
     if (window.setNumpad) window.setNumpad(m.op);
+  } else if (m.t === 'block') {
+    if (window.setBlocked) window.setBlocked(m.op, m.name);
   } else if (m.t === 'tell' || m.t === 'chat') {
     if (m.t === 'tell') noteTell(m.d);
     // The MUD prints these in the main output already; echoing them into the
@@ -917,6 +919,14 @@ function render(s) {
     const span = document.createElement('span');
     span.textContent = `${k}: ${v}`;
     chrome.append(span);
+  }
+  // Lines a pack keeps up to date, such as the corpse counts.
+  const packLines = $('pack-status');
+  packLines.replaceChildren();
+  for (const text of s.status || []) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    packLines.append(div);
   }
 }
 

@@ -46,6 +46,11 @@ HELP = [
         ('/unalias <word>', 'remove one'),
         ('/flush', 'drop everything the scripts have queued'),
     ]),
+    ('Messages', 'The messages window across the top: tells, souls and channels.', [
+        ('/block <name>', 'keep everything they say out of the messages window -- the output still shows it'),
+        ('/unblock <name|all>', 'show them there again'),
+        ('/blocked', 'who is kept out'),
+    ]),
     ('Gags', 'Lines kept off the screen -- also under Options -> Gags. Your triggers and the log still see them.', [
         ('/gag <text>', 'hide every line containing it'),
         ('/gags', 'the ones in force'),
@@ -321,6 +326,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb == "numpad":
         _numpad(rest, session, note)
+
+    elif verb in ("block", "unblock", "blocked"):
+        _block(verb, rest, session, note)
 
     elif verb in ("folder", "folders"):
         _folders(rest, scripts, note)
@@ -739,6 +747,27 @@ def _numpad(rest: str, session, note) -> None:
         return
     from . import events
     session.bus.emit(events.PAGE, {"t": "numpad", "op": op})
+
+
+def _block(verb: str, rest: str, session, note) -> None:
+    """Somebody kept out of the messages window, or let back in.
+
+    3kdb's chat blacklist.  The window belongs to the browser, like the
+    numpad, so this asks every open window and each says what it did.  Only
+    that window: the output is 3K's own text and keeps everything.
+    """
+    name = rest.strip()
+    if verb == "blocked":
+        op, name = "list", ""
+    elif verb == "unblock" and name.lower() == "all":
+        op, name = "clear", ""
+    elif not name or " " in name:
+        note(f"usage: /{verb} <name>" + (" -- or /unblock all" if verb == "unblock" else ""))
+        return
+    else:
+        op = "add" if verb == "block" else "remove"
+    from . import events
+    session.bus.emit(events.PAGE, {"t": "block", "op": op, "name": name})
 
 
 def _group(rest: str, scripts, note) -> None:

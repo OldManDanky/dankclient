@@ -56,6 +56,10 @@ class Character:
     #: kept only if you asked; never sent back to the browser
     password: str = ""
     note: str = ""
+    #: a profession pack's id (mud/packs), or "" for none
+    profession: str = ""
+    #: extra packs' ids, such as "corpses"
+    extras: list[str] = field(default_factory=list)
     last_played: float = 0.0
 
     @property
@@ -203,3 +207,8 @@ def activate(char: Character, chars: Characters, session, scripts=None) -> None:
         rules.path = chars.rules_path(char.name)
         rules.load()
         rules.register()
+    # Their profession's 3kdb commands, or none -- and never the last
+    # character's, which is the same mistake as their rules.
+    if scripts is not None and hasattr(scripts, "load_source"):
+        from . import packs
+        packs.apply(scripts, char, chars.dir(char.name))
