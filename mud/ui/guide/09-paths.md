@@ -10,7 +10,7 @@ A path is a walk: the steps, and optionally creatures to kill along it. A steppe
 - **Start room**: a room number to walk to first. The client checks it arrived; blank starts wherever you are.
 - **Before starting**: commands sent once, one per line, e.g. `touch angel rune`.
 - **Attack on sight**: names, or any word from their long description, separated by commas. Blank walks without fighting.
-- **Repeat**, and **Rest** (seconds in each room).
+- **Repeat**, and **Rest** (seconds in each room; 0 takes the Stepper panel's **Rest**).
 
 - **Folder**: optional, and it changes nothing about the walk. A `/` makes
   another level, so `chaos/dungeon` puts the path in **dungeon** inside
@@ -37,6 +37,7 @@ In the **Stepper panel**, type part of a path's name, a step or a creature, and 
 - **AutoCollect** sends `get all` in a room once its fights are over, before moving on.
 - **Loop** starts the path over when it reaches the end. It is the path's own **Repeat**, so ticking it here ticks it there. Unticked while walking, the stepper finishes the lap it is on.
 - **COT when done**: when a path finishes by itself and is not looping, walk to the Center of Town, as `/go cot` does. Not after **Stop** or **Pause**, and not when a stepper gives up partway.
+- **Rest** is how long a stepper waits in each room before its next step, 2 seconds to start with, so your triggers have time to fire: a corpse handled, a heal, a pick-up. A path with a **Rest** of its own uses that instead. With any rest, a path walks room by room rather than as one quick stack.
 
 ## How it fights
 

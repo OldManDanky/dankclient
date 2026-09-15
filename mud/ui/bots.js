@@ -283,6 +283,21 @@
   const cot = $('bot-cot');
   if (cot) cot.onchange = () => send({ op: 'cot', on: cot.checked });
   window.setCot = (on) => { if (cot) cot.checked = on; };
+  /* Rest: seconds in each room before the next step, so triggers have time
+     to fire.  The panel's, kept by the server; a path with a Rest of its
+     own uses that instead. */
+  const restBox = $('bot-rest');
+  if (restBox) {
+    restBox.onchange = () => {
+      const n = Math.max(0, Math.min(60, parseFloat(restBox.value) || 0));
+      restBox.value = String(n);
+      send({ op: 'rest', seconds: n });
+    };
+  }
+  window.setRest = (n) => {
+    // Not while it is being typed in: a list arriving would undo the typing.
+    if (restBox && document.activeElement !== restBox) restBox.value = String(n);
+  };
 
   $('bot-find').oninput = drawFound;
   $('bot-find').onkeydown = (e) => {

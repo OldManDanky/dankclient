@@ -60,6 +60,25 @@ def folder(path: str) -> str:
     return "/".join([p for p in parts if p][:MOST_DEPTH])
 
 
+#: The Stepper panel's Rest, as it starts: long enough after each step for
+#: what a room sets off -- a trigger, a corpse handled, a heal -- to happen
+#: before the next one.
+REST = 2.0
+#: The longest a rest can be set to.
+MOST_REST = 60.0
+
+
+def _rest(seconds) -> float:
+    """A rest as typed: a number of seconds, 0 to MOST_REST, else REST."""
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        return REST
+    if value != value:                   # NaN
+        return REST
+    return min(max(value, 0.0), MOST_REST)
+
+
 @dataclass
 class Route:
     id: str = ""
@@ -68,8 +87,8 @@ class Route:
     #: Creature names to attack on sight, as MIP spells them.
     targets: list[str] = field(default_factory=list)
     loop: bool = False
-    #: Seconds to pause in each room.  Nothing forces this; it is for routes
-    #: that want to let a regeneration tick land.
+    #: Seconds to pause in each room.  0 takes the Stepper panel's Rest; more
+    #: is for a path that wants longer, to let a regeneration tick land.
     rest: float = 0.0
     #: Commands to send before the first step.  A Section Z route
     #: opens with "touch angel rune", and a route that walks in without it is
@@ -207,6 +226,9 @@ class RouteStore:
         #: The Stepper panel's COT when done: a path that finishes by itself,
         #: not looping, then walks to the Center of Town.
         self.cot = False
+        #: The Stepper panel's Rest: seconds in each room before the next
+        #: step, for every path without a rest of its own.
+        self.rest = REST
 
     @property
     def paused_path(self) -> Path:
@@ -225,18 +247,26 @@ class RouteStore:
         self.cot = bool(on)
         self._save_settings()
 
+    def set_rest(self, seconds) -> None:
+        """The Stepper panel's Rest, 0 to MOST_REST seconds."""
+        self.rest = _rest(seconds)
+        self._save_settings()
+
     def _save_settings(self) -> None:
         write_atomically(self.settings_path, json.dumps(
-            {"autocollect": self.autocollect, "cot": self.cot}, indent=2))
+            {"autocollect": self.autocollect, "cot": self.cot,
+             "rest": self.rest}, indent=2))
 
     def _load_settings(self) -> None:
         self.autocollect = self.cot = False
+        self.rest = REST
         if not self.settings_path.exists():
             return
         try:
             raw = json.loads(self.settings_path.read_text())
             self.autocollect = bool(raw.get("autocollect", False))
             self.cot = bool(raw.get("cot", False))
+            self.rest = _rest(raw.get("rest", REST))
         except (ValueError, OSError, AttributeError):
             set_aside(self.settings_path)
 
@@ -533,8 +563,10 @@ class RouteStore:
                 # fight here dropped.  At the moves' own priority, so it
                 # reaches 3K before the next step does.
                 self.host.session.queue.put(COLLECT, HIGH)
-            if route.rest:
-                await asyncio.sleep(route.rest)
+            rest = route.rest or self.rest
+            if rest:
+                # Time for what the room set off before the next step.
+                await asyncio.sleep(rest)
 
         def finished(bot) -> None:
             """The path ran to its end by itself -- not Stop, not Pause, not
@@ -594,7 +626,7 @@ class RouteStore:
             # A route that fights nothing and rests nowhere is only a walk, so
             # it goes as one stack, like /go -- when the map can follow the
             # whole path and so knows where it ends.  Otherwise room by room.
-            stack = not targets and not route.rest
+            stack = not targets and not (route.rest or self.rest)
             while True:
                 if stack and mapper is not None and mapper.here is not None:
                     left = steps[first:]

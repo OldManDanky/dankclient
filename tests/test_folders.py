@@ -160,6 +160,7 @@ def both(*items) -> tuple:
     host = ScriptHost(session, where)
     host.rules = RuleStore(host, where / "rules.json")
     host.routes = RouteStore(host, where / "routes.json")
+    host.routes.rest = 0.0          # the panel's rest, off so these run at speed
     host.rules.rules = [
         Rule(kind=kind, pattern=f"p{n}", name=f"n{n}", every=290, group=group,
              actions=[{"type": "send", "text": "x"}])

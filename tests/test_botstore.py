@@ -83,6 +83,9 @@ def build(tmp):
     s.queue._send = s.sent.append
     host = ScriptHost(s, tmp)
     host.routes = RouteStore(host, Path(tmp) / "routes.json")
+    # The panel's two-second rest, off here so these run at speed; the
+    # tests of the rest itself put it back.
+    host.routes.rest = 0.0
     return s, host
 
 
@@ -868,3 +871,77 @@ def test_the_stepper_panel_sets_loop_and_cot_and_they_are_kept():
         assert again.cot is True and again.routes[0].loop is True
         html = (Path(__file__).resolve().parents[1] / "mud/ui/index.html").read_text()
         assert 'id="bot-loop"' in html and 'id="bot-cot"' in html and "COT when done" in html
+
+
+# --- the Stepper panel's rest ------------------------------------------------------
+
+def test_the_panel_rests_two_seconds_to_start_with_and_keeps_what_it_is_set_to():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        fresh = RouteStore(host, Path(tmp) / "other.json")
+        assert fresh.rest == 2.0
+        fresh.set_rest(3.5)
+        again = RouteStore(host, Path(tmp) / "other.json")
+        again.load()
+        assert again.rest == 3.5
+        for typed, kept in (("junk", 2.0), (-4, 0.0), (999, 60.0), ("0.5", 0.5)):
+            again.set_rest(typed)
+            assert again.rest == kept, typed
+
+
+def _moves(s):
+    return [c for c in s.sent if c in ("n", "e")]
+
+
+def test_a_rest_waits_in_each_room_before_the_next_step():
+    """Time for what the room set off -- a trigger, a corpse handled -- before
+    the path moves on.  So a rest also means room by room, never one stack."""
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        m.here = a
+        host.routes.set_rest(0.4)
+        route, _ = host.routes.upsert({"name": "stroll", "path": "n e"})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0.05)
+            assert _moves(s) == ["n"], "room by room, not one stack"
+            arrive(s, m, b)
+            await asyncio.sleep(0.2)
+            assert _moves(s) == ["n"], "still resting"
+            await asyncio.sleep(0.4)
+            assert _moves(s) == ["n", "e"]
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_a_path_with_its_own_rest_uses_that_instead():
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        m, a, b, c = line_of_rooms(s)
+        m.here = a
+        host.routes.set_rest(30)
+        route, _ = host.routes.upsert({"name": "stroll", "path": "n e", "rest": 0.1})
+
+        async def scenario():
+            host.routes.start(route.id)
+            await asyncio.sleep(0.05)
+            arrive(s, m, b)
+            await asyncio.sleep(0.4)
+            assert _moves(s) == ["n", "e"]
+
+        asyncio.new_event_loop().run_until_complete(scenario())
+
+
+def test_the_stepper_panel_sets_the_rest_and_hears_it():
+    from mud.web import WebServer
+    with tempfile.TemporaryDirectory() as tmp:
+        s, host = build(tmp)
+        web = WebServer(s, scripts=host)
+        pushed = []
+        web.push = pushed.append
+        web._on_client_message(b'{"t": "routes", "op": "rest", "seconds": 4}')
+        assert host.routes.rest == 4.0 and pushed[-1]["rest"] == 4.0
+        html = (Path(__file__).resolve().parents[1] / "mud/ui/index.html").read_text()
+        assert 'id="bot-rest"' in html

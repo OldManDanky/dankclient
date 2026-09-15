@@ -190,6 +190,7 @@
       }));
       if (window.setAutoCollect) window.setAutoCollect(!!m.autocollect);
       if (window.setCot) window.setCot(!!m.cot);
+      if (window.setRest && typeof m.rest === 'number') window.setRest(m.rest);
       // The form closes only once the server has taken the save: an error
       // comes back on the same channel, and closing on the click would throw
       // away what you typed before you had seen why it was refused.

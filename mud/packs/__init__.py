@@ -15,6 +15,7 @@ A pack is a script like any other, with a few more names in its globals:
     say(text)              one line, marked with the pack's name
     show(*lines)           lines as they are, for a table
     status(text)           a line in the Session panel; "" takes it away
+    owner                  its own name, for gags it adds and takes away
     level()                a profession's level, once `profs` has said it
     await fresh_level()    sends `profs` and waits for the answer
     await go_to(place)     walks to a 3kdb speedrun destination; True there
@@ -93,6 +94,10 @@ EXTRAS = (
           "fill-moulding", "make-gem <gem>", "gem-lookup <word>",
           "jewel-lookup <word>", "borrow-tomes <i|ii|iii>",
           "buy-tomes <i|ii|iii>", "box-tomes <i|ii|iii>"), "extra"),
+    Pack("kills", "Kill stats",
+         "every kill's rounds, time, damage, xp and coins, with rates",
+         (".kills [count|mob|clear|ask off]", "3kReport", "3kReport-clear"),
+         "extra"),
 )
 
 
@@ -270,7 +275,7 @@ def _load(host, pack: Pack, folder: Path | None) -> bool:
         return False
 
     extra = {
-        "say": say, "show": show, "status": status,
+        "say": say, "show": show, "status": status, "owner": owner,
         "fresh_level": fresh_level, "go_to": go_to,
         "level": lambda: heard["level"],
         "keep": Keep(Path(folder) / f"{pack.id}.json" if folder else None),

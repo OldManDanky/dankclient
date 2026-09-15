@@ -118,6 +118,7 @@ def build(tmp):
     s.me = "Player"
     host = ScriptHost(s, tmp)
     host.routes = RouteStore(host, Path(tmp) / "routes.json")
+    host.routes.rest = 0.0          # the panel's rest, off so these run at speed
     return s, host
 
 

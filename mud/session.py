@@ -99,6 +99,12 @@ def keep_alive(sock) -> bool:
     return True
 
 
+#: "You hit Cur 3 times for 900 damage." and "Cur hits you for 90 damage!"
+DAMAGE_NUMBERS = re.compile(r"\bfor [\d,]+ damage\b")
+#: Who owns the 3kdb gag library's gags (gaglib.OWNER).
+LIBRARY_GAGS = "3kdb-gags"
+
+
 class Session:
     def __init__(
         self,
@@ -680,8 +686,19 @@ class Session:
     # --- the screen ---------------------------------------------------------
 
     def is_gagged(self, plain: str) -> bool:
-        """Is this line one the player has asked not to see?"""
-        return bool(self.gags.fire(plain))
+        """Is this line one the player has asked not to see?
+
+        A line with damage numbers in it is never hidden by 3kdb's gag
+        library.  Its `^You hit %%1.` is meant for the plain "You hit Cur."
+        and, as written, hides "You hit Cur 1 time for 9161 damage." too --
+        in TinTin++ as well, where 3kdb's damage tracker shows a summary
+        instead.  Numbers are a setting somebody turns on to see them.  A
+        gag of the player's own still hides whatever it matches.
+        """
+        hits = self.gags.fire(plain)
+        if hits and DAMAGE_NUMBERS.search(plain):
+            hits = [hit for hit in hits if hit[0].owner != LIBRARY_GAGS]
+        return bool(hits)
 
     def _show(self, data: bytes) -> None:
         """Send text to the screen, through the gags."""

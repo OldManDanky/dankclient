@@ -923,6 +923,10 @@
         <label class="bot-check"
                title="When a path finishes by itself and is not looping, walk to the Center of Town (/go cot)">
           <input id="bot-cot" type="checkbox"> COT when done</label>
+        <label class="bot-check"
+               title="Seconds to wait in each room before the next step, so triggers have time to fire. A path with a Rest of its own uses that instead">
+          Rest <input id="bot-rest" type="number" min="0" max="60" step="0.5" value="2"
+                      class="num" style="width:4em"> s</label>
       </div>
       <input id="bot-find" type="search" autocomplete="off" spellcheck="false"
              placeholder="find a path: name, step or creature"
@@ -1816,7 +1820,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
                 <label for="r-rest">Rest</label>
                 <div class="ctl">
                   <input id="r-rest" type="text" spellcheck="false" value="0"
-                         class="num"> <span class="hint">seconds between steps</span>
+                         class="num"> <span class="hint">seconds between steps; 0 takes the Stepper panel's Rest</span>
                 </div>
               </div>
             </div>

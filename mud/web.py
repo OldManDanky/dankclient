@@ -1322,7 +1322,7 @@ class WebServer:
                 # route in without having to derive them from the routes.
                 "folders": store.folders(),
                 "walk": self._walk_state(), "autocollect": store.autocollect,
-                "cot": store.cot}
+                "cot": store.cot, "rest": store.rest}
 
     def _folders_op(self, msg: dict) -> None:
         """A folder spans both stores, so the ops that act on one live here.
@@ -1410,6 +1410,8 @@ class WebServer:
             store.set_autocollect(bool(msg.get("on")))
         elif op == "cot":
             store.set_cot(bool(msg.get("on")))
+        elif op == "rest":
+            store.set_rest(msg.get("seconds"))
         elif op == "loop":
             problem = store.set_loop(msg.get("id", ""), bool(msg.get("on")))
             if problem:

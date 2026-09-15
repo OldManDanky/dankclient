@@ -178,3 +178,28 @@ def test_options_has_a_gag_library_tab_in_automation():
     assert "op: 'set', key: g.key, on: box.checked" in js
     assert "window.refreshGaglib" in (UI / "options.js").read_text()
     assert "done.gags" in (UI / "updates.js").read_text()
+
+
+def test_the_library_never_hides_a_line_with_damage_numbers():
+    """3kdb's `^You hit %%1.` is meant for "You hit Cur." and, as written,
+    hid every "You hit Cur 1 time for 9161 damage." -- a player's numbers,
+    gone because a combat group was ticked.  A gag of your own still hides."""
+    from mud.gaglib import OWNER, apply
+    from mud.session import LIBRARY_GAGS, Session
+    from mud.triggers import Trigger
+
+    assert LIBRARY_GAGS == OWNER
+    s = Session("127.0.0.1", 1, sec_code=1)
+    library = {"groups": [{"key": "combat", "gags": [{"regex": r"^You\ hit\ .*?\."},
+                                                      {"regex": r"hits you"}]}]}
+    assert apply(s.gags, library, {"combat"}) == 2
+    assert not s.is_gagged("You hit Spiral Gun 1 time for 9161 damage.")
+    assert not s.is_gagged("You hit the lordly knight 12 times for 45,000 damage.")
+    assert not s.is_gagged("Cur hits you for 90 damage!")
+    assert s.is_gagged("You hit Cur.")
+    assert s.is_gagged("Cur hits you hard.")
+    s.gags.add(Trigger("Spiral Gun", lambda _m=None: None, "contains", "mine"))
+    assert s.is_gagged("You hit Spiral Gun 1 time for 9161 damage.")
+    shown = s.gate.feed(b"You hit Cur.\r\nYou hit rat 1 time for 9161 damage.\r\n")
+    shown += s.gate.release()
+    assert b"9161 damage" in shown and b"You hit Cur." not in shown

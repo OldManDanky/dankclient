@@ -6,9 +6,9 @@ const { page, load, check, same, finish } = require('./stage');
 const sent = [];
 const IDS = ['bot-now', 'bot-name', 'bot-step', 'bot-bar', 'bot-note', 'bot-start',
   'bot-pause', 'bot-stop', 'bot-find', 'bot-found', 'bot-autocollect', 'bot-loop', 'bot-cot',
-  'bot-sum'];
+  'bot-sum', 'bot-rest'];
 const saved = {};
-const p = page(Object.fromEntries(IDS.map((i) => [i, i === 'bot-find' ? 'input' : 'div'])), saved);
+const p = page(Object.fromEntries(IDS.map((i) => [i, ['bot-find', 'bot-rest'].includes(i) ? 'input' : 'div'])), saved);
 global.ws = { readyState: 1, send: (m) => sent.push(JSON.parse(m)) };
 load('bots.js');
 const el = (id) => p.els[id];
@@ -159,5 +159,16 @@ check('a path that repeats shows Loop ticked', el('bot-loop').disabled === false
 el('bot-loop').checked = false;
 el('bot-loop').onchange();
 check('unticking Loop changes that path', same(last(), { t: 'routes', op: 'loop', id: 'a1', on: false }), last());
+
+// Rest: the panel's, kept by the server; what is typed is held to 0-60.
+setRest(2);
+check('Rest shows what the server sent', el('bot-rest').value === '2', el('bot-rest').value);
+el('bot-rest').value = '90';
+el('bot-rest').onchange();
+check('a rest is at most a minute, and the server is told',
+  same(last(), { t: 'routes', op: 'rest', seconds: 60 }) && el('bot-rest').value === '60', last());
+el('bot-rest').value = 'x';
+el('bot-rest').onchange();
+check('nonsense is no rest', same(last(), { t: 'routes', op: 'rest', seconds: 0 }), last());
 
 finish();

@@ -53,7 +53,8 @@ def status(session):
 def test_every_extra_loads_and_answers_to_every_command_it_names():
     with tempfile.TemporaryDirectory() as tmp:
         session, host = make(tmp)
-        assert packs.use_extras(host, [e.id for e in packs.EXTRAS]) == ["corpses", "crafting"]
+        assert packs.use_extras(host, [e.id for e in packs.EXTRAS]) == [
+            "corpses", "crafting", "kills"]
         assert not host.errors
         for extra in packs.EXTRAS:
             for command in extra.commands:
@@ -91,7 +92,7 @@ def test_the_character_screen_offers_and_saves_the_extras():
         session, host = make(tmp)
         chars = Characters(Path(tmp) / "profiles", Path(tmp) / "scripts")
         web = WebServer(session, scripts=host, characters=chars)
-        assert [e["id"] for e in web._who()["extras"]] == ["corpses", "crafting"]
+        assert [e["id"] for e in web._who()["extras"]] == ["corpses", "crafting", "kills"]
         web._login_op({"op": "save", "character": {"name": "Player",
                                                    "extras": ["crafting", "bogus"]}})
         assert chars.get("Player").extras == ["crafting"]
