@@ -7,7 +7,8 @@ const saved = {};
 let p;
 const sent = [];
 function open() {
-  p = page({ cmd: 'input', 'numpad-mode': 'select', 'numpad-grid': 'div', 'numpad-reset': 'button' }, saved);
+  p = page({ cmd: 'input', 'numpad-mode': 'select', 'numpad-hold': 'select', 'numpad-grid': 'div',
+    'numpad-reset': 'button' }, saved);
   global.sendCommand = (t) => sent.push(t);
   load('numpad.js');
 }
@@ -101,5 +102,39 @@ window.setNumpad('off');
 open();
 window.setNumpad('on');
 check('after a reload, on is still however it was last on', p.els['numpad-mode'].value === 'empty');
+
+// Holding a key, with the clock stood in for.
+const ticks = new Map();
+let nextTimer = 1;
+global.setInterval = (f, ms) => { ticks.set(nextTimer, { f, ms }); return nextTimer++; };
+global.clearInterval = (id) => ticks.delete(id);
+const tick = () => { for (const t of [...ticks.values()]) t.f(); };
+window.setNumpad('empty');
+box('', 0, 0);
+key('Numpad6');
+check('sends once when held, unless asked', ticks.size === 0 && p.els['numpad-hold'].value === '0');
+p.els['numpad-hold'].value = '250';
+p.els['numpad-hold'].onchange();
+check('repeat is kept', saved['numpad:hold'] === '250');
+const held = key('Numpad6');
+const pace = [...ticks.values()].map((t) => t.ms);
+const repeated = key('Numpad6', { repeat: true }).sent;
+tick(); tick();
+check('held: sent now, then on the clock, never on the keyboard\'s own repeat',
+  same(held.sent, ['e']) && same(pace, [250]) && same(repeated, []) && same(sent, ['e', 'e']), sent);
+window.numpadKeyUp({ code: 'Numpad8' });
+check('another key coming up does not stop it', ticks.size === 1);
+window.numpadKeyUp({ code: 'Numpad6' });
+check('letting go stops it', ticks.size === 0);
+key('Numpad6');
+key('Numpad4');
+sent.length = 0;
+tick();
+check('pressing another key hands the repeat over', ticks.size === 1 && same(sent, ['w']));
+window.setNumpad('off');
+tick();
+check('switched off mid-hold: it stops', ticks.size === 0);
+open();
+check('after a reload it still repeats', p.els['numpad-hold'].value === '250');
 
 finish();

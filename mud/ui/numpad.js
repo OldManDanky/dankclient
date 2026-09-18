@@ -9,9 +9,11 @@
 
    The browser says which physical key it was (Numpad8, not "8"), with NumLock
    on or off, so the digit row above the letters is never involved.  Holding a
-   key sends once: auto-repeat would send "n" thirty times a second, which on
-   a strange map is how you walk into something.  A key left empty types its
-   number, so any one of them can be handed back. */
+   key sends once unless Options says to repeat, and then at a pace chosen
+   there rather than the keyboard's own auto-repeat, which would send "n"
+   thirty times a second -- on a strange map, how you walk into something.  It
+   stops the moment the key comes up, or the window loses the keyboard.  A key
+   left empty types its number, so any one of them can be handed back. */
 
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -42,6 +44,9 @@
     ['0', 'wide'], ['.'],
   ];
 
+  //: Holding a key: 0 sends once, otherwise every this many milliseconds.
+  const PACES = [0, 500, 250];
+  let pace = 0;
   let mode = 'off';
   //: which way it was last on, for /numpad on to go back to
   let lastOn = 'empty';
@@ -50,6 +55,8 @@
   function load() {
     mode = store.get('numpad:mode', 'off');
     if (!['off', 'empty', 'always'].includes(mode)) mode = 'off';
+    pace = Number(store.get('numpad:hold', '0'));
+    if (!PACES.includes(pace)) pace = 0;
     lastOn = mode !== 'off' ? mode : store.get('numpad:on', 'empty');
     if (!['empty', 'always'].includes(lastOn)) lastOn = 'empty';
     map = Object.assign({}, DEFAULTS);
@@ -64,6 +71,7 @@
   function save() {
     store.set('numpad:mode', mode);
     store.set('numpad:map', JSON.stringify(map));
+    store.set('numpad:hold', String(pace));
     if (mode !== 'off') {
       lastOn = mode;
       store.set('numpad:on', mode);
@@ -112,14 +120,42 @@
     // well as walking north, and 9 scrolled the terminal up a page, where it
     // stayed while everything new arrived out of sight below.
     if (e.stopPropagation) e.stopPropagation();
-    if (e.repeat) return true;            // held down: once is enough
-    const parts = command.split(';').map((s) => s.trim()).filter(Boolean);
-    for (const part of parts) if (window.sendCommand) window.sendCommand(part);
+    // The keyboard's own repeats are never sent: holding is timed here.
+    if (e.repeat) return true;
+    stop();
+    send(command);
+    if (pace) {
+      held = e.code;
+      timer = setInterval(() => {
+        if (mode === 'off') stop();
+        else send((map[key] || '').trim());
+      }, pace);
+    }
     return true;
   };
+
+  function send(command) {
+    const parts = command.split(';').map((s) => s.trim()).filter(Boolean);
+    for (const part of parts) if (window.sendCommand) window.sendCommand(part);
+  }
+
+  //: the key being held and repeated, and its timer
+  let held = null;
+  let timer = null;
+  function stop() {
+    if (timer) clearInterval(timer);
+    held = timer = null;
+  }
+  window.numpadKeyUp = function (e) {
+    if (held && e.code === held) stop();
+  };
+
   // Capturing, on the way down: first, before the command box's own arrow
   // and PageUp handling, which would otherwise have acted on it already.
   addEventListener('keydown', window.numpadKey, true);
+  addEventListener('keyup', window.numpadKeyUp, true);
+  // A key let go in another window is never seen coming up.
+  addEventListener('blur', stop);
 
   // --- Options -> Keyboard ---------------------------------------------------
 
@@ -160,6 +196,15 @@
     $('numpad-mode').value = mode;
     $('numpad-mode').onchange = () => {
       mode = $('numpad-mode').value;
+      save();
+    };
+  }
+  if ($('numpad-hold')) {
+    $('numpad-hold').value = String(pace);
+    $('numpad-hold').onchange = () => {
+      pace = Number($('numpad-hold').value);
+      if (!PACES.includes(pace)) pace = 0;
+      stop();
       save();
     };
   }

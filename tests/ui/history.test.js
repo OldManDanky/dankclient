@@ -69,5 +69,9 @@ for (let i = 0; i < 600; i++) window.cmdHistory.add(`say ${i}`, true);
 check('the last 500 are kept',
   window.cmdHistory.list().length === 500 && JSON.parse(saved['cmd:history']).length === 500
   && window.cmdHistory.list()[499] === 'say 599');
+window.cmdHistory.open();
+check('the list shows the newest 50, and says a search reaches the rest',
+  rows().length === 50 && texts()[0] === 'say 599'
+  && p.els['hist-list'].children[50].textContent.includes('of 500'), texts().length);
 
 finish();

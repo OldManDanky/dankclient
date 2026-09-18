@@ -13,7 +13,7 @@
   const KEY = 'cmd:history';
   const MOST = 500;
   //: the most rows drawn at once; a search finds the rest
-  const SHOWN = 200;
+  const SHOWN = 50;
 
   function read() {
     try {
@@ -71,7 +71,8 @@
 
   function draw() {
     const query = find.value.trim();
-    rows = matching(query).slice(0, SHOWN);
+    const found = matching(query);
+    rows = found.slice(0, SHOWN);
     picked = Math.max(0, Math.min(picked, rows.length - 1));
     list.replaceChildren();
     if (!rows.length) {
@@ -94,6 +95,12 @@
       list.append(row);
       if (i === picked && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
     });
+    if (found.length > rows.length) {
+      const more = document.createElement('p');
+      more.className = 'hist-none';
+      more.textContent = `The newest ${rows.length} of ${found.length}: type to search the rest.`;
+      list.append(more);
+    }
   }
 
   function show() {

@@ -6,6 +6,7 @@ register for changes and are called with (name, new, old).
 
 from __future__ import annotations
 
+import re
 import time
 from collections import deque
 from dataclasses import dataclass, field, replace
@@ -14,6 +15,18 @@ from typing import Callable
 from . import codes, events
 from .codes import Chat, GlineField, RoomObject, Tell
 from .events import Bus
+
+#: 3K's party bookkeeping on the Party channel, not anybody talking:
+#: "[PARTY] GOLD divvy called by Friend." and "[PARTY] All gold divvied,
+#: total: 476."  One pair every kill someone divvies, and the Messages window
+#: is where you look for what people said.  It still prints in the main window.
+DIVVY = re.compile(r"^\[PARTY\]\s+(?:\w+ divvy called by \S+|All \w+ divvied, total\b)",
+                   re.IGNORECASE)
+
+
+def chat_is_chatter(chat: Chat) -> bool:
+    """Does this channel record belong in the Messages window?"""
+    return not DIVVY.match((getattr(chat, "message", "") or "").strip())
 
 Listener = Callable[[str, object, object], None]
 
@@ -328,11 +341,12 @@ class World:
         elif code == "CAA":
             chat = codes.parse_caa(data)
             self.chat.append(chat)
-            self.messages.append({
-                "kind": "chat", "at": time.time(), "who": chat.who,
-                "channel": chat.channel, "command": chat.command,
-                "text": chat.message, "mine": False,
-            })
+            if chat_is_chatter(chat):
+                self.messages.append({
+                    "kind": "chat", "at": time.time(), "who": chat.who,
+                    "channel": chat.channel, "command": chat.command,
+                    "text": chat.message, "mine": False,
+                })
             self._emit("chat", chat)
             self.log("chat", chat.message, chat.channel, chat.who)
 

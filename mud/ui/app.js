@@ -340,6 +340,24 @@ function handle(m) {
 // scrollback as you type, so what you are composing never gets shredded by
 // output arriving mid-keystroke.
 const cmd = $('cmd');
+/* The room's name without the ways out 3K tacks on the end in brief mode --
+   "Town square (n,s,e,w)", cut off at 60 characters, often mid-word.  They
+   are the buttons just under it, and a name that long ran out of the panel.
+   Only a list of the room's own exits goes: "(or 'strange things are
+   happening here')" is part of the name. */
+function roomTitle(short, exits) {
+  const m = /^(.*\S)\s+\(([^()]*)\)?$/.exec(short);
+  if (!m || !exits || !exits.length) return short;
+  const ways = exits.map((e) => String(e).trim().toLowerCase());
+  const items = m[2].split(',').map((x) => x.trim().toLowerCase());
+  const cut = !short.endsWith(')');
+  const last = cut ? items.pop() : null;
+  if (items.some((x) => !ways.includes(x))) return short;
+  if (last !== null && !ways.some((w) => w.startsWith(last))) return short;
+  return m[1];
+}
+window.roomTitle = roomTitle;
+
 //: How far ↑ and ↓ have gone back through history.js's list; null until the
 //: first ↑, since that list is loaded after this file.
 let histPos = null;
@@ -760,7 +778,7 @@ function render(s) {
     lastRound = null;
   }
 
-  $('room-name').textContent = s.room.short || '';
+  $('room-name').textContent = roomTitle(s.room.short || '', s.room.exits);
 
   const exits = $('exits');
   exits.replaceChildren();

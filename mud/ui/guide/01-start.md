@@ -8,7 +8,7 @@ The first things to know: what is on the screen, where you type, and where every
 - **Messages**, across the top, keeps tells and channel lines where combat cannot scroll them away. See [The messages window](#messages).
 - **The map**, top right, follows you. Click a room to walk there. See [The map and getting about](#map).
 - **Session**, under the buttons, says who is logged in, whether MIP is live, and how many commands you have spent this minute (**APM**).
-- **The Stepper panel** walks a path for you. See [Paths and steppers](#paths).
+- **The Stepper panel** walks a path for you. Steppers are an add-on, used at your own risk: know what a path does before you start it, and play within 3K's rules. See [Paths and steppers](#paths).
 - **Your health and points** run along the bottom, above the box you type in.
 
 ## Typing commands

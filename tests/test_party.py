@@ -189,3 +189,16 @@ def test_it_does_not_ask_in_every_room():
     party.asked()
     assert party.since_asked() == 0.0
     assert botstore.ASK_EVERY >= 30
+
+
+def test_divvy_bookkeeping_stays_out_of_the_messages_window():
+    from mud.state import chat_is_chatter
+    s = Session("127.0.0.1", 1, sec_code=12345)
+    for text in ("[PARTY] GOLD divvy called by Friend.",
+                 "[PARTY] All gold divvied, total: 476.",
+                 "[PARTY] Pal: nice kill, divvy called by you?"):
+        s._consume(mip("CAA", f"ptell~Party~friend~{text}") + b"\r\n")
+    assert [m["text"] for m in s.world.messages] == ["[PARTY] Pal: nice kill, divvy called by you?"]
+    assert len(s.world.chat) == 3                 # still read, for the party list
+    assert chat_is_chatter(Chat(command="ptell", channel="Party", who="pal",
+                                message="[PARTY] Pal: all gold divvied, total: meh"))

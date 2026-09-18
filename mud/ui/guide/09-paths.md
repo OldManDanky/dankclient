@@ -2,6 +2,8 @@
 
 A path is a walk: the steps, and optionally creatures to kill along it. A stepper walks one for you, one room at a time, and pauses when you step away from the keyboard.
 
+**Steppers are an add-on, and used at your own risk.** Know what you are running before you start it -- where it goes, what it attacks, what it sends -- and follow 3K's rules. The client walks a path; what it does in the game is on you.
+
 ## Making a path
 
 [Options → Paths & steppers](options:routes), **+ New path**.

@@ -206,13 +206,15 @@
              font:var(--term-size)/1.4 var(--term-font);padding:5px 8px;border-radius:3px}
   #hist-find:focus{outline:none;border-color:var(--accent)}
   #hist-list{max-height:min(50vh,360px);overflow-y:auto;display:flex;flex-direction:column}
-  .hist-row{all:unset;box-sizing:border-box;display:block;width:100%;padding:3px 8px;
+  /* flex:none -- with overflow:hidden a row may otherwise shrink to nothing,
+     and a long list squeezes every row into a sliver you can click but not read. */
+  .hist-row{all:unset;box-sizing:border-box;display:block;flex:none;width:100%;padding:3px 8px;
             border-radius:3px;cursor:pointer;color:var(--ink);
             font:var(--term-size)/1.4 var(--term-font);
             white-space:pre;overflow:hidden;text-overflow:ellipsis}
   .hist-row:hover,.hist-row.on{background:var(--sunk);color:var(--accent)}
   .hist-row:focus-visible{outline:2px solid var(--accent)}
-  .hist-none{margin:4px 8px;color:var(--dim);font-size:11px}
+  .hist-none{flex:none;margin:4px 8px;color:var(--dim);font-size:11px}
   #cmd::placeholder{color:var(--placeholder)}
   aside{width:330px;flex:none;border-left:1px solid var(--line);background:var(--panel);
         overflow-y:auto;padding:var(--gut);display:flex;flex-direction:column;
@@ -231,6 +233,8 @@
      in it what is worth seeing rolled up. */
   #session>h2,#botpanel>h2,#trackpanel>h2,#roompanel>h2{cursor:pointer;display:flex;align-items:baseline;gap:6px}
   h2 .cm-toggle{margin-left:auto;color:var(--dim)}
+  /* A long room name wraps rather than running out of the panel. */
+  #room-name{min-width:0;overflow-wrap:anywhere}
   #session>h2 #status{margin-left:auto}
   #session>h2 .cm-toggle{margin-left:0}
   #side section.collapsed>*:not(h2){display:none!important}
@@ -1152,6 +1156,8 @@
               <h4>Paths &amp; steppers</h4>
               <p>Walks to take and what to fight on the way. Start them here or
                  from the Stepper panel under the map.</p>
+              <p>Steppers are an add-on, used at your own risk: know what a path
+                 does before you start it, and follow 3K's rules.</p>
             </div>
             <div class="acts">
               <button id="r-new" type="button" class="primary">+ New path</button>
@@ -1402,7 +1408,18 @@
                   <option value="always">always</option>
                 </select></div>
                 <p class="fhint">With text in the box the keys type numbers,
-                  unless this says always. Holding a key sends once.</p>
+                  unless this says always.</p>
+              </div>
+              <div class="frow">
+                <label for="numpad-hold">Holding a key</label>
+                <div class="ctl"><select id="numpad-hold">
+                  <option value="0">sends once</option>
+                  <option value="500">repeats, twice a second</option>
+                  <option value="250">repeats, four times a second</option>
+                </select></div>
+                <p class="fhint">Repeats until you let go. 3K works through
+                  what it has been sent, so a fast repeat can carry you a
+                  step or two past where you let go.</p>
               </div>
               <div id="numpad-grid" class="numpad"></div>
               <p class="fhint">Any command, or several separated by

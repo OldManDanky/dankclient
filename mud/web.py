@@ -29,6 +29,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import codes, events, packs
+from .state import chat_is_chatter
 
 def log(*parts: object) -> None:
     print("\x1b[2m[web]\x1b[0m", *parts, file=sys.stderr, flush=True)
@@ -349,8 +350,11 @@ class WebServer:
         def _(room) -> None:
             self._dirty = True
 
-        for kind in (events.TELL, events.CHAT):
-            bus.on(kind, lambda obj, k=kind: self.push({"t": k, "d": _asdict(obj)}))
+        bus.on(events.TELL, lambda obj: self.push({"t": events.TELL, "d": _asdict(obj)}))
+        # Party bookkeeping still counts for the party list, but is not
+        # anything anybody said.
+        bus.on(events.CHAT, lambda obj: chat_is_chatter(obj)
+               and self.push({"t": events.CHAT, "d": _asdict(obj)}))
 
     def _routes_changed(self) -> bool:
         """Has any route started, stopped or moved since we last looked?
