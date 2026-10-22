@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import codes, events
-from . import SLUG, __version__
+from . import SLUG, __version__, worlds
 from .clock import Clock
 from .events import Bus
 from .lines import LineAssembler
@@ -44,8 +44,8 @@ from .deadman import MINUTES, Deadman
 from .party import Party
 from .triggers import TriggerSet
 
-DEFAULT_HOST = "3k.org"
-DEFAULT_PORT = 3000
+DEFAULT_HOST = worlds.DEFAULT.host
+DEFAULT_PORT = worlds.DEFAULT.port
 
 #: How long a room title waits for a DDD of its own before the room is made
 #: from the title instead.  Measured over 1,127 titles in long mode: the DDD
@@ -143,6 +143,14 @@ class Session:
         #: because one place to see and stop them is the point.
         self.bots = patrol.Bots(self)
         self.store = store
+        #: One open map per world, because the two games are two geographies.
+        #: Keyed by world id; the one we started on is already open.
+        self._stores = {worlds.of(host, port).id: store} if store is not None else {}
+        #: The plain filename the per-world ones hang off -- kept rather than
+        #: worked out from whichever map is open, because by then it is one
+        #: of the derived names.
+        self._map_base = (worlds.of(host, port).base(store.path)
+                          if store is not None else None)
         #: Grows the map as you walk.  Absent when there is no store to put it
         #: in, so the client runs unchanged with mapping switched off.
         self.mapper = Mapper(store) if store is not None else None
@@ -395,6 +403,12 @@ class Session:
                 self._asked.clear()
                 parked = True
                 continue
+            # Asked for by hand -- Reconnect, or a move to the other MUD --
+            # while the socket was still on its way down, so the loop never
+            # reached the parking spot above.  Same thing, one state later.
+            if self._asked.is_set():
+                self._asked.clear()
+                parked = True
             # --no-reconnect, and every replay of a capture: the end of the
             # input is the end.  Asking for it back by hand still works.
             if self.connections and not self.reconnect and not parked:
@@ -471,6 +485,83 @@ class Session:
         if self.logbook is not None:
             self.logbook.reopen()     # it did not finish after all
         self._asked.set()
+
+    def switch_world(self, host: str, port: int) -> bool:
+        """Play the other MUD.  True if the session had to move.
+
+        Three Kingdoms and 3Scapes are two games, so this is a hang-up and a
+        fresh connection, not a setting: anything the old one told us -- the
+        map's idea of where we are standing, the login, the handshake -- is
+        about the game we just left.
+        """
+        if worlds.find(self.host, self.port) is None:
+            # Pointed at neither of them: a replay, a test server, somebody
+            # trying something on the command line.  Whoever aimed it there
+            # meant it, and a character's saved world does not overrule them.
+            return False
+        there = worlds.of(host, port)
+        if (there.host, there.port) == (self.host, self.port):
+            return False
+        self.host, self.port = there.host, there.port
+        if self.connected or self._writer is not None:
+            self.hangup()                 # which also drops us where we were
+        self.use_store(self.store_for(there))
+        said = f"moving to {there.name} ({there.address})."
+        if self.store is not None:
+            said += (f"  Its map is kept apart from the other game's, in "
+                     f"{Path(self.store.path).name}.")
+        self.bus.emit(events.TEXT,
+                      f"\r\n\x1b[33m[client] {said}\x1b[0m\r\n".encode("latin-1"))
+        # Said after the map has moved, so anything listening -- the paths,
+        # the browser -- reads the new one rather than the old.
+        self.bus.emit(events.WORLD, there)
+        self.resume()
+        return True
+
+    @property
+    def world_now(self) -> worlds.World:
+        """Which MUD this session is pointed at."""
+        return worlds.of(self.host, self.port)
+
+    def store_for(self, world: worlds.World):
+        """This world's map, opened the first time it is asked for.
+
+        3Scapes starts with nothing -- there is no 3kdb for it -- so its file
+        is made empty and grows as you walk, which is what the mapper is for.
+        """
+        if self.store is None or self._map_base is None:
+            return None
+        if world.id not in self._stores:
+            from .store import Store
+            fresh = Store(world.file(self._map_base))
+            empty = fresh.db.execute("SELECT 1 FROM room LIMIT 1").fetchone()
+            if not world.has_3kdb and empty is None:
+                # Nothing to import, so the only map it will ever have is the
+                # one you walk.  Locked, it would spend the session saying it
+                # was lost; 3K's lock is there to protect 3kdb's rooms, and
+                # here there are none to protect.
+                fresh.locked = False
+            self._stores[world.id] = fresh
+        return self._stores[world.id]
+
+    def use_store(self, store) -> None:
+        """Point the map and the log at another world's file.
+
+        Everything else reads ``session.store`` and ``session.mapper`` when it
+        needs them, so the swap is these three lines and the one listener the
+        world holds.
+        """
+        if store is self.store:
+            return
+        if self.logbook is not None:
+            self.logbook.close()
+        self.store = store
+        if store is not None:
+            self._stores.setdefault(self.world_now.id, store)
+            self._map_base = self.world_now.base(store.path)
+        self.mapper = Mapper(store) if store is not None else None
+        self.logbook = Logbook(store, self.mapper) if store is not None else None
+        self.world.log_to = self.logbook
 
     def login_as(self, name: str, password: str = "") -> None:
         """Play as this character: now if there is a connection, else on the

@@ -11,6 +11,10 @@ The first things to know: what is on the screen, where you type, and where every
 - **The Stepper panel** walks a path for you. Steppers are an add-on, used at your own risk: know what a path does before you start it, and play within 3K's rules. See [Paths and steppers](#paths).
 - **Your health and points** run along the bottom, above the box you type in.
 
+## Which MUD
+
+This client plays **Three Kingdoms** and **3Scapes**. Each character you add belongs to one of them, chosen on the character screen, and playing that character connects to their MUD -- moving across from the other one if that is where the client is. The two games keep separate maps and separate paths; see [The map and getting about](#map).
+
 ## Typing commands
 
 Type in the box at the bottom and press Enter. Anything you type goes to 3K, except:

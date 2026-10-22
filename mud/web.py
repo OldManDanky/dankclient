@@ -28,7 +28,7 @@ import webbrowser
 from importlib import resources
 from pathlib import Path
 
-from . import codes, events, packs
+from . import codes, events, packs, worlds
 from .state import chat_is_chatter
 
 def log(*parts: object) -> None:
@@ -580,7 +580,12 @@ class WebServer:
             # uses it to tell your own lines from everybody else's.
             "me": getattr(self.session, "who_am_i", "") or "",
             "known": self.characters.public() if self.characters else [],
-            # What the character screen offers: only packs this client has.
+            # What the character screen offers: the two MUDs this client
+            # plays, and only packs it has.  "world" is the one the session
+            # is on now, which is not always the chosen character's -- it is
+            # whichever game the socket is pointed at.
+            "worlds": worlds.listing(),
+            "world": self.session.world_now.public(),
             "professions": packs.listing(),
             "extras": packs.extras_listing(),
             # The screen offers to log you in only while there is a prompt
@@ -619,10 +624,14 @@ class WebServer:
                 self._reply_login("a character needs a name")
                 return
             keep = bool(raw.get("remember"))
+            # Whichever of the two the screen picked; never an address the
+            # page made up, and never one the client cannot connect to.
+            there = worlds.of(str(raw.get("host") or self.session.host),
+                              raw.get("port") or self.session.port)
             chars.put(Character(
                 name=name,
-                host=str(raw.get("host") or self.session.host),
-                port=int(raw.get("port") or self.session.port),
+                host=there.host,
+                port=there.port,
                 # An empty password means "leave what is there"; put() knows.
                 password=str(raw.get("password") or "") if keep else "",
                 note=str(raw.get("note") or ""),
@@ -694,6 +703,15 @@ class WebServer:
         if store is None:
             self.push({"t": "update", "op": "state",
                        "error": "this client is running without a map"})
+            return
+        here = self.session.world_now
+        if op in ("check", "pull") and not here.has_3kdb:
+            # 3kdb is Three Kingdoms' map and Three Kingdoms' paths.  Taking
+            # them while playing the other game would write one world's
+            # geography into the other's file.
+            self.push({"t": "update", "op": "state",
+                       "error": f"3kdb has no map for {here.name}; "
+                                f"{here.name}'s map is the one you walk"})
             return
 
         if op == "check":

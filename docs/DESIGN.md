@@ -3,8 +3,9 @@
 Why it is built the way it is.  To install and play it, see the
 [README](../README.md).
 
-A MUD client for [3Kingdoms](https://3k.org), built around MIP — the protocol
-3K already speaks, and which no current client uses properly.
+A MUD client for [3Kingdoms](https://3k.org) and [3Scapes](https://3scapes.org),
+built around MIP — the protocol both already speak, and which no current client
+uses properly.
 
 Python owns the socket, the protocol, world state and scripting. The browser is
 a renderer, fed typed JSON over a WebSocket. **No third-party dependencies**: a
@@ -54,16 +55,57 @@ Corrections that matter if you touch `codes.py`:
 **The wire is the specification.** Assume more codes exist. `tools/analyze.py`
 on a capture reports anything unrecognised.
 
+## Two MUDs
+
+Three Kingdoms (`3k.org:3000`) and 3Scapes (`3scapes.org:3200`) run the same
+mudlib and speak the same protocol, so one client plays both.  They are two
+games with two geographies, though, and every mistake available here comes
+from treating them as one.
+
+`mud/worlds.py` holds the pair, and every address the client is handed goes
+through it: a character's saved host, the command line, whatever the browser
+sends.  Anything it does not recognise is Three Kingdoms.  There is no box to
+type a third address into -- a client that offers one can be pointed at a
+game it does not speak, and the box was worse than useless before the pair
+existed: the address a character was saved with reached nothing at all.
+`activate()` loaded their rules and left the socket where it was, so a
+character saved on 3Scapes was logged in on 3K.
+
+Which world a character plays is part of the character (`profile.Character`,
+snapped onto one of the two whatever the file says), and playing them is what
+moves the session.  `Session.switch_world` hangs the connection up, swaps the
+map and connects to the other address: a fresh connection rather than a
+setting, because everything the old one established -- where the map thinks
+you are standing, the login, the handshake -- belongs to the game just left.
+A session pointed at neither address (a replay, a test server, something
+tried on the command line) is left alone.
+
+Each world keeps its own files, named with the world's slug, Three Kingdoms
+keeping the plain names every installed client already has::
+
+    map.sqlite            map-3scapes.sqlite
+    scripts/routes.json   scripts/routes-3scapes.json
+
+One map holding both would be a path that walks you out of one game and into
+the other.  Each store is opened once and kept, so moving back and forth
+costs nothing and neither file is ever written by the other world.
+
+3kdb is Three Kingdoms' map and Three Kingdoms' paths, and a world without an
+import differs in two more ways: its map starts **unlocked**, because the
+lock protects imported rooms and there are none to protect, and **Options ->
+Updates** refuses rather than writing one world's geography into the other's
+file.  3Scapes starts empty and grows as you walk.
+
 ## The map
 
-The map is imported, not walked.  `3k_shared.map` -- a TinTin++ map file --
+Three Kingdoms' map is imported, not walked.  `3k_shared.map` -- a TinTin++ map file --
 holds 49,494 rooms, 144,768 exits and 777 areas, and loads in three seconds::
 
     python3 -m mud.tintin ~/3kdbimport/3k_shared.map \
         --into map.sqlite --speedruns ~/3kdbimport/speedruns.tin
 
 Room numbers are kept as room ids, because the speedrun list and years of
-scripts refer to them.  The map is **locked from the start**: it is corrected,
+scripts refer to them.  An imported map is **locked from the start**: it is corrected,
 never grown.  A room it does not contain is far likelier to be one the client
 failed to recognise than a room that does not exist, and adding it makes a
 duplicate nothing will ever join up -- one the router will happily walk you
@@ -180,15 +222,15 @@ For a while it was a quarter of them, and not because of the houses.  Whole
 areas -- the Underdark, Westersea, Xenolocles, over a thousand rooms apiece --
 were islands, joined up inside with no way in.  The ways in were in 3kdb's
 map all along; the importer had thrown them away (see *Rooms that are not
-rooms*, under The map).  A player's "for xeno you'd go to ravenloft, then go
-to xeno" was the clue: the walk now goes exactly that way.
+rooms*, under The map).  The way in to Xenolocles is through Ravenloft, and
+that is exactly the way the walk goes now.
 
 ### Brief mode
 
 3K's `brief on` shows each room's one-line title instead of its paragraph,
-and a friend testing it found the map standing still -- "walked from chaos ent
-to resid, map still thinks im at chaos ent ... caught back up when i looked".
-A capture of the same walk showed why.  In brief mode 3K sends the title,
+and with it on the map stood still: a walk from Chaos Entrance to Residential
+left the map at the room it had started in, and a `look` caught it up.  A
+capture of the same walk showed why.  In brief mode 3K sends the title,
 markers and all, and the room's contents, but **no DDD with the step**.  The
 exits arrive only later, behind BAD's two-second sample -- and a DDD after a
 BAD is deliberately not a new room, because in long mode that pair is a
@@ -356,8 +398,11 @@ watches and the line markers follow the character::
 
 The map and the paths deliberately do not.  A road is in the same place
 whoever walks it, and splitting fifty thousand rooms per character would mean
-walking them again for nothing; paths cross that map, so they go
-with it.
+walking them again for nothing; paths cross that map, so they go with it.
+They follow the *MUD* instead -- one map and one path library per world, and
+every character on that world shares them (see *Two MUDs*).  Which world a
+character plays is part of the character, so picking one is also what points
+the connection at a game.
 
 The login screen shows itself while nobody has said who is playing, and gets
 out of the way once somebody has -- by picking a name, by skipping, or by
@@ -389,8 +434,8 @@ cannot take back by pressing it again -- a mis-click leaves you link-dead in
 whatever room you were standing in, so it asks first.
 
 Three small things, each from something that went wrong.  A terminal
-scrolled up stays put while output lands beneath it, which looked to a tester
-exactly like the game freezing -- so **↓ new output** appears whenever that is
+scrolled up stays put while output lands beneath it, which is indistinguishable
+from the game having frozen -- so **↓ new output** appears whenever that is
 happening, and any command sent jumps back down.  The window's title carries
 the version and counts tells that arrive while the window is not in front,
 because the taskbar shows the title even with the sound off.  And Options has
@@ -577,8 +622,9 @@ than on the crossing. That is how you quaff forty potions.
 and watches for more than 100 — that is 1.67/second, where one command per 2s
 round is 30/min. Pacing to the round was three times stricter than the rule,
 and the client later held automated sends back near the ceiling instead. It
-does neither now: 3K's admins would rather a player knew they had gone over
-than have the client quietly slow them down. So everything is sent at once,
+does neither now: the limit is the game's to enforce and the player's to
+decide about, and a client that quietly slows the sending hides both. So
+everything is sent at once,
 the Session panel shows the minute's count, and reaching the limit prints one
 warning, armed again once the minute is back under 80. Movement is exempt, and
 `DDD` tells you what counts as movement in the room you are standing in.
@@ -669,8 +715,8 @@ the map stops choosing it.
 **Only evidence marks a way out broken**: 3K's "You cannot go west.", or a
 look that answers and shows the room the step started in.  Silence is not
 evidence.  Until 0.2.19 a step and the look after it both going unanswered
-was enough, and a tester's steppers walked him through the hyperfunk zone for
-it: Eastwick Road's `e` and `w` had been marked that way, and a way out the
+was enough, and steppers took the long way round the hyperfunk zone because
+of it: Eastwick Road's `e` and `w` had been marked that way, and a way out the
 router avoids is never walked again to clear it -- twelve steps to Angels
 became thirty-two, in by the fog at Crazy Road and out by `defunkt`.  Lag
 does that to a good exit, and so did the look itself: it waited its turn in
@@ -680,9 +726,9 @@ by one a day; and every mark in a map from before 0.2.19 is forgotten once,
 because silence was the only way one was ever made.
 
 **The look is `look`, not `l`.**  `l` is an alias on 3K's side, and a
-player's aliases are their own: the same tester's `l` answered "That does
+player's aliases are their own: on one character `l` answered "That does
 not seem to be here."  `embrace void` sends no room, so the walker looks to
-see where it went -- and his looks never showed the temple doorway, so the
+see where it went -- and those looks never showed the temple doorway, so the
 stepper sent `embrace void` from the doorway five times ("Whom do you wish to
 embrace?") and stopped at its own start.  `look` is the command itself.
 
@@ -1170,7 +1216,8 @@ the `#act`s beside them are scripts, and stay in tt++.
 ## Updates
 
 On a client that has never had a map -- a fresh install -- the world is fetched
-once, at startup, in the background.  Somebody who has just double-clicked an
+once, at startup, in the background.  Only on Three Kingdoms: 3kdb has nothing
+for the other world, and a client that opens on 3Scapes is not missing it.  Somebody who has just double-clicked an
 installer should not have to be told that the first thing to do is go and find
 fifty thousand rooms.  It takes about ten seconds and the client is usable
 while it runs; the login screen is what they should be looking at anyway.
@@ -1402,14 +1449,14 @@ wire.
 **A machine that had never been to GitHub.**  Python checks HTTPS against
 the machine's certificate store, and on Windows that store is filled in on
 demand: a root arrives the first time a Windows program asks for it, and
-Python reading the store is not asking.  A tester's client came up with no
-map, no steppers and "unable to get local issuer certificate" on the Updates page,
-because their machine had never opened GitHub in a browser.  The client now
+Python reading the store is not asking.  On a machine that had never opened
+GitHub in a browser, the client came up with no map, no steppers and "unable
+to get local issuer certificate" on the Updates page.  The client now
 carries Mozilla's roots, as curl publishes them, in `mud/cacert.pem`, and
 trusts them alongside the machine's store rather than instead of it -- a work
 proxy or an antivirus that re-signs HTTPS adds its own root to the store, and
 that has to keep working.  Checked by running the real update code with the
-machine's store emptied: it failed exactly as the tester's did, and with the
+machine's store emptied: it failed in exactly that way, and with the
 bundle it fetched the whole of 3kdb.  `tools/refresh_certs.py` updates it,
 against curl's published SHA-256.
 
@@ -1590,8 +1637,8 @@ what it had done.
 
 The client says the same things whenever asked, in **Options -> About**: the
 map, the characters, the scripts, the captures and the log, each with a word
-about what it is.  "Where is my map" is a question that gets asked more than
-once -- before an update, before a backup, when something has gone wrong.
+about what it is.  Where the map lives is worth knowing more than once --
+before an update, before a backup, and when something has gone wrong.
 
 The built MSI was taken apart again to check: 84 files in, 84 out, every
 SHA-256 matching, installing to the right directory with the "elevated

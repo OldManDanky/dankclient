@@ -162,8 +162,8 @@ class Bot:
 class Bots:
     """Every running bot, so there is one place to see and stop them.
 
-    An admin's client should never leave you guessing whether something is
-    walking your character around, so this is surfaced rather than buried.
+    A client should never leave you guessing whether something is walking
+    your character around, so this is surfaced rather than buried.
     """
 
     def __init__(self, session) -> None:

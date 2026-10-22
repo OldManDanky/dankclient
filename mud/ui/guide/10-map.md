@@ -1,6 +1,6 @@
 # The map and getting about
 
-The map is 3kdb's, tens of thousands of rooms, and it follows you as you walk.
+On Three Kingdoms the map is 3kdb's, tens of thousands of rooms, and it follows you as you walk. On 3Scapes it is yours, and it starts empty -- the last section says why.
 
 - **Click a room** on the map to walk there.
 - `/go <name>` walks to the nearest room with that name or mark: `/go bank`. The whole way goes at once.
@@ -29,3 +29,9 @@ Nobody can hand you their map: it is tens of megabytes, and the file holds their
 - When they differ it says how: a different 3kdb map file, the same file built by a different importer (**Options → Updates → Take updates** rebuilds it), or areas where one of you has rooms or exits the other does not, widest first.
 
 The summary is counts, digests and area names. Nothing you have walked, said or logged is in it.
+
+## Two MUDs, two maps
+
+Three Kingdoms and 3Scapes are two games with two geographies, so each keeps its own map file and its own paths. Playing a character on the other one moves the client across: it disconnects, connects to that MUD and loads that MUD's map. Nothing you have mapped on one is ever written into the other.
+
+3kdb has no map for 3Scapes, so 3Scapes starts empty and **unlocked** -- it grows as you walk, which is what the lock above would otherwise prevent. `/go` and the Marks list fill up as rooms arrive. Options -> Updates stays on Three Kingdoms' map, and says so if you ask for it while playing 3Scapes.

@@ -1,9 +1,11 @@
 # Dank Mud Client
 
-A MUD client for [3Kingdoms](https://3k.org), built around MIP -- the
-protocol 3K already speaks.  Health, guild state, room contents, tells and
+A MUD client for [3Kingdoms](https://3k.org) and its sister game
+[3Scapes](https://3scapes.org), built around MIP -- the protocol they
+already speak.  Health, guild state, room contents, tells and
 channels arrive as data rather than text to be scraped, and it comes with
-the whole 3K map and a library of paths to walk.
+3kdb's map of Three Kingdoms -- over 51,000 rooms across 777 areas -- and a
+library of paths to walk.
 
 ## Installing
 
@@ -21,13 +23,26 @@ SmartScreen does not recognise it.  Click **More info**, then **Run anyway**.
 
 ## The first time you run it
 
-It fetches the map and the paths from
+It fetches Three Kingdoms' map and paths from
 [3kdb](https://github.com/jmitchell33/3kdb) in the background -- about ten
 seconds, and you can log in while it runs.
 
-The character screen comes up.  Add your character; the password is optional.
-If you save one it is kept on your own machine, in a file only your account
-can read, and it is never written to the logs.
+The character screen comes up.  Add your character and pick which of the two
+MUDs they play.  The password is optional; if you save one it is kept on your
+own machine, in a file only your account can read, and it is never written to
+the logs.
+
+## Two MUDs
+
+Three Kingdoms (`3k.org`) and 3Scapes (`3scapes.org`) are two games, and each
+character belongs to one of them.  Playing a character connects to their MUD:
+if the client is on the other one it disconnects, moves across and logs them
+in there.
+
+Each MUD keeps its own map and its own paths, and nothing you map on one is
+ever written into the other.  3kdb's map is Three Kingdoms', so 3Scapes
+starts empty and fills in as you walk -- `/go` and the Marks list grow with
+it -- and **Options -> Updates** stays on Three Kingdoms' map.
 
 ## Playing
 
@@ -183,7 +198,8 @@ into Explorer's address bar.  **Options -> About** shows the same paths.
 
 | | |
 |---|---|
-| `map.sqlite` | the map, and your session log |
+| `map.sqlite` | Three Kingdoms' map, and your session log |
+| `map-3scapes.sqlite` | 3Scapes' map, once you have played there |
 | `profiles\` | your characters and each one's triggers, aliases and timers |
 | `scripts\` | Python scripts, if you write any |
 | `captures\` | raw recordings of each session |
@@ -262,7 +278,7 @@ mapping with no room ids, reconnecting, the installer -- is in
 
 ## Credits and licence
 
-The map and the paths come from
+Three Kingdoms' map and paths come from
 [jmitchell33/3kdb](https://github.com/jmitchell33/3kdb).  The root
 certificates in `mud/cacert.pem` are Mozilla's, under the MPL 2.0, as
 [extracted by curl](https://curl.se/docs/caextract.html).

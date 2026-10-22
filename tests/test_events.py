@@ -73,8 +73,8 @@ def q(sent, *, soft=80, limit=100, exits=(), period=2.0):
 # --- APM is counted and told, never waited for -----------------------------
 #
 # 3k.org watches non-directional commands per minute, above 100.  The client
-# once held automated commands back near that; 3K's admins would rather the
-# player simply knew.  What still waits is the round, and a missing socket.
+# once held automated commands back near that; it reports the count instead
+# and holds nothing back.  What still waits is the round, and a missing socket.
 
 def test_a_single_command_goes_out_at_once():
     sent = []

@@ -2,10 +2,10 @@
 
 3k.org measures APM -- non-directional commands entered per minute -- and
 watches for more than 100.  The client used to hold automated commands back
-as the minute filled.  It no longer does: 3K's admins would rather a player
-knew they had gone over than have the client quietly slow them down.  So the
-count is shown in the Session panel, and reaching the limit says so, once
-(`APMMeter.on_over`).
+as the minute filled.  It no longer does: the limit is the game's to enforce
+and the player's to decide about, and a client that quietly slows the sending
+hides both.  So the count is shown in the Session panel, and reaching the
+limit says so, once (`APMMeter.on_over`).
 
 Movement is free.  Compass directions and the exits of the room you are
 standing in do not count, which matters because walking is most of what an

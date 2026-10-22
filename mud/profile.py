@@ -37,6 +37,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import worlds
 from .paths import set_aside, write_atomically
 from .session import DEFAULT_HOST, DEFAULT_PORT
 
@@ -62,6 +63,17 @@ class Character:
     extras: list[str] = field(default_factory=list)
     last_played: float = 0.0
 
+    def __post_init__(self) -> None:
+        # One of the two games this client plays, whatever the file says.  An
+        # address nobody here can connect to is not a setting, it is a dead
+        # end -- and a character saved before the choice existed is on 3K.
+        self.host, self.port = self.world.host, self.world.port
+
+    @property
+    def world(self) -> worlds.World:
+        """Which MUD they play."""
+        return worlds.of(self.host, self.port)
+
     @property
     def slug(self) -> str:
         """A directory name that is recognisably the character's."""
@@ -74,6 +86,7 @@ class Character:
         out.pop("password")
         out["has_password"] = bool(self.password)
         out["slug"] = self.slug
+        out["world"] = self.world.id
         return out
 
 
@@ -196,6 +209,12 @@ def activate(char: Character, chars: Characters, session, scripts=None) -> None:
     kind of thing you notice by watching yourself cast a spell you do not have.
     """
     session.character = char
+    # Where they play.  Picking a character picks the MUD with them: the two
+    # are different games, and a name typed at the wrong one's prompt is a
+    # name that does not exist.  Moving hangs the connection up and brings it
+    # back on the other address; staying put costs nothing.
+    if hasattr(session, "switch_world"):
+        session.switch_world(char.host, char.port)
     chars.played(char.name)
     # The client is up and logging before anybody has picked a character, so
     # this is the first moment the session row can say whose it is.

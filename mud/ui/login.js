@@ -52,6 +52,44 @@
     }
   });
 
+  // --- which MUD -------------------------------------------------------------
+
+  /* Three Kingdoms and 3Scapes, from the server like the packs: the page
+     never invents an address, and there is no third choice to type. */
+  let offeredWorlds = '';
+  function offerWorlds() {
+    const list = who.worlds || [];
+    const key = JSON.stringify(list.map((w) => w.id));
+    if (key === offeredWorlds) return;
+    offeredWorlds = key;
+    const sel = $('c-world');
+    const was = sel.value;
+    sel.replaceChildren();
+    for (const w of list) {
+      const o = document.createElement('option');
+      o.value = w.id;
+      o.textContent = `${w.name}  ·  ${w.host}:${w.port}`;
+      sel.append(o);
+    }
+    sel.value = was || firstWorld();
+  }
+
+  function firstWorld() {
+    return ((who.worlds || [])[0] || {}).id || '';
+  }
+
+  function worldOf(id) {
+    return (who.worlds || []).find((w) => w.id === id) || null;
+  }
+
+  /* A character carries the id, but an older saved one carries only the
+     address -- so fall back to matching that. */
+  function worldOfChar(char) {
+    if (!char) return null;
+    return worldOf(char.world)
+      || (who.worlds || []).find((w) => w.host === char.host) || null;
+  }
+
   // --- professions ----------------------------------------------------------
 
   /* The packs come from the server, so the list is whatever this client can
@@ -128,6 +166,7 @@
   // --- add / edit -----------------------------------------------------------
 
   function form(char, show) {
+    offerWorlds();
     offerProfessions();
     offerExtras();
     editing = char || null;
@@ -135,8 +174,7 @@
     $('char-error').textContent = '';
     $('char-form-title').textContent = char ? `Edit ${char.name}` : 'Add a character';
     $('c-name').value = char ? char.name : '';
-    $('c-host').value = char ? char.host : '3k.org';
-    $('c-port').value = char ? String(char.port) : '3000';
+    $('c-world').value = (worldOfChar(char) || {}).id || firstWorld();
     $('c-profession').value = (char && professionOf(char.profession)) ? char.profession : '';
     describeProfession();
     for (const input of Array.from($('c-extras').querySelectorAll('input'))) {
@@ -165,8 +203,9 @@
       op: 'save',
       character: {
         name: editing ? editing.name : name,
-        host: $('c-host').value.trim(),
-        port: parseInt($('c-port').value, 10) || 3000,
+        world: $('c-world').value,
+        host: (worldOf($('c-world').value) || {}).host || '',
+        port: (worldOf($('c-world').value) || {}).port || 0,
         password: $('c-password').value,
         remember: $('c-remember').checked,
         note: $('c-note').value.trim(),
@@ -213,7 +252,7 @@
     sub.className = 'sub';
     const prof = professionOf(char.profession);
     sub.textContent = [
-      `${char.host}:${char.port}`,
+      (worldOfChar(char) || {}).name || `${char.host}:${char.port}`,
       prof ? prof.name : '',
       ...(char.extras || []).map((id) => (extraOf(id) || {}).name),
       char.has_password ? 'password saved' : '',
@@ -267,18 +306,23 @@
   }
 
   function render() {
+    offerWorlds();
     offerProfessions();
     offerExtras();
     const list = $('char-list');
     list.replaceChildren();
     for (const c of who.known) list.append(card(c));
 
+    // Which game the connection is on, which is not always the character's
+    // -- picking one on the other MUD is what moves it.
+    const here = (who.world || {}).name || '';
     $('login-state').textContent = who.offline
-      ? 'Disconnected. Pick a character and the client will connect and log '
-        + 'them in.'
+      ? 'Disconnected. Pick a character and the client will connect to their '
+        + 'MUD and log them in.'
       : who.character
-      ? `Playing ${who.character}. Their triggers, aliases and markers are `
-        + 'loaded; the map and paths are shared with everyone.'
+      ? `Playing ${who.character}${here ? ' on ' + here : ''}. Their triggers, `
+        + 'aliases and markers are theirs; the map and paths belong to the '
+        + 'MUD, and every character on it shares them.'
       : who.asking
         ? 'The MUD is asking for a name. Pick one and the client will answer.'
         : who.known.length

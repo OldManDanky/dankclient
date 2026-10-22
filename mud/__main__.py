@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import events
 from . import update
+from . import worlds
 from . import NAME, SLUG, __version__
 from .paths import home
 from .capture import CaptureWriter
@@ -151,16 +152,31 @@ async def amain(args: argparse.Namespace) -> int:
         stem = args.log or str(
             home() / "captures" / f"{datetime.now():%Y%m%d-%H%M%S}")
         raw_log = CaptureWriter(stem)
-    store = None if args.no_map else Store(args.map)
+    chars = None if args.no_profiles else Characters(args.profiles, args.scripts)
+    # Which MUD to open.  A named character's own world wins over the
+    # default, so the client does not connect to one game and then move to
+    # the other a second later.  An address given on the command line is
+    # somebody aiming at something else on purpose, and still wins; an
+    # unknown character name is left to the check further down, which says
+    # so properly.
+    start_host, start_port = args.host, args.port
+    if (chars is not None and args.character
+            and (start_host, start_port) == (DEFAULT_HOST, DEFAULT_PORT)):
+        named = chars.get(args.character)
+        if named is not None:
+            start_host, start_port = named.host, named.port
+    here = worlds.of(start_host, start_port)
+    # Each world's own map: 3Scapes is a different game, and one file holding
+    # both would be a path that walks you out of one and into the other.
+    store = None if args.no_map else Store(here.file(args.map))
     if store is not None:
         try:
             store.forget_old_lines()
         except Exception:                # an old log is never a reason not to start
             pass
-    chars = None if args.no_profiles else Characters(args.profiles, args.scripts)
     session = Session(
-        args.host,
-        args.port,
+        start_host,
+        start_port,
         sec_code=args.sec,
         jumpstart=not args.no_jumpstart,
         raw_log=raw_log,
@@ -200,18 +216,18 @@ async def amain(args: argparse.Namespace) -> int:
         await session.connect()
     except OSError as exc:
         if not session.reconnect:
-            print(f"{RED}cannot connect to {args.host}:{args.port}: "
+            print(f"{RED}cannot connect to {session.host}:{session.port}: "
                   f"{exc}{RESET}", file=sys.stderr)
             return 1
         # Started while 3K is rebooting, or before the network is up.  This
         # used to be the end: the installed client exited before its window
         # had opened, so it looked as though it had never started.  Now the
         # window comes up and it keeps knocking, exactly as after a link death.
-        print(f"{YELLOW}{args.host}:{args.port} is not answering "
+        print(f"{YELLOW}{session.host}:{session.port} is not answering "
               f"({type(exc).__name__}: {exc}) -- will keep trying{RESET}",
               file=sys.stderr)
     else:
-        print(f"{DIM}connected {args.host}:{args.port}  "
+        print(f"{DIM}connected {session.host}:{session.port}  "
               f"sec_code={session.sec_code}{where}  "
               f"(/js forces the handshake){RESET}", file=sys.stderr)
 
@@ -228,7 +244,7 @@ async def amain(args: argparse.Namespace) -> int:
     @session.bus.on(events.CONNECTED)
     def _() -> None:
         if session.connections > 1:
-            print(f"{GREEN}  back on {args.host}:{args.port}{RESET}",
+            print(f"{GREEN}  back on {session.host}:{session.port}{RESET}",
                   file=sys.stderr)
 
     async def keyboard() -> None:
@@ -267,8 +283,18 @@ async def amain(args: argparse.Namespace) -> int:
     if not args.no_scripts:
         host = ScriptHost(session, args.scripts)
         host.rules = RuleStore(host, Path(args.scripts) / "rules.json")
-        host.routes = RouteStore(host, Path(args.scripts) / "routes.json")
+        host.routes = RouteStore(host,
+                                 here.file(Path(args.scripts) / "routes.json"))
         host.routes.load()
+
+        @session.bus.on(events.WORLD)
+        def _(world) -> None:
+            # Paths are routes across a map, so they move with it.  3Scapes
+            # has no path library yet; recording one there writes its own.
+            host.routes.path = world.file(Path(args.scripts) / "routes.json")
+            host.routes.load()
+            _note(f"now on {world.name}: its own map and paths "
+                  f"({len(host.routes.routes)} saved)")
         from .gaglib import LIBRARY
         session.gaglib_path = Path(args.scripts) / LIBRARY
         session.apply_gag_groups()
@@ -375,7 +401,10 @@ async def amain(args: argparse.Namespace) -> int:
         if web is not None:
             web.refresh()
 
-    if store is not None and not args.no_bootstrap and update.never_run(store):
+    # 3kdb's map and paths are Three Kingdoms'.  A client that opens on
+    # 3Scapes is not missing them -- there are none to fetch.
+    if (store is not None and not args.no_bootstrap
+            and here.id == worlds.DEFAULT.id and update.never_run(store)):
         events.spawn(first_run(), "fetching the world")
 
     kb = asyncio.create_task(keyboard())

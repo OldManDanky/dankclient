@@ -351,8 +351,8 @@ def test_the_map_does_not_draw_lines_to_rooms_that_are_not_next_door():
 
 def test_the_login_screen_is_wired_up():
     page, js = html(), scripts()["login.js"]
-    for element in ("login", "char-list", "char-form", "c-name", "c-host",
-                    "c-port", "c-password", "c-remember", "c-note",
+    for element in ("login", "char-list", "char-form", "c-name", "c-world",
+                    "c-password", "c-remember", "c-note",
                     "char-add", "char-cancel", "char-error", "login-skip",
                     "open-login", "login-state", "char-form-title",
                     "c-password-hint"):
