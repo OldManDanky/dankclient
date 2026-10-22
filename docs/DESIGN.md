@@ -96,6 +96,57 @@ lock protects imported rooms and there are none to protect, and **Options ->
 Updates** refuses rather than writing one world's geography into the other's
 file.  3Scapes starts empty and grows as you walk.
 
+## GMCP
+
+3Scapes speaks GMCP as well as MIP, and says so in its own help: the same
+vitals, combat, chat and guild state, plus three things MIP cannot give --
+`Room.Info` carries the room's **number**, `Char.Vitals` the coffin's corpse
+count, and `Room.Death` a kill as an event rather than a line to recognise.
+3K speaks only MIP, and nothing here depends on either being present.
+
+The number is the one that changes anything structural.  Everything under
+*Knowing where you are* exists because nothing on 3K's wire identifies a
+room; where the MUD says outright which room this is, there is nothing to
+work out, so `Mapper.told_room` takes the number as the room id -- as 3kdb's
+numbers are room ids on 3K -- and a room block settling within the window
+afterwards is evidence about the room, never a second opinion on which room
+it is.  The step is still ours to credit: the MUD names the rooms, and the
+edge between them is what makes the map walkable.
+
+So the rule is narrow on purpose.  **GMCP is the authority on room identity;
+MIP stays the authority for everything it already parses** against years of
+captures.  Two sources for one fact is two answers that disagree, and only
+one of them has been tested against a capture.
+
+`mud/telnet.py` now accepts exactly one option, and announces it as
+`opt:on:201` because agreeing is the moment to subscribe -- the filter itself
+knows nothing about what to say.  `mud/gmcp.py` builds and reads the frames:
+`Core.Hello`, then `Core.Supports.Set ["Room.Info 1"]`, and the server's
+`Core.Supported` is kept because it names what the MUD really offers, as
+opposed to what the help file says.  Frames go straight to the socket, never
+through the send queue: this is telnet negotiation, not a command, so it is
+not paced to the game's two-second beat and does not count towards APM.
+
+Four things to know before adding packages:
+
+- `SB_MOST` used to be 4KB, safe only because every option was refused.  An
+  accepted one makes it a truncation bug, and half a JSON frame is worse
+  than none -- it either fails to parse or parses into something the MUD did
+  not say.  It is 64KB now, and a frame that outgrows it is dropped whole.
+- `Room.Contents` is **paged**, with `entry: 1` on every page of an entry
+  list.  Nothing may be decided from the first frame.
+- `Room.Refresh` is the one package a client *sends*.  It is rate-limited to
+  about two a second and the rest are dropped without a reply: for a resync,
+  never on a timer.
+- `look` does not resend room data over GMCP.  It does still send the room
+  as text, so the walker's look -- which is how a quiet step is checked --
+  keeps working through MIP exactly as it does on 3K.
+
+What is written here comes from 3S's own help file, which makes it a claim
+rather than a specification.  The package list and the frames themselves
+want confirming against a capture, for the same reason `codes.py` says the
+wire wins.
+
 ## The map
 
 Three Kingdoms' map is imported, not walked.  `3k_shared.map` -- a TinTin++ map file --

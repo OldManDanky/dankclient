@@ -44,6 +44,11 @@ ever written into the other.  3kdb's map is Three Kingdoms', so 3Scapes
 starts empty and fills in as you walk -- `/go` and the Marks list grow with
 it -- and **Options -> Updates** stays on Three Kingdoms' map.
 
+3Scapes speaks GMCP as well as MIP, and names each room as you enter it, so
+there the map is told where you are rather than working it out from the room
+description.  It cannot lose you, and it never files one room under two
+names.
+
 ## Playing
 
 The first time each character logs in, **Getting started** opens: the world

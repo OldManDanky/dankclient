@@ -37,6 +37,7 @@ from .ansivars import COMMAND as ANSI_COMMAND, MOST as ANSI_MOST
 from .ansivars import QUIET as ANSI_QUIET, AnsiVars
 from .scanner import Message, Scanner, Text
 from .state import World
+from . import telnet
 from .telnet import TelnetFilter
 from .gags import HOLD, LineGate
 from . import gaglib
@@ -121,6 +122,10 @@ class Session:
     ) -> None:
         self.host, self.port = host, port
         self.encoding = encoding
+        #: Whether the MUD turned GMCP on, and what it says it can send.
+        #: 3Scapes does; 3K does not, and nothing here depends on either.
+        self.gmcp_on = False
+        self.gmcp_offers = None
         # The *client* invents this; the MUD stamps it on every MIP line so we
         # can ignore traffic meant for somebody else.
         self.sec_code = sec_code or random.randint(1, 99999)
@@ -614,6 +619,9 @@ class Session:
         self._writer = None
         self._scanner = Scanner(encoding=self.encoding)
         self._telnet = TelnetFilter()
+        # Options are negotiated per connection, and the other MUD may not
+        # offer this one at all.
+        self.gmcp_on, self.gmcp_offers = False, None
         self._lines = LineAssembler(self.encoding)
         self._tail = ""
         self.gate.reset()               # half a line is the socket's too
@@ -660,9 +668,15 @@ class Session:
             self.raw_log.write(chunk)
             self.raw_log.flush()
 
-        clean, reply, marks = self._telnet.feed(chunk)
+        clean, reply, marks, subs = self._telnet.feed(chunk)
         if reply and self._writer is not None:
             self._writer.write(reply)
+        for mark in marks:
+            if mark == f"opt:on:{telnet.OPT_GMCP}":
+                self._gmcp_agreed()
+        for opt, payload in subs:
+            if opt == telnet.OPT_GMCP:
+                self._on_gmcp(payload)
 
         for event in self._scanner.feed(clean):
             if isinstance(event, Text):
@@ -681,6 +695,42 @@ class Session:
                 self.bus.emit(events.PROMPT)
                 for fn in self.on_prompt:
                     fn()
+
+    def _gmcp_agreed(self) -> None:
+        """The MUD turned GMCP on, so say who we are and what we want.
+
+        Straight to the socket, not through the queue: this is telnet
+        negotiation, not a command, so it is not paced to the game's beat and
+        does not count towards APM.
+        """
+        if self._writer is None:
+            return
+        from . import gmcp
+        self.gmcp_on = True
+        self._writer.write(gmcp.hello(self.version))
+        self._writer.write(gmcp.subscribe())
+
+    def _on_gmcp(self, payload: bytes) -> None:
+        """One GMCP frame.
+
+        Room.Info is the only one acted on: it carries the room's number, and
+        a number is the thing 3K's wire has never had.  Everything else is
+        passed on and left alone -- MIP already parses it, and two sources for
+        one fact is two answers that disagree.
+        """
+        from . import gmcp
+        package, body = gmcp.parse(payload)
+        if not package:
+            return
+        if package == "Core.Supported":
+            # What it really offers, as opposed to what the help file says.
+            self.gmcp_offers = body
+        elif package == "Room.Info" and self.mapper is not None:
+            room = gmcp.room_info(body)
+            if room is not None:
+                self.mapper.told_room(room["num"], room["name"],
+                                      room["exits"])
+        self.bus.emit(events.GMCP, package, body)
 
     def _went_stale(self, many: int) -> None:
         """The queue threw away commands that had waited too long.

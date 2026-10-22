@@ -39,6 +39,7 @@ BOT_ENDED = "bot_ended"  # patrol.Bot -- a bot finished or gave up, by itself
 RETRYING = "retrying"    # float -- seconds until the next attempt to reconnect
 PAGE = "page"            # dict -- for the browser alone to act on: /numpad
 WORLD = "world"          # worlds.World -- moved to the other MUD
+GMCP = "gmcp"            # (package, body) -- one GMCP frame, decoded
 
 Handler = Callable[..., Any]
 

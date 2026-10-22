@@ -108,6 +108,10 @@ class Mapper:
         #: reply is due when the one before it has arrived, not when it was
         #: sent, and a forty-step stack must not age out behind its own queue.
         self.stacking = False
+        #: When the MUD last said outright which room this is (GMCP's
+        #: Room.Info).  A room block settling within the window after that is
+        #: the same arrival, and there is nothing left to work out.
+        self.told_at: float | None = None
 
     # --- input --------------------------------------------------------------
 
@@ -129,10 +133,60 @@ class Mapper:
                 del self._pending[i]
                 return
 
+    def told_room(self, num: int, name: str = "", exits: Iterable[str] = (),
+                  at: float | None = None) -> int:
+        """The MUD said which room this is.  Believe it.
+
+        3Scapes sends the room's number over GMCP, which is the one thing
+        3K's wire has never carried: no fingerprint, no candidates, no being
+        lost.  The number is the room id, as 3kdb's numbers are on 3K, so
+        both maps mean the same thing by one.
+
+        The step that got us here is still ours to credit -- the edge is what
+        makes the map walkable, and the MUD does not tell us which command it
+        was.
+        """
+        now = time.time() if at is None else at
+        exits = [str(e).strip().lower() for e in exits if str(e).strip()]
+        self.store.room_numbered(num, name or None, now)
+
+        ways = self._ways_out()
+        was = self.here
+        while self._pending and now - self._pending[0][0] > self.window:
+            self._pending.popleft()        # that command moved nothing
+        sent_at, cmd = self._blame(ways, now)
+        self.moved_at = sent_at
+        self._queue_behind(now)
+
+        if was is not None and was != num and cmd:
+            # A move we can point at, between two rooms we are sure of: the
+            # one edge the map could not have learned any other way.
+            self.store.link(was, cmd, num, now)
+        self.here, self.candidates = num, []
+        self._was = None
+        self._verifying = False
+        self._last_exits = exits
+        self.told_at = self.settled_at = now
+        self.store.observe(num, exits, [], now)
+        self.store.visit(num, name or None, now)
+        return num
+
     def arrived(self, exits: Iterable[str], scenery: Iterable[str],
                 name: str | None = None, at: float | None = None) -> int | None:
         """A room block settled.  Returns the room we believe we are in."""
         now = time.time() if at is None else at
+        if (self.told_at is not None and self.here is not None
+                and now - self.told_at <= self.window):
+            # The MUD already named this room.  The block is the same arrival
+            # arriving twice, so it is evidence about the room -- its scenery,
+            # the exits as the text gives them -- and never a second opinion
+            # on which room it is.
+            exits, scenery = list(exits), list(scenery)
+            self._last_exits = exits or self._last_exits
+            self.settled_at = now
+            self._record(self.here, exits or self._last_exits, scenery,
+                         name, now, moved=False)
+            return self.here
         exits, scenery = list(exits), list(scenery)
         ways = self._ways_out()          # of the room we are leaving, not this one
         self._last_exits = exits
@@ -336,6 +390,7 @@ class Mapper:
         self.candidates = []
         self._pending.clear()
         self._last_exits = []
+        self.told_at = None        # whatever we were told was about back there
 
 
     def _locate(self, exits: list[str], scenery: list[str], now: float,

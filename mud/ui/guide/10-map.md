@@ -35,3 +35,5 @@ The summary is counts, digests and area names. Nothing you have walked, said or 
 Three Kingdoms and 3Scapes are two games with two geographies, so each keeps its own map file and its own paths. Playing a character on the other one moves the client across: it disconnects, connects to that MUD and loads that MUD's map. Nothing you have mapped on one is ever written into the other.
 
 3kdb has no map for 3Scapes, so 3Scapes starts empty and **unlocked** -- it grows as you walk, which is what the lock above would otherwise prevent. `/go` and the Marks list fill up as rooms arrive. Options -> Updates stays on Three Kingdoms' map, and says so if you ask for it while playing 3Scapes.
+
+3Scapes also names the room you are in as you arrive, over GMCP, so there the map never has to work out where you are from what the room looks like -- it is told, and it cannot lose you or put two rooms together as one. The markers from **Getting started** are still worth setting: they are what the rest of the screen reads.

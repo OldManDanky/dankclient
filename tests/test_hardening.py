@@ -178,7 +178,7 @@ def test_a_subnegotiation_that_never_ends_does_not_grow_for_ever():
     f = TelnetFilter()
     f.feed(bytes([IAC, SB, 24]) + b"x" * (SB_MOST * 10))
     assert len(f._sub) <= SB_MOST
-    clean, _reply, marks = f.feed(bytes([IAC, SE]) + b"hello")
+    clean, _reply, marks, _subs = f.feed(bytes([IAC, SE]) + b"hello")
     assert clean == b"hello" and marks == ["sb:24"]
 
 

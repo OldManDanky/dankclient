@@ -23,7 +23,7 @@ def drive(chunks, sec="12345"):
     tel, scan, world = TelnetFilter(), Scanner(), World()
     replies, text = bytearray(), bytearray()
     for chunk in chunks:
-        clean, reply, _ = tel.feed(chunk)
+        clean, reply, _, _ = tel.feed(chunk)
         replies += reply
         for ev in scan.feed(clean):
             if isinstance(ev, Text):

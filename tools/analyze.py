@@ -43,7 +43,7 @@ def replay(stem: Path) -> list[tuple[float | None, Message]]:
     tel, scan = TelnetFilter(), Scanner()
     found: list[tuple[float | None, Message]] = []
     for ts, chunk in read_capture(stem):
-        clean, _, _ = tel.feed(chunk)
+        clean, _, _, _ = tel.feed(chunk)
         for ev in scan.feed(clean):
             if isinstance(ev, Message):
                 found.append((ts, ev))

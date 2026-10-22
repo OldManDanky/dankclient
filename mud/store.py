@@ -601,6 +601,22 @@ class Store:
         )
         return int(cur.lastrowid)
 
+    def room_numbered(self, room_id: int, name: str | None = None,
+                      at: float | None = None) -> int:
+        """The room with this id, made if it is not there yet.
+
+        For a MUD that names its rooms by number (GMCP's ``Room.Info``).  The
+        id is the game's own, exactly as 3kdb's numbers are 3K's, so the two
+        maps mean the same thing by a room id.
+        """
+        now = time.time() if at is None else at
+        self.db.execute(
+            "INSERT INTO room (id, name, first_seen, last_seen, visits) "
+            "VALUES (?,?,?,?,0) ON CONFLICT(id) DO NOTHING",
+            (room_id, name, now, now),
+        )
+        return room_id
+
     def visit(self, room_id: int, name: str | None = None,
               at: float | None = None) -> None:
         """Record arriving.  A name only ever fills a blank or replaces itself;
