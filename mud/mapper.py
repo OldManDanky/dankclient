@@ -32,9 +32,20 @@ import heapq
 import itertools
 import time
 from collections import deque
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from .store import Store, personal
+
+
+def _tagged(store, tag: str):
+    """Rooms carrying a tag, from a store that may not keep any.
+
+    The mapper is handed a real Store in the client and a stand-in in the
+    tests; a stand-in that has never heard of tags has no tagged rooms,
+    which is the right answer rather than an error.
+    """
+    rows = getattr(store, "tagged", None)
+    return rows(tag) if callable(rows) else ()
 
 #: How long a command may wait for its room block.  Ten times the observed
 #: median, comfortably past the observed maximum, and well under the 2s tick.
@@ -112,6 +123,15 @@ class Mapper:
         #: Room.Info).  A room block settling within the window after that is
         #: the same arrival, and there is nothing left to work out.
         self.told_at: float | None = None
+        #: Numbers the MUD uses for more than one room.  Nothing is learned
+        #: about them or through them; see `_shares_a_number`.  Remembered
+        #: in the map, so what one session worked out the next one knows.
+        self.shared: set[int] = {row["id"] for row
+                                 in _tagged(store, "shared-number")}
+        #: What each number was last called, and how many times a step has
+        #: left it standing in a room of the same number under another name.
+        self._names: dict[int, str] = {}
+        self._shifty: dict[int, int] = {}
 
     # --- input --------------------------------------------------------------
 
@@ -134,6 +154,7 @@ class Mapper:
                 return
 
     def told_room(self, num: int, name: str = "", exits: Iterable[str] = (),
+                  told: Mapping[str, int] | None = None,
                   at: float | None = None) -> int:
         """The MUD said which room this is.  Believe it.
 
@@ -144,7 +165,8 @@ class Mapper:
 
         The step that got us here is still ours to credit -- the edge is what
         makes the map walkable, and the MUD does not tell us which command it
-        was.
+        was.  ``told`` is the other half: the exits it named *with* the room
+        each one leads to, which is the map handed over an edge at a time.
         """
         now = time.time() if at is None else at
         exits = [str(e).strip().lower() for e in exits if str(e).strip()]
@@ -157,8 +179,10 @@ class Mapper:
         sent_at, cmd = self._blame(ways, now)
         self.moved_at = sent_at
         self._queue_behind(now)
+        shared = self._note_the_name(num, name, was, bool(cmd))
 
-        if was is not None and was != num and cmd:
+        if (was is not None and was != num and cmd
+                and not shared and was not in self.shared):
             # A move we can point at, between two rooms we are sure of: the
             # one edge the map could not have learned any other way.
             self.store.link(was, cmd, num, now)
@@ -167,9 +191,80 @@ class Mapper:
         self._verifying = False
         self._last_exits = exits
         self.told_at = self.settled_at = now
-        self.store.observe(num, exits, [], now)
+        # An empty list is "it named none", not "there are none": hidden
+        # exits are left out of Room.Info, so a room with nothing but hidden
+        # ways out reports nothing at all.  Writing that down as a
+        # fingerprint would teach the map a dead end that is not there.
+        if exits:
+            self.store.observe(num, exits, [], now)
         self.store.visit(num, name or None, now)
+        if told and not shared:
+            self._told_exits(num, told, now)
         return num
+
+    def _told_exits(self, num: int, told: Mapping[str, int],
+                    now: float) -> None:
+        """Write down the exits the MUD named, with where they go.
+
+        An edge we were told is better evidence than one we walked: it is
+        the game's own answer, and it covers the ways out nobody has taken
+        yet.  The destination room is made if it is new -- a room with no
+        name, which is what the map already calls a room it has heard of but
+        not stood in.
+
+        Which makes this the map growing, so a locked map says no.  The room
+        you are standing in is different and is always filed: the MUD named
+        it by number, so it is identity rather than invention, and that is
+        the whole reason GMCP is worth having.  A room nobody has been to is
+        an addition like any other.
+        """
+        if self.store.locked:
+            return
+        for way, dest in told.items():
+            if dest <= 0 or dest == num or dest in self.shared:
+                # 0 is "there is a way out and I am not saying where"; a
+                # door onto its own room is the Sea of Chaos being itself.
+                continue
+            self.store.room_numbered(dest, None, now)
+            self.store.link(num, way, dest, now)
+
+    def _note_the_name(self, num: int, name: str, was: int | None,
+                       moved: bool) -> bool:
+        """Is this number being used for more than one room?
+
+        It happens: 3Scapes generates the Sea of Chaos fresh every time and
+        gives every layer room of every layer the same number.  Nothing can
+        tell those rooms apart -- that is what one number for many rooms
+        means -- so the only safe thing is to stop drawing edges to or from
+        it.  Detected rather than listed, because a number that is reused is
+        a fact about the game, not about any one place in it.
+
+        The signal is narrow on purpose: **we walked somewhere, arrived at
+        the number we just left, and the room is called something else.**
+        One name replacing another is an ordinary rename and happens to real
+        rooms; a room that changes under you every time you step is not one
+        room.  Twice, because once is a rename that happened to land on a
+        step.
+        """
+        name = (name or "").strip()
+        before = self._names.get(num)
+        if name:
+            self._names[num] = name
+        if num in self.shared:
+            return True
+        if not (moved and was == num and name and before and before != name):
+            return False
+        self._shifty[num] = self._shifty.get(num, 0) + 1
+        if self._shifty[num] < 2:
+            return False
+        self.shared.add(num)
+        self.store.tag(num, "shared-number")
+        # Including whatever was learned before we knew: those edges join
+        # two real rooms through one that is not a place.
+        forget = getattr(self.store, "forget_edges", None)
+        if callable(forget):
+            forget(num)
+        return True
 
     def arrived(self, exits: Iterable[str], scenery: Iterable[str],
                 name: str | None = None, at: float | None = None) -> int | None:

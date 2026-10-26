@@ -221,3 +221,33 @@ def test_3kdbs_map_is_never_taken_while_playing_the_other_game():
             assert "3Scapes" in said["error"], said
         # On 3K it is allowed through -- as far as the network, anyway.
         assert WebServer(session_at("3k.org", 3000))._who()["world"]["id"] == "3k"
+
+
+def test_3scapes_map_starts_unlocked_however_it_is_opened():
+    """It was unlocked only when the session *moved* to 3Scapes.  Starting
+    the client already on it -- `--character` on a 3Scapes character --
+    opened the map directly and left it locked, so an empty map that cannot
+    grow, and a session spent saying it was lost."""
+    from mud.store import open_for
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "map.sqlite"
+        three_s = worlds.find("3scapes.org")
+        store = open_for(three_s, base)
+        assert store.path.name == "map-3scapes.sqlite"
+        assert store.locked is False
+        # And Three Kingdoms' is 3kdb's, so it stays locked.
+        assert open_for(worlds.DEFAULT, base).locked is True
+
+
+def test_locking_3scapes_by_hand_is_not_undone_on_the_next_run():
+    """`/lock` is the player's decision; reopening the map must not quietly
+    reverse it."""
+    from mud.store import open_for
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "map.sqlite"
+        three_s = worlds.find("3scapes.org")
+        first = open_for(three_s, base)
+        first.room_numbered(1, "Somewhere")
+        first.locked = True
+        first.close()
+        assert open_for(three_s, base).locked is True

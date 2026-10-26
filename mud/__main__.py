@@ -27,7 +27,7 @@ from . import NAME, SLUG, __version__
 from .paths import home
 from .capture import CaptureWriter
 from .capture import prune as prune_captures
-from .store import Store
+from .store import open_for
 from . import commands
 from .botstore import RouteStore
 from .profile import Characters, activate
@@ -168,7 +168,9 @@ async def amain(args: argparse.Namespace) -> int:
     here = worlds.of(start_host, start_port)
     # Each world's own map: 3Scapes is a different game, and one file holding
     # both would be a path that walks you out of one and into the other.
-    store = None if args.no_map else Store(here.file(args.map))
+    # open_for, not Store: the world decides whether its map starts locked,
+    # and this is the other place a map gets opened.
+    store = None if args.no_map else open_for(here, args.map)
     if store is not None:
         try:
             store.forget_old_lines()

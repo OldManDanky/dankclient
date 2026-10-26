@@ -36,4 +36,6 @@ Three Kingdoms and 3Scapes are two games with two geographies, so each keeps its
 
 3kdb has no map for 3Scapes, so 3Scapes starts empty and **unlocked** -- it grows as you walk, which is what the lock above would otherwise prevent. `/go` and the Marks list fill up as rooms arrive. Options -> Updates stays on Three Kingdoms' map, and says so if you ask for it while playing 3Scapes.
 
-3Scapes also names the room you are in as you arrive, over GMCP, so there the map never has to work out where you are from what the room looks like -- it is told, and it cannot lose you or put two rooms together as one. The markers from **Getting started** are still worth setting: they are what the rest of the screen reads.
+3Scapes also names the room you are in as you arrive, over GMCP, so there the map never has to work out where you are from what the room looks like -- it is told, and it cannot lose you or put two rooms together as one. It names where each exit goes, too, so the map fills in faster than you walk. The markers from **Getting started** are still worth setting: they are what the rest of the screen reads.
+
+`/gmcp` says whether that feed is live, what 3Scapes offers, and what has actually arrived -- worth a look if the map there is not following you.

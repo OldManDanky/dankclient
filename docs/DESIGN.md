@@ -121,13 +121,76 @@ one of them has been tested against a capture.
 `mud/telnet.py` now accepts exactly one option, and announces it as
 `opt:on:201` because agreeing is the moment to subscribe -- the filter itself
 knows nothing about what to say.  `mud/gmcp.py` builds and reads the frames:
-`Core.Hello`, then `Core.Supports.Set ["Room.Info 1"]`, and the server's
-`Core.Supported` is kept because it names what the MUD really offers, as
-opposed to what the help file says.  Frames go straight to the socket, never
-through the send queue: this is telnet negotiation, not a command, so it is
-not paced to the game's two-second beat and does not count towards APM.
+`Core.Hello`, then the subscription, and the server's `Core.Supported` is
+kept because it names what the MUD really offers, as opposed to what the
+help file says.  Frames go straight to the socket, never through the send
+queue: this is telnet negotiation, not a command, so it is not paced to the
+game's two-second beat and does not count towards APM.
 
-Four things to know before adding packages:
+### Subscribing is the part that fails silently
+
+A MUD that sends only what was asked for sends **nothing at all** to a
+client that agrees to the option and then says nothing -- which is
+indistinguishable, from the screen, from a MUD with no GMCP.  Two things
+follow.
+
+We ask for **roots** (`Char 1`, `Room 1`, `Comm 1`, `Guild 1`, `Merc 1`,
+`Craft 1`, `Mud 1`) rather than exact package names, so a package the game
+gains later arrives without a new client.  Receiving a package and acting
+on one are separate decisions: everything lands on the bus as `gmcp` and in
+the audit, and only `Room.Info` changes the map.
+
+And the spelling is in doubt.  3S's help calls the mechanism
+`Core.Supports`; the specification and every other client say
+`Core.Supports.Set`.  We send the second, and if **nothing whatever** has
+arrived a few seconds later we send the first, once, and say so on screen.
+The retry is driven off inbound traffic rather than a timer -- the MUD sends
+a prompt often enough, and a connection with nothing coming in has no feed
+to worry about yet.
+
+### The receipts: `/gmcp`
+
+`gmcp.Audit` keeps what was asked for, what `Core.Supported` offered, and
+every package that has arrived with a count, its field paths and its last
+payload.  It exists because a feed can be silent for three different
+reasons -- never negotiated, negotiated but never subscribed, subscribed but
+nothing has changed yet -- which look identical from the output and need
+different fixes.  It also names packages the MUD offers that we do not ask
+for, which is how the next one gets found.
+
+### Room.Info, as 3Scapes actually sends it
+
+`exits` is an **object**, direction to the destination room's number:
+`{"w": 3873, "e": 0}`.  That is the map handed over an edge at a time,
+including the ways out nobody has walked, so `told_room` writes them down as
+edges and creates the far room unnamed -- which is what the schema already
+means by a room heard of but not stood in.  Three rules come with it:
+
+- **`0` is a way out, not a destination.**  The exit is there; the MUD is
+  declining to say where it goes.  It belongs in the exit list and not in
+  the graph.
+- **`{}` is not a dead end.**  Hidden exits are left out of `Room.Info`, so
+  a room whose ways out are all hidden reports none.  No fingerprint is
+  written for it: recording "no exits" would teach the map a wall that is
+  not there and route around a door that opens.
+- **A number is not always one room.**  3Scapes generates the Sea of Chaos
+  fresh and gives every layer room the same number, and one of its exits
+  points at itself.  The signal has to be narrow, because real rooms get
+  renamed and a rename must not cost a room its exits: what marks this is
+  *we walked, we arrived at the number we just left, and the room is called
+  something else* -- twice, since once is a rename that happened to land on
+  a step.  Then it is tagged `shared-number`, every edge touching it is
+  deleted (the ones learned in good faith before we knew included, because
+  they join two real rooms through a room that is not a place), and nothing
+  more is learned through it.  Detected from evidence rather than listed,
+  because a reused number is a fact about the game, not about one place.
+- **A locked map says no to all of this.**  Rooms named in another room's
+  exits are rooms nobody has stood in, so writing them down is the map
+  growing and `/lock` forbids it.  Where you are standing is different and
+  is always filed: the MUD named it by number, so that is identity, not
+  invention, and it is the whole reason GMCP is worth having.
+
+Four more things to know before adding packages:
 
 - `SB_MOST` used to be 4KB, safe only because every option was refused.  An
   accepted one makes it a truncation bug, and half a JSON frame is worse
@@ -142,10 +205,17 @@ Four things to know before adding packages:
   as text, so the walker's look -- which is how a quiet step is checked --
   keeps working through MIP exactly as it does on 3K.
 
-What is written here comes from 3S's own help file, which makes it a claim
-rather than a specification.  The package list and the frames themselves
-want confirming against a capture, for the same reason `codes.py` says the
-wire wins.
+The exit rules above are not in the help file: they are what the wire does,
+and each of them is a way a mapper gets it wrong by believing the
+documentation instead.  The rest of this section does come from 3S's own
+help, which makes it a claim rather than a specification, and wants
+confirming against a capture for the same reason `codes.py` says the wire
+wins.
+
+`tests/test_gmcp.py` covers each of the rules above, and the bench that
+drives the real client against a fake MUD speaking GMCP -- the handshake,
+the fallback spelling, a room with hidden exits and the shared number --
+lives outside the repo, in the dev scratchpad.
 
 ## The map
 
@@ -165,6 +235,15 @@ into and then be lost in.  There is no exception, not even for a room whose
 **Options -> Updates** when 3kdb has them, not by being guessed at while
 walking.  Not recognising a room is a thing the client says out loud and
 recovers from in a step or two; a room it invented is silent and permanent.
+
+A map with no import is the other case, and the rule lives in
+`store.open_for` rather than in either caller: 3Scapes has no 3kdb, so a
+locked map there would be an empty file never allowed to fill, and the
+session would be spent saying it was lost.  It is opened unlocked while it
+has no rooms.  That rule used to live in `Session.store_for`, which runs
+only when the session *moves* between games -- so starting the client
+already on 3Scapes (`--character`, on a 3Scapes character) opened the map
+directly and left it locked.  One rule, one place, both callers.
 
 `/unlock` is there for anybody mapping somewhere the import does not cover,
 and everything that grows a map still works behind it.

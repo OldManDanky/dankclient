@@ -76,6 +76,7 @@ HELP = [
     ]),
     ('The connection', '', [
         ('/js', 're-send the 3klient handshake'),
+        ('/gmcp', 'what the MUD offers over GMCP, and what has arrived'),
         ('/prefixes', "show the character settings that mark up 3K's output"),
         ('/prefixes set', 'send them'),
         ('/ansivars', 'read and keep your own colour settings from 3K'),
@@ -224,6 +225,9 @@ def handle(text: str, session, scripts, note) -> bool:
 
     elif verb == "here":
         _here(session, note)
+
+    elif verb == "gmcp":
+        note("\n".join(session.gmcp.report()))
 
     elif verb in ("name", "lost", "merge"):
         _correct(session, verb, rest, note)

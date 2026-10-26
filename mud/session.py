@@ -21,7 +21,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable
 
-from . import codes, events
+from . import codes, events, gmcp
 from . import SLUG, __version__, worlds
 from .clock import Clock
 from .events import Bus
@@ -126,6 +126,10 @@ class Session:
         #: 3Scapes does; 3K does not, and nothing here depends on either.
         self.gmcp_on = False
         self.gmcp_offers = None
+        #: The receipts: asked, offered, arrived.  `/gmcp` prints it.
+        self.gmcp = gmcp.Audit()
+        self._gmcp_asked_at = 0.0
+        self._gmcp_asked_again = False
         # The *client* invents this; the MUD stamps it on every MIP line so we
         # can ignore traffic meant for somebody else.
         self.sec_code = sec_code or random.randint(1, 99999)
@@ -537,16 +541,8 @@ class Session:
         if self.store is None or self._map_base is None:
             return None
         if world.id not in self._stores:
-            from .store import Store
-            fresh = Store(world.file(self._map_base))
-            empty = fresh.db.execute("SELECT 1 FROM room LIMIT 1").fetchone()
-            if not world.has_3kdb and empty is None:
-                # Nothing to import, so the only map it will ever have is the
-                # one you walk.  Locked, it would spend the session saying it
-                # was lost; 3K's lock is there to protect 3kdb's rooms, and
-                # here there are none to protect.
-                fresh.locked = False
-            self._stores[world.id] = fresh
+            from .store import open_for
+            self._stores[world.id] = open_for(world, self._map_base)
         return self._stores[world.id]
 
     def use_store(self, store) -> None:
@@ -622,6 +618,8 @@ class Session:
         # Options are negotiated per connection, and the other MUD may not
         # offer this one at all.
         self.gmcp_on, self.gmcp_offers = False, None
+        self.gmcp = gmcp.Audit()
+        self._gmcp_asked_at, self._gmcp_asked_again = 0.0, False
         self._lines = LineAssembler(self.encoding)
         self._tail = ""
         self.gate.reset()               # half a line is the socket's too
@@ -677,6 +675,11 @@ class Session:
         for opt, payload in subs:
             if opt == telnet.OPT_GMCP:
                 self._on_gmcp(payload)
+        # Driven off inbound traffic rather than a timer: the MUD sends a
+        # prompt often enough, and a connection with nothing coming in has
+        # no feed to be worried about yet.
+        if self.gmcp_on and not self._gmcp_asked_again:
+            self._gmcp_still_quiet()
 
         for event in self._scanner.feed(clean):
             if isinstance(event, Text):
@@ -705,10 +708,40 @@ class Session:
         """
         if self._writer is None:
             return
-        from . import gmcp
         self.gmcp_on = True
-        self._writer.write(gmcp.hello(self.version))
-        self._writer.write(gmcp.subscribe())
+        self.gmcp.negotiated = True
+        # The plain version number, not `self.version` -- that is MIP's
+        # handshake token (`dankclient0.2.36`), and GMCP already has a field
+        # for the client's name.
+        self._writer.write(gmcp.hello(__version__))
+        self._ask_gmcp(gmcp.VERB)
+
+    def _ask_gmcp(self, verb: str) -> None:
+        """Subscribe, under one of the two spellings."""
+        if self._writer is None:
+            return
+        self._writer.write(gmcp.subscribe(verb=verb))
+        self.gmcp.subscribed(verb, gmcp.WANTED)
+        self._gmcp_asked_at = time.time()
+
+    def _gmcp_still_quiet(self) -> None:
+        """Nothing has come back.  Try the other spelling, once.
+
+        A MUD that sends only what was asked for sends nothing at all to a
+        client whose subscription it did not understand -- which is exactly
+        what a MUD with no GMCP looks like.  Asking again under the other
+        name costs one frame and turns that silence into a line that says
+        what happened.
+        """
+        if (not self.gmcp_on or self._gmcp_asked_again
+                or self.gmcp.anything or not self._gmcp_asked_at):
+            return
+        if time.time() - self._gmcp_asked_at < gmcp.QUIET:
+            return
+        self._gmcp_asked_again = True
+        self._show(f"\r\n[client] no answer to {gmcp.VERB}; asking again as "
+                   f"{gmcp.VERB_ALSO}\r\n".encode(self.encoding, "replace"))
+        self._ask_gmcp(gmcp.VERB_ALSO)
 
     def _on_gmcp(self, payload: bytes) -> None:
         """One GMCP frame.
@@ -718,18 +751,21 @@ class Session:
         passed on and left alone -- MIP already parses it, and two sources for
         one fact is two answers that disagree.
         """
-        from . import gmcp
         package, body = gmcp.parse(payload)
+        self.gmcp.frames += 1
         if not package:
+            self.gmcp.unreadable += 1
             return
+        self.gmcp.took(package, body, time.time())
         if package == "Core.Supported":
             # What it really offers, as opposed to what the help file says.
             self.gmcp_offers = body
+            self.gmcp.offered = body
         elif package == "Room.Info" and self.mapper is not None:
             room = gmcp.room_info(body)
             if room is not None:
                 self.mapper.told_room(room["num"], room["name"],
-                                      room["exits"])
+                                      room["exits"], room["ways"])
         self.bus.emit(events.GMCP, package, body)
 
     def _went_stale(self, many: int) -> None:

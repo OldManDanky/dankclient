@@ -18,6 +18,16 @@ Subscribing is the client's move: ``Core.Supports.Set`` with a list of
 ``"Package.Name 1"`` strings.  3S answers with ``Core.Supported``, naming
 every package it can send and whether we are subscribed -- which is how we
 find out what it really offers, as opposed to what the help file says.
+
+Subscribing is also the part that fails silently.  A MUD that sends only
+what was asked for sends *nothing* to a client that agrees to the option
+and then says nothing, which looks exactly like a MUD with no GMCP at all.
+So we ask for whole roots rather than exact names -- a package added to the
+game later then arrives without a new client -- and if nothing has come
+back a few seconds later we ask again under the other spelling.  3S's help
+calls the mechanism ``Core.Supports``; the specification and every other
+client say ``Core.Supports.Set``.  One of them works, and the retry turns a
+silent feed into a line that says which.
 """
 
 from __future__ import annotations
@@ -26,9 +36,20 @@ import json
 
 from .telnet import IAC, OPT_GMCP, SB, SE
 
-#: What we ask for.  Only the room, for now: it is the package that tells us
-#: something MIP cannot.  Adding to this list is how the rest arrives.
-WANTED = ("Room.Info 1",)
+#: What we ask for: roots, not exact package names.  "Room 1" takes
+#: Room.Info, Room.Contents, Room.Map and anything else filed under Room,
+#: including whatever is added to the game after this release.  Asking for
+#: the whole feed costs nothing -- it arrives only when it changes -- and
+#: what we do with a package is a separate decision from receiving it.
+WANTED = ("Char 1", "Room 1", "Comm 1", "Guild 1",
+          "Merc 1", "Craft 1", "Mud 1")
+
+#: The spelling the specification gives, and the one 3S's help implies.
+#: We send the first and fall back to the second.  See the module docstring.
+VERB, VERB_ALSO = "Core.Supports.Set", "Core.Supports"
+
+#: How long to wait for anything at all before trying the other spelling.
+QUIET = 6.0
 
 
 def frame(package: str, body=None) -> bytes:
@@ -51,8 +72,8 @@ def hello(version: str, name: str = "Dank Mud Client") -> bytes:
     return frame("Core.Hello", {"client": name, "version": version})
 
 
-def subscribe(packages=WANTED) -> bytes:
-    return frame("Core.Supports.Set", list(packages))
+def subscribe(packages=WANTED, verb: str = VERB) -> bytes:
+    return frame(verb, list(packages))
 
 
 def parse(payload: bytes) -> tuple[str, object]:
@@ -91,18 +112,148 @@ def room_info(body) -> dict | None:
         return None
     if num <= 0:
         return None
-    exits = body.get("exits")
-    if isinstance(exits, dict):           # {"n": 1234} -- the usual shape
-        exits = list(exits)
-    elif isinstance(exits, str):
-        exits = [e for e in exits.replace("~", " ").split() if e]
-    elif not isinstance(exits, list):
-        exits = []
+    raw = body.get("exits")
+    ways: dict[str, int] = {}
+    if isinstance(raw, dict):
+        # The real shape: direction -> the room it leads to.  A 0 means the
+        # exit is there and the MUD is not saying where it goes, which is
+        # the frontier a mapper wants, not an absence.
+        for way, dest in raw.items():
+            key = str(way).strip().lower()
+            if not key:
+                continue
+            try:
+                ways[key] = int(dest)
+            except (TypeError, ValueError):
+                ways[key] = 0
+    elif isinstance(raw, str):
+        ways = {e: 0 for e in
+                (w.strip().lower() for w in raw.replace("~", " ").split()) if e}
+    elif isinstance(raw, list):
+        ways = {e: 0 for e in
+                (str(w).strip().lower() for w in raw) if e}
     name = body.get("name")
     area = body.get("area")
     return {
         "num": num,
         "name": str(name) if isinstance(name, (str, int)) else "",
         "area": str(area) if isinstance(area, (str, int)) else "",
-        "exits": [str(e).strip().lower() for e in exits if str(e).strip()],
+        "exits": list(ways),
+        # Only the ones it actually named.  Nothing downstream may read a
+        # missing direction as "no exit": hidden exits are left out, so a
+        # room with nothing but hidden ways out reports none at all.
+        "ways": {w: d for w, d in ways.items() if d > 0},
     }
+
+
+#: Most of a payload kept as the sample.  Enough to see the shape of one.
+SAMPLE = 400
+
+#: Most field names remembered per package.  A package that names a field
+#: after its contents -- a map legend's glyphs, a guild's numbered slots --
+#: would otherwise grow this list for as long as the session runs.
+FIELDS = 60
+
+
+def paths(body, prefix: str = "") -> list[str]:
+    """Every field path in a payload: ``hp``, ``exits.n``, ``items[].name``.
+
+    An index is flattened to ``[]`` on purpose -- what is worth knowing is
+    that the package carries a list of things with names, not how many
+    things were in it this time.
+    """
+    out: list[str] = []
+    if isinstance(body, dict):
+        for key, value in body.items():
+            here = f"{prefix}{key}"
+            kids = paths(value, here + ".")
+            out.extend(kids or [here])
+    elif isinstance(body, list):
+        for item in body:
+            for found in paths(item, prefix.rstrip(".") + "[]."):
+                if found not in out:
+                    out.append(found)
+        if not out and prefix:
+            out.append(prefix.rstrip(".") + "[]")
+    return out
+
+
+class Audit:
+    """What was asked for, what the MUD said it would send, and what came.
+
+    The three are routinely different, and only the first is visible without
+    writing it down.  A package can be offered and never sent because nothing
+    about it changed; the whole feed can be silent because the subscription
+    never landed; and both look the same from the screen -- nothing happens --
+    while needing opposite fixes.  So the client keeps the receipts.
+    """
+
+    def __init__(self) -> None:
+        self.negotiated = False
+        self.verb = ""
+        self.asked: list[str] = []
+        #: The body of ``Core.Supported``: what the MUD says it can send.
+        self.offered: object = None
+        self.frames = 0
+        self.unreadable = 0
+        #: package -> {"count", "first_at", "last_at", "last", "fields"}
+        self.seen: dict[str, dict] = {}
+
+    def subscribed(self, verb: str, packages) -> None:
+        self.verb, self.asked = verb, list(packages)
+
+    def took(self, package: str, body, at: float) -> None:
+        row = self.seen.get(package)
+        if row is None:
+            row = self.seen[package] = {"count": 0, "first_at": at,
+                                        "last_at": at, "last": "",
+                                        "fields": []}
+        row["count"] += 1
+        row["last_at"] = at
+        text = json.dumps(body, sort_keys=True) if body is not None else ""
+        row["last"] = text[:SAMPLE] + ("..." if len(text) > SAMPLE else "")
+        if len(row["fields"]) <= FIELDS:
+            for field in paths(body):
+                if field not in row["fields"]:
+                    row["fields"].append(field)
+                    if len(row["fields"]) > FIELDS:
+                        row["fields"].append("...")
+                        break
+
+    @property
+    def anything(self) -> bool:
+        """Has the MUD sent us a single frame?  The question the fallback
+        spelling turns on: negotiated and silent is the failure that looks
+        like success."""
+        return bool(self.seen)
+
+    def report(self) -> list[str]:
+        """``/gmcp``, as lines."""
+        if not self.negotiated:
+            return ["GMCP: not negotiated -- this MUD did not offer it."]
+        out = [f"GMCP: negotiated, {self.frames} frame(s) in"
+               + (f", {self.unreadable} unreadable" if self.unreadable else "")]
+        out.append(f"  asked ({self.verb}): " + ", ".join(self.asked))
+        if self.offered is None:
+            out.append("  the MUD has not answered with Core.Supported")
+        else:
+            offers = (self.offered if isinstance(self.offered, list)
+                      else [str(self.offered)])
+            out.append("  it offers: " + ", ".join(str(o) for o in offers))
+            bare = {str(o).split()[0].split(".")[0] for o in offers}
+            mine = {a.split()[0].split(".")[0] for a in self.asked}
+            missed = sorted(bare - mine)
+            if missed:
+                out.append("  offered and not asked for: " + ", ".join(missed))
+        if not self.seen:
+            out.append("  nothing has arrived yet")
+            return out
+        out.append("  arrived:")
+        for package in sorted(self.seen):
+            row = self.seen[package]
+            out.append(f"    {package}  x{row['count']}")
+            if row["fields"]:
+                out.append("      fields: " + ", ".join(row["fields"]))
+            if row["last"]:
+                out.append("      last:   " + row["last"])
+        return out

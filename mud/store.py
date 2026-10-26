@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Iterable, Iterator
 
+from . import worlds
+
 SCHEMA_VERSION = 5
 
 _SCHEMA = """
@@ -186,6 +188,28 @@ LOG_KEEP_DAYS = 180
 LOG_FORGET_CHUNK = 5000
 LOG_FORGET_MOST = 100_000
 LOG_VACUUM_AFTER = 50_000
+
+
+def open_for(world: worlds.World, path) -> "Store":
+    """This world's map, with the lock set the way that world needs it.
+
+    A map starts locked, because Three Kingdoms' is 3kdb's and is corrected
+    rather than grown.  3Scapes has no import, so a locked one would be an
+    empty file that is never allowed to fill: the client would spend the
+    session saying it was lost.  The lock exists to protect imported rooms,
+    and where there are none to protect it is just a stop on the only map
+    the player will ever have.
+
+    The rule lives here because the map is opened from more than one place
+    -- at start-up, and again when a character on the other game is chosen
+    -- and a rule written twice is a rule that drifts.
+    """
+    store = Store(world.file(path))
+    if not world.has_3kdb and store.locked:
+        empty = store.db.execute("SELECT 1 FROM room LIMIT 1").fetchone()
+        if empty is None:
+            store.locked = False
+    return store
 
 
 class Store:
@@ -949,6 +973,20 @@ class Store:
             "seen = seen + 1, last_seen = excluded.last_seen",
             (from_room, command.strip().lower(), to_room, now),
         )
+
+    def forget_edges(self, room_id: int) -> int:
+        """Drop every way in and out of one room.
+
+        For a room id that turns out not to be an identity -- 3Scapes gives
+        every layer of the Sea of Chaos one number -- the edges touching it
+        were learned in good faith and are still wrong: they join whatever
+        you walked in from to whatever you walked out to, through a room
+        that is not one room.  What was learned before we knew goes too.
+        """
+        cur = self.db.execute(
+            "DELETE FROM edge WHERE from_room = ? OR to_room = ?",
+            (room_id, room_id))
+        return cur.rowcount or 0
 
     def mark_failed(self, from_room: int, command: str) -> None:
         """This way out did not work.  Remember, so routing stops choosing it."""
