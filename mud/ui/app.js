@@ -639,6 +639,10 @@ function link(op) {
   if (ws) ws.send(JSON.stringify({ t: 'link', op }));
 }
 
+/* Which MUD the connection is on, for anything that has to name it. There
+   are two now, so "disconnect from 3K?" was wrong half the time. */
+let worldNow = '';
+
 $('link-again').addEventListener('click', () => {
   if (window.openLogin) window.openLogin();
 });
@@ -647,8 +651,22 @@ $('link-again').addEventListener('click', () => {
 // window, so the map, the log and everything in Options are still here to come
 // back to. Confirmed because a mis-click leaves you link-dead in whatever room
 // you were standing in.
+//
+// Nothing brings the connection back by itself -- a drop we asked for is not
+// one to recover from -- so the character screen comes up instead. After a
+// hang-up "who is playing" and "how do I get back on" are the same question,
+// and that screen is the answer to both. It is the way back as well as the
+// way out: leaving the player looking at a dead terminal with no prompt is
+// how a deliberate disconnect ends up looking like a crash.
 $('hangup').addEventListener('click', () => {
-  if (confirm('Save the session and disconnect from 3K?')) link('hangup');
+  const where = worldNow ? ` from ${worldNow}` : '';
+  if (confirm(`Save the session and disconnect${where}?`)) {
+    link('hangup');
+    // The character screen takes the focus with it. Putting it back in the
+    // command box would leave the cursor blinking at a connection that is
+    // gone, under a screen asking who to play.
+    if (window.openLogin) return window.openLogin();
+  }
   cmd.focus();
 });
 
@@ -858,6 +876,7 @@ function render(s) {
   });
   $('glines').hidden = !anyGuild;
 
+  if (s.who && s.who.world) worldNow = s.who.world.name || '';
   if (window.renderWho) window.renderWho(s.who);
   if (window.renderBrief) window.renderBrief(s.brief);
   if (window.maybeGetStarted) window.maybeGetStarted(s.start);
@@ -876,6 +895,8 @@ function render(s) {
   }
   if (s.release && window.renderRelease) window.renderRelease(s.release);
   if (window.renderVersion) window.renderVersion(s.release, s.where && s.where.version);
+
+  if (window.renderGuilds) window.renderGuilds(s.guilds);
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {
     mipLabels = s.labels;

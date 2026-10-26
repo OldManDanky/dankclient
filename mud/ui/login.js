@@ -253,6 +253,9 @@
     const prof = professionOf(char.profession);
     sub.textContent = [
       (worldOfChar(char) || {}).name || `${char.host}:${char.port}`,
+      // Whatever the MUD last said their guild was.  Nobody typed it, and
+      // nothing asks for it: it is here because it is already known.
+      char.guild || '',
       prof ? prof.name : '',
       ...(char.extras || []).map((id) => (extraOf(id) || {}).name),
       char.has_password ? 'password saved' : '',

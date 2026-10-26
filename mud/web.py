@@ -452,6 +452,11 @@ class WebServer:
             },
             "enemy_label": w.enemy_label,
             "labels": dict(w.labels),
+            # 3Scapes' Guild.* packages, assembled.  Empty on Three
+            # Kingdoms, which does not send them, and the panel hides
+            # itself when it is empty rather than showing a bare heading.
+            "guilds": getattr(self.session, "guilds", None).public()
+                      if getattr(self.session, "guilds", None) else {},
             "messages": list(w.messages)[-80:],
             "room": {
                 "short": w.room.short,
@@ -571,6 +576,7 @@ class WebServer:
     def _who(self) -> dict:
         """Who is playing, and whether anything is waiting to be told."""
         char = getattr(self.session, "character", None)
+        self._learn_guild(char)
         login = getattr(self.session, "login", None)
         asking = bool(login is not None and login.waiting)
         # Hung up on purpose: there is no MUD to ask the question, but picking
@@ -821,6 +827,26 @@ class WebServer:
         except Exception:
             log("saying what an update did:\n" + traceback.format_exc())
         self.push({"t": "update", "op": "done", **got})
+
+    def _learn_guild(self, char) -> None:
+        """Keep whichever guild the feed says this character is in.
+
+        Never asked for on the character screen: 3Scapes puts it on every
+        Guild.* package, so the only honest source is the one that cannot
+        be out of date.  Written down so the screen can say who they are
+        before they have logged in.
+        """
+        feed = getattr(self.session, "guilds", None)
+        if char is None or feed is None or self.characters is None:
+            return
+        said = feed.guild
+        if not said or said == char.guild:
+            return
+        char.guild = said
+        held = self.characters.get(char.name)
+        if held is not None and held is not char:
+            held.guild = said
+        self.characters.save()
 
     def _reply_login(self, error: str) -> None:
         self.push({"t": "login", "op": "error", "error": error})

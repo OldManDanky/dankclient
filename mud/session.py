@@ -25,6 +25,7 @@ from . import codes, events, gmcp
 from . import SLUG, __version__, worlds
 from .clock import Clock
 from .events import Bus
+from .guilds import GuildFeed
 from .lines import LineAssembler
 from .logbook import Logbook
 from .markup import Markup
@@ -128,6 +129,8 @@ class Session:
         self.gmcp_offers = None
         #: The receipts: asked, offered, arrived.  `/gmcp` prints it.
         self.gmcp = gmcp.Audit()
+        #: The Guild.* packages, assembled.  3Scapes only; empty on 3K.
+        self.guilds = GuildFeed()
         self._gmcp_asked_at = 0.0
         self._gmcp_asked_again = False
         # The *client* invents this; the MUD stamps it on every MIP line so we
@@ -619,6 +622,7 @@ class Session:
         # offer this one at all.
         self.gmcp_on, self.gmcp_offers = False, None
         self.gmcp = gmcp.Audit()
+        self.guilds.clear()      # another connection, possibly another game
         self._gmcp_asked_at, self._gmcp_asked_again = 0.0, False
         self._lines = LineAssembler(self.encoding)
         self._tail = ""
@@ -757,6 +761,7 @@ class Session:
             self.gmcp.unreadable += 1
             return
         self.gmcp.took(package, body, time.time())
+        self.guilds.take(package, body)
         if package == "Core.Supported":
             # What it really offers, as opposed to what the help file says.
             self.gmcp_offers = body

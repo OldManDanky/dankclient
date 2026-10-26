@@ -19,6 +19,10 @@
     { id: 'msgmon', label: 'Messages', on: true,
       note: 'Tells, emotes and channel traffic, across the top of the '
           + 'output. Each channel gets a tag you can switch off.' },
+    { id: 'guildpanel', label: 'Guild', on: true,
+      note: 'Under Session: everything 3Scapes sends about your guild, a '
+          + 'tab per package. It appears only on 3Scapes, which is the '
+          + 'only one of the two that sends it.' },
     { id: 'mapmon', label: 'Map', on: true,
       note: 'Top of the sidebar. Click a room to walk there.' },
     { id: 'botpanel', label: 'Stepper', on: true,
@@ -45,6 +49,10 @@
     // display:none has no size -- so it has to be told to draw again once it
     // has one.
     if (on && p.id === 'mapmon' && window.renderMap) window.renderMap();
+    // The Guild panel is shown only if there is also something in it, which
+    // is its own business, so hand the decision back rather than leaving an
+    // empty heading on a MUD that sends none of it.
+    if (p.id === 'guildpanel' && window.renderGuilds) window.renderGuilds();
   }
 
   function set(p, on) {
@@ -210,7 +218,8 @@
      click on the heading, remembered in this browser.  What is worth seeing
      rolled up stays in the heading -- whether you are connected, the path and
      its step, the room. */
-  const FOLDS = ['session', 'botpanel', 'trackpanel', 'roompanel'];
+  const FOLDS = ['session', 'botpanel', 'trackpanel', 'roompanel',
+                 'guildpanel'];
 
   function foldable(id) {
     const section = $(id);

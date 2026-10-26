@@ -61,6 +61,10 @@ class Character:
     profession: str = ""
     #: extra packs' ids, such as "corpses"
     extras: list[str] = field(default_factory=list)
+    #: Their guild, as the MUD said it -- never typed, and never asked for:
+    #: 3Scapes puts it on every Guild.* package and on Char.Vitals.  Kept so
+    #: the character screen can say who they are before they have logged in.
+    guild: str = ""
     #: What this character calls the gauges: {"gp1": "PU"}.  3K names them
     #: per guild over MIP, which is right until it is not -- the name a
     #: player uses for their own guild's points is theirs, and it is theirs
@@ -159,6 +163,8 @@ class Characters:
             # Same for the gauge names: they are set from the playing screen,
             # not the character screen, so an edit there must not drop them.
             char.labels = char.labels or dict(old.labels)
+            # And the guild, which the screen never offers at all.
+            char.guild = char.guild or old.guild
             self.all[self.all.index(old)] = char
         self.save()
         return char
@@ -223,6 +229,12 @@ def activate(char: Character, chars: Characters, session, scripts=None) -> None:
     # back on the other address; staying put costs nothing.
     if hasattr(session, "switch_world"):
         session.switch_world(char.host, char.port)
+    # Another character is another guild, and picking one on the same MUD
+    # does not hang up -- so nothing else would clear what the last one's
+    # Guild.* packages said, and the panel would wear their numbers until
+    # each package next changed.
+    if getattr(session, "guilds", None) is not None:
+        session.guilds.clear()
     chars.played(char.name)
     # The client is up and logging before anybody has picked a character, so
     # this is the first moment the session row can say whose it is.
