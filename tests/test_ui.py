@@ -903,3 +903,17 @@ def test_every_command_is_in_a_group():
     for title, _blurb, rows in HELP:
         assert rows, f"{title} is empty"
         assert title[0].isupper()
+
+
+def test_a_gauge_name_belongs_to_the_character_not_the_browser():
+    """Set PU/SPU, close the client, come back: 3K's own name for the
+    guild's points had replaced them.  Two faults in one line --
+    `mipLabels[key] || ownLabel(key)`, so the MUD outranked the player, and
+    `ownLabel` read localStorage, which is this browser's rather than this
+    character's.  Both are fixed here, so both are pinned here."""
+    app = (UI / "app.js").read_text()
+    assert "myLabels[key] || mipLabels[key]" in app, \
+        "the player's own name for a gauge must beat the MUD's"
+    assert "localStorage.getItem('label:" not in app, \
+        "a gauge's name is kept with the character, not in the browser"
+    assert "op: 'label'" in app, "renaming has to reach the server to be kept"

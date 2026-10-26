@@ -699,44 +699,54 @@ window.sendCommand = (text) => send(text, true);
 // practice this is your own naming.
 const DEFAULT_LABELS = { hp: 'HP', sp: 'SP', gp1: 'GP1', gp2: 'GP2' };
 let mipLabels = {};
-
-function ownLabel(key) {
-  try {
-    return localStorage.getItem('label:' + key) || '';
-  } catch (err) {
-    return '';
-  }
-}
+/* What this character calls them.  Kept with the character on disk, not in
+   this browser: the name belongs to the guild they are in, and the next
+   character is in another one.  Theirs wins over the name 3K sends -- a
+   player who has typed a name has said what they want it called. */
+let myLabels = {};
+let playing = null;
 
 function labelFor(key) {
-  return mipLabels[key] || ownLabel(key) || DEFAULT_LABELS[key];
+  return myLabels[key] || mipLabels[key] || DEFAULT_LABELS[key];
 }
 
 function paintLabels() {
   for (const key of Object.keys(DEFAULT_LABELS)) {
     const el = $('lbl-' + key);
-    if (el) {
-      el.textContent = labelFor(key);
-      el.title = mipLabels[key]
-        ? 'Named by the MUD'
-        : 'Click to rename this gauge';
-    }
+    if (!el) continue;
+    el.textContent = labelFor(key);
+    el.title = myLabels[key]
+      ? 'Your name for it. Click to change, or clear it to go back to '
+        + (mipLabels[key] || DEFAULT_LABELS[key])
+      : playing
+        ? 'Click to rename this gauge'
+        : 'Log in a character to rename this gauge';
   }
 }
+
+window.setOwnLabels = function (labels, who) {
+  const next = labels || {};
+  playing = who || null;
+  if (JSON.stringify(next) !== JSON.stringify(myLabels)) {
+    myLabels = next;
+  }
+  paintLabels();
+};
 
 for (const key of Object.keys(DEFAULT_LABELS)) {
   const el = $('lbl-' + key);
   if (!el) continue;
   el.style.cursor = 'pointer';
   el.onclick = () => {
-    if (mipLabels[key]) return;              // the MUD named it; leave it be
-    const next = prompt(`Name for ${DEFAULT_LABELS[key]}`, labelFor(key));
+    if (!playing) return;       // it is kept with a character; there is none
+    const next = prompt(
+      `Name for ${DEFAULT_LABELS[key]} (empty for `
+        + `${mipLabels[key] || DEFAULT_LABELS[key]})`,
+      myLabels[key] || '');
     if (next === null) return;
-    try {
-      if (next.trim()) localStorage.setItem('label:' + key, next.trim());
-      else localStorage.removeItem('label:' + key);
-    } catch (err) { /* private window: the name just will not stick */ }
-    paintLabels();
+    if (ws) ws.send(JSON.stringify({
+      t: 'login', op: 'label', key, text: next.trim(),
+    }));
   };
 }
 paintLabels();
@@ -871,6 +881,7 @@ function render(s) {
     mipLabels = s.labels;
     paintLabels();
   }
+  if (s.who) window.setOwnLabels(s.who.own_labels, s.who.character);
 
   if (window.renderMap) window.renderMap(s.map);
 

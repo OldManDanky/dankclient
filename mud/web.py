@@ -85,6 +85,10 @@ OP_CONT, OP_TEXT, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG = 0x0, 0x1, 0x2, 0x8, 0x
 #: The names this machine answers to, and the only ones the UI is served on.
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
+#: The gauges a player may rename.  Anything else the page asks for is
+#: ignored rather than written into the character's file.
+GAUGES = ("hp", "sp", "gp1", "gp2")
+
 
 def loopback_host(host: str) -> bool:
     """Is this Host header naming this machine?
@@ -576,6 +580,9 @@ class WebServer:
         return {
             "offline": offline,
             "character": char.name if char is not None else None,
+            # What this character calls the gauges.  Theirs beats the name
+            # 3K sends for the guild, which is the point of setting one.
+            "own_labels": dict(char.labels) if char is not None else {},
             # Whoever is playing, however they got in: the messages window
             # uses it to tell your own lines from everybody else's.
             "me": getattr(self.session, "who_am_i", "") or "",
@@ -656,6 +663,29 @@ class WebServer:
                 if not packs.matches(self.scripts, held):
                     packs.apply(self.scripts, held, chars.dir(held.name),
                                 fresh=False)
+            self._dirty = True
+            return
+
+        if op == "label":
+            # Renaming a gauge, from the playing screen rather than the
+            # character screen: it belongs to whoever is playing.
+            char = getattr(self.session, "character", None)
+            if char is None:
+                self._reply_login("log in a character first -- a gauge's "
+                                  "name is kept with them")
+                return
+            key = str(msg.get("key", "")).strip().lower()
+            if key not in GAUGES:
+                return
+            text = str(msg.get("text", "")).strip()[:12]
+            if text:
+                char.labels[key] = text
+            else:
+                char.labels.pop(key, None)      # back to whatever 3K calls it
+            held = chars.get(char.name)
+            if held is not None and held is not char:
+                held.labels = dict(char.labels)
+            chars.save()
             self._dirty = True
             return
 

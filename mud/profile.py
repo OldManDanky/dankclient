@@ -61,6 +61,11 @@ class Character:
     profession: str = ""
     #: extra packs' ids, such as "corpses"
     extras: list[str] = field(default_factory=list)
+    #: What this character calls the gauges: {"gp1": "PU"}.  3K names them
+    #: per guild over MIP, which is right until it is not -- the name a
+    #: player uses for their own guild's points is theirs, and it is theirs
+    #: per character, because the next character is in another guild.
+    labels: dict[str, str] = field(default_factory=dict)
     last_played: float = 0.0
 
     def __post_init__(self) -> None:
@@ -151,6 +156,9 @@ class Characters:
             # An empty password means "leave it alone", not "forget it": the
             # browser is never sent one back, so it cannot send one on.
             char.password = char.password or old.password
+            # Same for the gauge names: they are set from the playing screen,
+            # not the character screen, so an edit there must not drop them.
+            char.labels = char.labels or dict(old.labels)
             self.all[self.all.index(old)] = char
         self.save()
         return char

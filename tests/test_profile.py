@@ -273,3 +273,38 @@ def test_a_password_reaches_the_socket_and_nowhere_else():
         assert "hunter2" in wire, "the MUD never got it"
         written = [line for _, line in read_commands(Path(tmp) / "run")]
         assert written == ["Player", "********"], written
+
+
+# --- what a character calls their own gauges --------------------------------
+
+def test_a_gauge_name_is_kept_with_the_character():
+    """It was in localStorage, so it was the browser's rather than anybody's:
+    one name shared by every character, lost on another machine, and beaten
+    by whatever 3K called the guild's points on the next login."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = chars(tmp)
+        c.put(Character("Player", labels={"gp1": "PU", "gp2": "SPU"}))
+        again = chars(tmp)
+        assert again.get("Player").labels == {"gp1": "PU", "gp2": "SPU"}
+
+
+def test_one_characters_gauge_names_are_not_anothers():
+    with tempfile.TemporaryDirectory() as tmp:
+        c = chars(tmp)
+        c.put(Character("Player", labels={"gp1": "PU"}))
+        c.put(Character("Other", labels={"gp1": "chi"}))
+        again = chars(tmp)
+        assert again.get("Player").labels["gp1"] == "PU"
+        assert again.get("Other").labels["gp1"] == "chi"
+
+
+def test_editing_a_character_does_not_drop_their_gauge_names():
+    """The character screen does not show them -- they are set from the
+    gauge itself while playing -- so a save from that screen arrives with
+    none, exactly as it arrives with no password."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = chars(tmp)
+        c.put(Character("Player", labels={"gp1": "PU"}))
+        c.put(Character("Player", note="now a psionicist"))
+        assert c.get("Player").labels == {"gp1": "PU"}
+        assert c.get("Player").note == "now a psionicist"
