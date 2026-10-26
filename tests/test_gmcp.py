@@ -478,3 +478,43 @@ def test_a_locked_map_does_not_grow_on_what_it_is_told_either():
         store.locked = False
         m.told_room(3872, "On the outer wall", ["w"], {"w": 3873})
         assert ways(store, 3872) == {"w": 3873}
+
+
+# --- Core.Supported, as 3Scapes answers it ---------------------------------
+
+def test_core_supported_is_an_object_not_a_list():
+    """The specification says a list of names; 3Scapes sends package -> 1
+    if we are subscribed, 0 if it is only on offer.  Read as a list it
+    stringified the whole dict and reported a package called "{'Balatro"."""
+    a = gmcp.Audit()
+    a.negotiated = True
+    a.subscribed(gmcp.VERB, ["Char 1"])
+    a.offered = {"Char.Vitals": 1, "Room.Info": 1, "Balatro.Cards": 0}
+    text = "\n".join(a.report())
+    assert "subscribed (2): Char.Vitals, Room.Info" in text
+    assert "offered, not asked for (1): Balatro.Cards" in text
+    assert "{'" not in text
+
+
+def test_the_list_shape_still_reads():
+    a = gmcp.Audit()
+    a.negotiated = True
+    a.subscribed(gmcp.VERB, ["Char 1"])
+    a.offered = ["Char.Vitals 1", "Balatro.Cards 1"]
+    text = "\n".join(a.report())
+    assert "subscribed (1): Char.Vitals" in text
+    assert "offered, not asked for (1): Balatro.Cards" in text
+
+
+def test_a_package_that_arrives_without_being_offered_is_named():
+    """Core.Supported is not exhaustive.  3Scapes sends Guild.Config,
+    Guild.Stats and more that it never names there, so what turned up
+    anyway is worth saying -- it is how the next package gets found."""
+    a = gmcp.Audit()
+    a.negotiated = True
+    a.subscribed(gmcp.VERB, ["Guild 1"])
+    a.offered = {"Guild.State": 1}
+    a.took("Guild.State", {"pu": 9393}, 1.0)
+    a.took("Guild.Config", {"guild": "gentech"}, 2.0)
+    line = [l for l in a.report() if "without being offered" in l]
+    assert line == ["  arrived without being offered: Guild.Config"]

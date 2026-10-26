@@ -917,3 +917,26 @@ def test_a_gauge_name_belongs_to_the_character_not_the_browser():
     assert "localStorage.getItem('label:" not in app, \
         "a gauge's name is kept with the character, not in the browser"
     assert "op: 'label'" in app, "renaming has to reach the server to be kept"
+
+
+def test_disconnect_brings_the_character_screen_back():
+    """The README said it did and login.js's own comment said it did, but
+    nothing called it: pressing Disconnect left you looking at a dead
+    terminal with no prompt, which is what a crash looks like.  Nothing
+    reconnects by itself after a hang-up -- that is the point of the button
+    -- so the screen that says who is playing has to be the way back."""
+    app = (UI / "app.js").read_text()
+    press = app[app.index("$('hangup').addEventListener"):]
+    press = press[:press.index("});")]
+    assert "link('hangup')" in press
+    assert "openLogin" in press, "it has to offer the way back on"
+
+
+def test_the_disconnect_question_names_the_right_mud():
+    """There are two now, so "disconnect from 3K?" was wrong half the
+    time."""
+    app = (UI / "app.js").read_text()
+    press = app[app.index("$('hangup').addEventListener"):]
+    press = press[:press.index("});")]
+    assert "3K" not in press, "the question must not name one of the two"
+    assert "worldNow" in press, "it names whichever one is connected"

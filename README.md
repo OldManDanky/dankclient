@@ -46,8 +46,12 @@ it -- and **Options -> Updates** stays on Three Kingdoms' map.
 
 3Scapes speaks GMCP as well as MIP, and names each room as you enter it, so
 there the map is told where you are rather than working it out from the room
-description.  It cannot lose you, and it never files one room under two
-names.
+description.  It cannot lose you, it never files one room under two names,
+and because each room also names where its exits go, the map fills in faster
+than you walk.  A **Guild** panel shows everything 3Scapes sends about your
+guild, under Session in the sidebar, a tab per package and the guild's own
+names for things -- and
+`/gmcp` says what the feed is doing if it ever looks wrong.
 
 ## Playing
 

@@ -42,7 +42,7 @@ from .telnet import IAC, OPT_GMCP, SB, SE
 #: the whole feed costs nothing -- it arrives only when it changes -- and
 #: what we do with a package is a separate decision from receiving it.
 WANTED = ("Char 1", "Room 1", "Comm 1", "Guild 1",
-          "Merc 1", "Craft 1", "Mud 1")
+          "Merc 1", "Craft 1", "Mud 1", "Balatro 1")
 
 #: The spelling the specification gives, and the one 3S's help implies.
 #: We send the first and fall back to the second.  See the module docstring.
@@ -234,17 +234,7 @@ class Audit:
         out = [f"GMCP: negotiated, {self.frames} frame(s) in"
                + (f", {self.unreadable} unreadable" if self.unreadable else "")]
         out.append(f"  asked ({self.verb}): " + ", ".join(self.asked))
-        if self.offered is None:
-            out.append("  the MUD has not answered with Core.Supported")
-        else:
-            offers = (self.offered if isinstance(self.offered, list)
-                      else [str(self.offered)])
-            out.append("  it offers: " + ", ".join(str(o) for o in offers))
-            bare = {str(o).split()[0].split(".")[0] for o in offers}
-            mine = {a.split()[0].split(".")[0] for a in self.asked}
-            missed = sorted(bare - mine)
-            if missed:
-                out.append("  offered and not asked for: " + ", ".join(missed))
+        out.extend(self._offers())
         if not self.seen:
             out.append("  nothing has arrived yet")
             return out
@@ -252,8 +242,47 @@ class Audit:
         for package in sorted(self.seen):
             row = self.seen[package]
             out.append(f"    {package}  x{row['count']}")
-            if row["fields"]:
+            # Core.Supported's payload *is* a list of package names, so
+            # repeating it as a field list says nothing twice.
+            if row["fields"] and not package.startswith("Core."):
                 out.append("      fields: " + ", ".join(row["fields"]))
             if row["last"]:
                 out.append("      last:   " + row["last"])
+        return out
+
+    def _offers(self) -> list[str]:
+        """What Core.Supported said, and what it did not say.
+
+        3Scapes answers with an **object**, package -> 1 if we are
+        subscribed and 0 if it is merely on offer, rather than the list of
+        strings the specification describes.  The 0s are the interesting
+        half: they are what the MUD would send if asked.
+        """
+        if self.offered is None:
+            return ["  the MUD has not answered with Core.Supported"]
+        on, off = [], []
+        if isinstance(self.offered, dict):
+            for package, live in sorted(self.offered.items()):
+                (on if live else off).append(str(package))
+        elif isinstance(self.offered, list):
+            # The shape the specification gives: names only, no answer about
+            # which of them we are subscribed to.
+            roots = {a.split()[0].split(".")[0] for a in self.asked}
+            for entry in self.offered:
+                name = str(entry).split()[0]
+                (on if name.split(".")[0] in roots else off).append(name)
+        else:
+            return [f"  it answered Core.Supported with {self.offered!r}"]
+        out = [f"  subscribed ({len(on)}): " + (", ".join(on) or "none")]
+        if off:
+            out.append(f"  offered, not asked for ({len(off)}): "
+                       + ", ".join(off))
+        # Core.Supported is not a promise to be exhaustive: 3Scapes sends
+        # Guild.Config, Guild.Stats and others it never names there.  What
+        # turned up anyway is worth saying out loud.
+        named = {str(p).split()[0] for p in (on + off)}
+        extra = sorted(p for p in self.seen
+                       if p not in named and not p.startswith("Core."))
+        if extra:
+            out.append("  arrived without being offered: " + ", ".join(extra))
         return out

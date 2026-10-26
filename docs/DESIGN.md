@@ -135,18 +135,35 @@ indistinguishable, from the screen, from a MUD with no GMCP.  Two things
 follow.
 
 We ask for **roots** (`Char 1`, `Room 1`, `Comm 1`, `Guild 1`, `Merc 1`,
-`Craft 1`, `Mud 1`) rather than exact package names, so a package the game
-gains later arrives without a new client.  Receiving a package and acting
+`Craft 1`, `Mud 1`, `Balatro 1`) rather than exact package names, so a
+package the game gains later arrives without a new client.  Receiving a package and acting
 on one are separate decisions: everything lands on the bus as `gmcp` and in
 the audit, and only `Room.Info` changes the map.
 
-And the spelling is in doubt.  3S's help calls the mechanism
-`Core.Supports`; the specification and every other client say
-`Core.Supports.Set`.  We send the second, and if **nothing whatever** has
-arrived a few seconds later we send the first, once, and say so on screen.
-The retry is driven off inbound traffic rather than a timer -- the MUD sends
-a prompt often enough, and a connection with nothing coming in has no feed
-to worry about yet.
+The spelling was in doubt: 3S's help calls the mechanism `Core.Supports`,
+while the specification and every other client say `Core.Supports.Set`.
+**`Core.Supports.Set` is the one that works** -- settled on the wire, 85
+frames into the first live session.  The fallback stays: if nothing
+whatever has arrived a few seconds after subscribing, the other spelling
+goes out once and says so on screen.  It costs one frame on a feed that is
+already broken and nothing at all on a working one.  The retry is driven
+off inbound traffic rather than a timer -- the MUD sends a prompt often
+enough, and a connection with nothing coming in has no feed to worry about
+yet.
+
+Two things about the answer, both observed rather than documented:
+
+- **`Core.Supported` is an object, not a list.**  Package to `1` if we are
+  subscribed and `0` if it is merely on offer, where the specification
+  describes a list of `"Name 1"` strings.  Read as a list it stringifies to
+  one long entry, which is how the first live `/gmcp` reported a package
+  called `{'Balatro`.  Both shapes are handled; the `0`s are the useful
+  half, because they are what the MUD would send if asked.
+- **It is not exhaustive.**  3Scapes sends `Guild.Config`, `Guild.Powers`,
+  `Guild.Progress`, `Guild.Stats` and `Guild.Systems`, none of which it
+  names in `Core.Supported`.  So the audit also reports what arrived
+  *without* being offered: subscribing to a root gets packages the MUD
+  never advertises, and that list is how the next one is found.
 
 ### The receipts: `/gmcp`
 
