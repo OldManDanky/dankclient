@@ -518,3 +518,41 @@ def test_a_package_that_arrives_without_being_offered_is_named():
     a.took("Guild.Config", {"guild": "gentech"}, 2.0)
     line = [l for l in a.report() if "without being offered" in l]
     assert line == ["  arrived without being offered: Guild.Config"]
+
+
+def test_gmcp_names_one_package_and_puts_its_pages_back_together():
+    """`/gmcp` on its own shows each package's LAST frame, and the last
+    page of a twenty-five page map is a line with the width on it.  So
+    `/gmcp <package>` prints what the pages add up to -- which is what the
+    panel draws from, and the only way to read a field at its source.
+    """
+    from mud.commands import _gmcp_package
+
+    class Feed:
+        packages = {"Guild.Map": {"guild": "viking", "w": 70,
+                                  "enc": {"terrain": "glyph"},
+                                  "terrain": ["ab", "cd"]}}
+
+    class S:
+        guilds = Feed()
+
+    out = "\n".join(_gmcp_package(S(), "map"))
+    assert "Guild.Map, as it has been assembled:" in out
+    assert "w = 70" in out
+    assert "terrain = [ab, cd]" in out
+    # Named with or without the prefix, and in any case.
+    assert _gmcp_package(S(), "Guild.MAP") == _gmcp_package(S(), "map")
+    # And an unknown one says what there is rather than nothing.
+    assert "Guild.Map" in "\n".join(_gmcp_package(S(), "nope"))
+
+
+def test_a_long_value_is_sampled_but_a_short_one_is_whole():
+    """A map's key names twenty-one kinds of ground and is useless with
+    four of them; its terrain is seventy characters by forty rows and is
+    unreadable whole."""
+    from mud.commands import _short
+
+    legend = {str(i): f"ground{i}" for i in range(21)}
+    assert "ground20" in _short(legend), "a key short enough to read is whole"
+    rows = ["x" * 70] * 40
+    assert "36 more" in _short(rows), "a map's rows are sampled, not printed"

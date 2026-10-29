@@ -93,12 +93,23 @@ renderGuilds({ 'Guild.Powers': {
   runes: [{ name: 'rune', level: 3 }, { name: 'axe', level: 1 }],
   slots: [4, null, 'open'],
 } });
-const odd = Object.fromEntries(pairs());
-check('a list of objects is readable, not [object Object]',
-  odd['runes'] === '{"name":"rune","level":3}, {"name":"axe","level":1}',
-  odd['runes']);
+const kids = () => el('guild-rows').children;
+const headed = (name) => kids().find(
+  (n) => n.className === 'ghead' && text(n) === name);
+check('a list of records is a table, not a line of JSON',
+  !!headed('runes') && !!kids().find((n) => n.className === 'gtable'));
+const trs = kids().find((n) => n.className === 'gtable').children[0].children;
+check("its columns are the records' own fields, in the order they came",
+  trs[0].children.map(text).join('|') === 'name|level',
+  trs[0].children.map(text));
+check('and one line per record',
+  trs[1].children.map(text).join('|') === 'rune|3'
+  && trs[2].children.map(text).join('|') === 'axe|1',
+  trs[1].children.map(text));
+// A list of plain values is still a list of plain values.
+const slot = kids().findIndex((n) => text(n) === 'slots');
 check('a hole in a list stays a hole',
-  odd['slots'] === '4, , open', odd['slots']);
+  text(kids()[slot + 1]) === '4, , open', text(kids()[slot + 1]));
 
 /* The package NAMES here are measured -- one guild really does send these
    sixteen -- the one field in each is not.  Seven tabs wrap to two rows and
@@ -165,17 +176,105 @@ check('what the drawing says is not repeated as rows underneath',
 check('and what it does not say still is',
   left.landmarks === 'hall, wreck');
 
+/* A real feed numbers its kinds of ground 0..20 rather than keying them
+   by the character on the map, so there is nothing to match against and
+   the whole key is listed.  Note 0..9 are single characters and look like
+   glyphs: what settles it is that none of them is on the map. */
+renderGuilds({ 'Guild.Map': Object.assign({}, MAP['Guild.Map'],
+  { legend: { 0: 'plains', 1: 'mountain', 9: 'sea', 20: 'ice' } }) });
+check('a key numbered rather than drawn is listed whole',
+  el('guild-map').children[2].children.map(text).join('|')
+  === '0 plains|1 mountain|9 sea|20 ice',
+  el('guild-map').children[2].children.map(text));
+
 renderGuilds({ 'Guild.Map': Object.assign({}, MAP['Guild.Map'],
   { enc: { terrain: 'base64' } }) });
 check('an encoding we cannot draw says so instead of drawing nonsense',
   text(el('guild-map').children[0]).includes('base64')
   && el('guild-map').children.length === 1);
 
-renderGuilds({ 'Guild.War': { guild: 'vikings', active: 0, w: 4, h: 1,
-  terrain: ['....'], war_points: 3 } });
+/* The real no-battle board: `active: 0` AND nothing in it.  Emptiness is
+   what is tested, not the flag -- see the live world map below, which
+   sends `active: 0` with seventy columns of real ground. */
+renderGuilds({ 'Guild.War': { guild: 'viking', active: 0, w: 0, h: 0,
+  terrain: [], war_points: 3 } });
 check('a board with nothing on it draws nothing, and still lists its fields',
   el('guild-map').hidden === true
   && Object.fromEntries(pairs())['war points'] === '3');
+
+/* Straight off a live feed: `active: 0` because you are not standing on
+   the world map, `pos` -1,-1 for the same reason, a key numbered 0..20
+   that does not match the letters in the rows, and a real 70-wide map.
+   The first version of this panel drew none of it. */
+renderGuilds({ 'Guild.Map': {
+  guild: 'viking', active: 0, w: 70, h: 35,
+  pos: { y: -1, x: -1 },
+  enc: { terrain: 'glyph', east: 'glyph', south: 'glyph' },
+  legend: { 0: 'unexplored', 1: 'plains', 2: 'forest', 3: 'hills',
+            4: 'mountains', 19: 'blocked (impassable edge)' },
+  terrain: ['rWWWffhhhhh', '.hhhffhhhhh', '.........ks'],
+  east: ['0000111111', '1111111111'],
+  south: ['10001111111', '11111111111'],
+} });
+const live = el('guild-map').children;
+check('a live world map draws, though it says active: 0',
+  el('guild-map').hidden === false && live[1].tagName === 'pre',
+  el('guild-map').hidden);
+check('its rows are drawn exactly as they came',
+  text(live[1]) === 'rWWWffhhhhh\n.hhhffhhhhh\n.........ks');
+check('and being nowhere on it is not a corner of it',
+  text(live[0]) === '70\u00d735', text(live[0]));
+check('the numbered key is listed, since no key is on the map',
+  live[2].children.length === 6, live[2].children.map(text));
+
+/* Straight off the live feed, which is where "this looks like a raw data
+   dump" came from: nested records and lists of records, every one of
+   which used to print as its JSON. */
+renderGuilds({ 'Guild.State': {
+  guild: 'viking',
+  hp: { cur: 1667, max: 1667, threk: 0, mthrek: 0, delta: 0 },
+  sp: { cur: 926, max: 53 },
+  bars: { gp1: 12, gp1_max: 40, gp2: 0, gp2_max: 0 },
+  chain: { chain: 0, bsdepth: 2 },
+  daler: 14230,
+} });
+const st = () => el('guild-rows').children;
+check('a current and a ceiling is one line, not a block of its own',
+  text(st()[st().findIndex((n) => text(n) === 'sp') + 1]) === '926 / 53',
+  text(st()[st().findIndex((n) => text(n) === 'sp') + 1]));
+const barsAt = st().findIndex(
+  (n) => n.className === 'ghead' && text(n) === 'bars');
+check('a record with more in it becomes a block under its own heading',
+  barsAt >= 0 && st()[barsAt + 1].className === 'gsub');
+check('and inside the block the usual pairing still applies',
+  st()[barsAt + 1].children.map(text).join('|') === 'gp1|12 / 40|gp2|0 / 0',
+  st()[barsAt + 1].children.map(text));
+check('a plain number is still a plain number',
+  text(st()[st().findIndex((n) => text(n) === 'daler') + 1]) === '14,230');
+check('and no JSON anywhere in it',
+  !st().map(text).join(' ').includes('{'),
+  st().map(text).join(' ').slice(0, 80));
+
+/* The warehouse: a list of records where not every record has every
+   field, and one field is blank the whole way down. */
+renderGuilds({ 'Guild.Warehouse': {
+  guild: 'viking', wstock_cap: 200,
+  wstock: [{ amount: 20, good: 'ore', pct: 100, note: '', held: 0 },
+           { amount: 9, good: 'mead', grade: 'must', pct: 45,
+             note: '', held: 0 }],
+} });
+const wt = el('guild-rows').children
+  .find((n) => n.className === 'gtable').children[0];
+check('a column a later record adds is picked up',
+  wt.children[0].children.map(text).join('|') === 'amount|good|pct|grade',
+  wt.children[0].children.map(text));
+check('a column blank the whole way down is dropped',
+  !wt.children[0].children.map(text).includes('note'));
+check('and so is one that is zero the whole way down',
+  !wt.children[0].children.map(text).includes('held'));
+check('and a record missing one of them leaves that cell empty',
+  wt.children[1].children.map(text).join('|') === '20|ore|100%|',
+  wt.children[1].children.map(text));
 
 renderGuilds({});
 check('and it goes away again when the feed does',

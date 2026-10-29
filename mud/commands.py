@@ -76,7 +76,7 @@ HELP = [
     ]),
     ('The connection', '', [
         ('/js', 're-send the 3klient handshake'),
-        ('/gmcp', 'what the MUD offers over GMCP, and what has arrived'),
+        ('/gmcp', 'what the MUD offers over GMCP, and what has arrived; /gmcp <package> for one of them, assembled'),
         ('/prefixes', "show the character settings that mark up 3K's output"),
         ('/prefixes set', 'send them'),
         ('/ansivars', 'read and keep your own colour settings from 3K'),
@@ -227,7 +227,10 @@ def handle(text: str, session, scripts, note) -> bool:
         _here(session, note)
 
     elif verb == "gmcp":
-        note("\n".join(session.gmcp.report()))
+        if rest.strip():
+            note("\n".join(_gmcp_package(session, rest.strip())))
+        else:
+            note("\n".join(session.gmcp.report()))
 
     elif verb in ("name", "lost", "merge"):
         _correct(session, verb, rest, note)
@@ -399,6 +402,65 @@ def _find(session, query: str, note) -> None:
         arrow = ">" if line["kind"] == "sent" else " "
         rows.append(f"  {when} {arrow} {line['text']}{where}")
     note(f"{len(hits)} match(es) for {query!r}:\n" + "\n".join(rows))
+
+
+def _gmcp_package(session, want: str) -> list[str]:
+    """One Guild.* package as the client holds it, pages and all put back.
+
+    `/gmcp` on its own lists what has arrived, but a package that comes in
+    pages shows only its last frame there -- and the last page of a
+    twenty-five page map is a line with the width on it.  This prints what
+    the pages add up to, which is what the panel is drawing from, so a
+    field that looks wrong on screen can be read at its source.
+    """
+    feed = getattr(session, "guilds", None)
+    held = dict(getattr(feed, "packages", {}) or {})
+    if not held:
+        return ["No guild packages have arrived."]
+
+    name = want if want.lower().startswith("guild.") else f"Guild.{want}"
+    found = next((k for k in held if k.lower() == name.lower()), None)
+    if found is None:
+        return [f"No package called {name}.  Held: "
+                + ", ".join(sorted(held)) + "."]
+
+    out = [f"{found}, as it has been assembled:"]
+    for key in sorted(held[found]):
+        out.append(f"  {key} = {_short(held[found][key])}")
+    return out
+
+
+#: Enough of a value to recognise it by, not the whole of a long one.
+#: A short list is shown whole -- a map's key names twenty-one kinds of
+#: ground and is useless with four of them -- and a long one is sampled.
+SAMPLE, WIDE, WHOLE = 4, 200, 400
+
+
+def _short(value) -> str:
+    """A value, trimmed to something a line can hold.
+
+    A map's terrain is seventy characters by however many rows, and a
+    market is a hundred records: printing those whole buries the one field
+    somebody is looking for.  So: small enough to read, printed; too big,
+    a few of it and a count of the rest.
+    """
+    if isinstance(value, (list, dict)):
+        whole = _spell(value, len(value))
+        return whole if len(whole) <= WHOLE else _spell(value, SAMPLE)
+    text = str(value)
+    return text if len(text) <= WIDE else text[:WIDE] + f"... ({len(text)})"
+
+
+def _spell(value, upto: int) -> str:
+    """A list or a map, up to so many of its entries."""
+    if isinstance(value, list):
+        shown = ", ".join(_short(v) for v in value[:upto])
+        rest = len(value) - upto
+        return f"[{shown}{f', ... {rest} more' if rest > 0 else ''}]"
+    keys = sorted(value)
+    shown = ", ".join(f"{k}: {_short(value[k])}" for k in keys[:upto])
+    rest = len(keys) - upto
+    return "{" + shown + (f", ... {rest} more" if rest > 0 else "") + "}"
 
 
 def _here(session, note) -> None:

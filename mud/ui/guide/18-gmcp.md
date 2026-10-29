@@ -14,6 +14,8 @@
 
 3Scapes sends a great deal about your guild -- seven packages on some guilds, sixteen on others, dozens of numbers each. The panel sits in the sidebar, directly under **Session**, and puts each package on its own tab: **State**, **Systems**, **Info**, **Progress**, **Stats**, **Config**, **Powers**, or whichever of them your guild sends. Past eight of them the tabs become a dropdown instead, so the list of packages does not fill the panel the numbers are there for. Click the heading to roll the whole thing up out of the way, and again to bring it back.
 
+What arrives is not a flat list of numbers, and it is not shown as one. A record -- your health, your points, a chain -- becomes a small block under its own heading, except where it reads better on one line: a current and a maximum are shown as a pair, and a coordinate as two numbers. A list of records -- your ships, your stock, your trade routes -- becomes a table, one line each, and a wide one scrolls rather than widening the sidebar. A column that is blank or zero the whole way down is left out; it appears the day it has something to say.
+
 The names on the rows are **your guild's own**, exactly as the MUD sends them. They are not translated, because every guild's are different and a friendlier name invented here could easily be the wrong one -- these are the names you already read in the game. Where the shape of a name says something, the panel uses it: a count with a ceiling is shown as a pair, something measured in seconds becomes a countdown, a percentage gets its sign, and a switch reads **on** or **off**. A number at zero is drawn quieter so the ones that matter stand out.
 
 ### Maps a guild sends

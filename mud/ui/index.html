@@ -264,6 +264,22 @@
   #guild-rows .v{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
   #guild-rows .v.off{color:var(--dim)}
   #guild-rows .wide{grid-column:1/-1;color:var(--ink);overflow-wrap:anywhere}
+  /* A record inside a package is its own little block under a heading,
+     set in from the margin with a rule down the side so it reads as
+     belonging to the line above it. */
+  #guild-rows .ghead{grid-column:1/-1;color:var(--ink);margin-top:5px}
+  #guild-rows .gsub{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr;
+    gap:1px 10px;margin:1px 0 2px 2px;padding-left:7px;
+    border-left:1px solid var(--line)}
+  /* A list of records is a table, and a wide one scrolls on its own
+     rather than widening the sidebar. */
+  #guild-rows .gtable{grid-column:1/-1;overflow-x:auto;margin:1px 0 3px 2px}
+  #guild-rows table{border-collapse:collapse}
+  #guild-rows th{text-align:left;font-weight:normal;color:var(--dim);
+    padding:0 9px 1px 0;white-space:nowrap}
+  #guild-rows td{padding:0 9px 0 0;white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  #guild-rows td.off{color:var(--dim)}
   h2 .cm-toggle{margin-left:auto;color:var(--dim)}
   /* A long room name wraps rather than running out of the panel. */
   #room-name{min-width:0;overflow-wrap:anywhere}
