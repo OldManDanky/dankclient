@@ -7,13 +7,20 @@
 - **The map is told where you are.** 3Scapes names each room by number as you walk into it, so the map never has to work out which room this is from what it looks like. It cannot lose you, and it cannot file one room under two names.
 - **The map fills in faster than you walk.** Each room also names where its exits go, so those become ways on the map without anyone walking them.
 - **The Guild panel.** Everything 3Scapes says about your guild, a tab per package. See below.
+- **Your guild can name its own two point pools.** Where it does, the names on the `GP1` and `GP2` gauges change to the guild's own without you typing anything. A name you set yourself still wins -- clearing it goes back to the guild's.
 - Your health, spell points and guild points still come from MIP, the protocol both MUDs speak, so the vitals strip reads the same on either game.
 
 ## The Guild panel
 
-3Scapes sends a great deal about your guild -- seven packages on some guilds, dozens of numbers each. The panel sits in the sidebar, directly under **Session**, and puts each package on its own tab: **State**, **Systems**, **Info**, **Progress**, **Stats**, **Config**, **Powers**, or whichever of them your guild sends. Click its heading to roll it up out of the way, and again to bring it back.
+3Scapes sends a great deal about your guild -- seven packages on some guilds, sixteen on others, dozens of numbers each. The panel sits in the sidebar, directly under **Session**, and puts each package on its own tab: **State**, **Systems**, **Info**, **Progress**, **Stats**, **Config**, **Powers**, or whichever of them your guild sends. Past eight of them the tabs become a dropdown instead, so the list of packages does not fill the panel the numbers are there for. Click the heading to roll the whole thing up out of the way, and again to bring it back.
 
 The names on the rows are **your guild's own**, exactly as the MUD sends them. They are not translated, because every guild's are different and a friendlier name invented here could easily be the wrong one -- these are the names you already read in the game. Where the shape of a name says something, the panel uses it: a count with a ceiling is shown as a pair, something measured in seconds becomes a countdown, a percentage gets its sign, and a switch reads **on** or **off**. A number at zero is drawn quieter so the ones that matter stand out.
+
+### Maps a guild sends
+
+Some guilds send a map -- a world, a territory, a battle board -- as rows of characters. Where one arrives it is **drawn** at the top of its tab rather than listed as rows of text, with your own position marked on it and a key to the characters actually on screen. Nothing about this is specific to any one guild: any package that arrives carrying a grid is drawn the same way, so a guild nobody here has played gets its map for free.
+
+A board with nothing on it draws nothing. If a guild sends its map in some encoding the panel cannot draw, it says so plainly instead of drawing something wrong.
 
 The panel appears only when something has arrived, so it is absent on Three Kingdoms. [Options → Layout](options:panels) hides it altogether if you would rather not have it.
 
@@ -30,3 +37,5 @@ Your guild is also shown on the character screen, beside the MUD and the profess
 - and anything that arrived without being offered, because the MUD's list of what it sends is not complete.
 
 A quiet feed is usually just a quiet moment: packages are sent when something changes and not otherwise. Room data comes when you **enter** a room -- `look` does not send it again.
+
+If a guild panel in particular stays empty, the guild may have a command of its own that sends everything again from scratch -- worth looking for in the guild's own help.

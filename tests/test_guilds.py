@@ -17,18 +17,50 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mud.guilds import GuildFeed  # noqa: E402
 
 
-def test_a_full_payload_replaces_and_a_bare_one_adds():
-    """`full: 1` is the whole truth, so a field missing from it is a field
-    the MUD has dropped.  Without it the payload is the bits that changed,
-    and the rest stands."""
+def test_the_first_push_replaces_and_every_push_after_it_merges():
+    """The guild's own `vhelp gmcp`: the first push after you subscribe, log
+    in or reconnect carries `full: 1` and every key; after that only the
+    keys that changed are sent, "merge them into what you hold, never
+    replace it"."""
     f = GuildFeed()
     f.take("Guild.State", {"full": 1, "guild": "gentech",
                            "pu": 9393, "gexp": 421838, "medkits": 4})
     f.take("Guild.State", {"pu": 9400})
     assert f.packages["Guild.State"] == {
         "guild": "gentech", "pu": 9400, "gexp": 421838, "medkits": 4}
+    # Relogging resends everything with full: 1, and a key that no longer
+    # applies -- no city, no city plan -- is gone rather than stale.
     f.take("Guild.State", {"full": 1, "guild": "gentech", "pu": 1})
     assert f.packages["Guild.State"] == {"guild": "gentech", "pu": 1}
+
+
+def test_a_paged_full_push_is_one_answer_not_one_per_page():
+    """Every page of a full push carries `full: 1` as well, so reading page
+    two as a snapshot of its own throws page one away.  `Guild.Map` sends
+    the territory that way -- terrain and the two edge grids -- and losing a
+    page there loses half the map.
+    """
+    f = GuildFeed()
+    f.take("Guild.Map", {"full": 1, "pages": 2, "page": 1, "guild": "vikings",
+                         "w": 50, "east": ["110", "011"]})
+    f.take("Guild.Map", {"full": 1, "pages": 2, "page": 2, "guild": "vikings",
+                         "south": ["1100", "0011"]})
+    assert f.packages["Guild.Map"] == {
+        "guild": "vikings", "w": 50,
+        "east": ["110", "011"], "south": ["1100", "0011"]}
+
+
+def test_a_paged_delta_never_clears_what_it_is_adding_to():
+    """A push without `full` is the keys that changed, and it can be paged
+    like any other.  Clearing on its first page would wipe the package."""
+    f = GuildFeed()
+    f.take("Guild.Trade", {"full": 1, "guild": "vikings",
+                           "carts": 3, "routes": ["north", "south"]})
+    f.take("Guild.Trade", {"pages": 2, "page": 1, "cart_legs": ["a"]})
+    f.take("Guild.Trade", {"pages": 2, "page": 2, "queue": 7})
+    assert f.packages["Guild.Trade"] == {
+        "guild": "vikings", "carts": 3, "routes": ["north", "south"],
+        "cart_legs": ["a"], "queue": 7}
 
 
 def test_a_paged_answer_is_collected_rather_than_overwritten():

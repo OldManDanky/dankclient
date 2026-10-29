@@ -51,7 +51,16 @@
 
   /* One field, as a value and whether it is "off" (dimmed). */
   function show(key, value, body) {
-    if (Array.isArray(value)) return [value.join(', '), !value.length];
+    // A list of objects joins to "[object Object]" if you leave it to the
+    // default, which is a bug waiting on the first guild that sends one --
+    // we have watched exactly one guild's feed, and it sends lists of words.
+    if (Array.isArray(value)) {
+      const parts = value.map((v) => {
+        if (v === null || v === undefined) return '';
+        return typeof v === 'object' ? JSON.stringify(v) : String(v);
+      });
+      return [parts.join(', '), !value.length];
+    }
     if (value === null || value === undefined) return ['', true];
     if (typeof value === 'object') return [JSON.stringify(value), false];
     if (typeof value === 'string') return [value, !value.trim()];
@@ -68,15 +77,103 @@
     return [group(n), n === 0];
   }
 
-  function rows(body) {
+  /* A package carrying a grid is drawn as one.  Recognised by its SHAPE,
+     never by its name: one guild's world map and its battle board both
+     arrive as w, h and rows of glyphs, and a third guild we have never
+     seen can do the same and get the same drawing for free.
+
+     Three rules come from the MUD's own help page rather than from
+     guesswork.  The rows never contain you -- you are drawn at `pos`.
+     `enc` names each plane's encoding and is to be read rather than
+     assumed, so an encoding we cannot draw says so instead of drawing
+     nonsense.  And `active: 0` means "nothing here", which is how a board
+     with no battle on it clears itself. */
+  const GRID_KEYS = ['terrain', 'east', 'south', 'legend', 'enc',
+                     'w', 'h', 'pos'];
+  const MARKER = '@';
+
+  function grid(body) {
+    const rows = body.terrain;
+    if (!Array.isArray(rows) || !rows.length) return null;
+    if (!rows.every((r) => typeof r === 'string')) return null;
+    if (body.active !== undefined && !Number(body.active)) return null;
+    const enc = body.enc && typeof body.enc === 'object' ? body.enc : {};
+    if (enc.terrain && enc.terrain !== 'glyph') {
+      return { unreadable: String(enc.terrain) };
+    }
+    const at = body.pos && typeof body.pos === 'object' ? body.pos : {};
+    const x = Number(at.x);
+    const y = Number(at.y);
+    return {
+      rows,
+      x: Number.isFinite(x) ? x : null,
+      y: Number.isFinite(y) ? y : null,
+      legend: body.legend && typeof body.legend === 'object' && !Array.isArray(body.legend)
+        ? body.legend : null,
+    };
+  }
+
+  function drawGrid(g, body) {
+    const box = $('guild-map');
+    if (!box) return;
+    box.replaceChildren();
+    if (!g) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    if (g.unreadable) {
+      const say = document.createElement('p');
+      say.className = 'fhint';
+      // Honest rather than wrong: we would be drawing the bytes of some
+      // other encoding as though they were characters.
+      say.textContent = `The map is sent as ${g.unreadable}, which this `
+        + 'panel cannot draw yet.';
+      box.append(say);
+      return;
+    }
+    const head = document.createElement('div');
+    head.className = 'gmap-head';
+    const size = `${Number(body.w) || g.rows[0].length}`
+      + `\u00d7${Number(body.h) || g.rows.length}`;
+    head.textContent = g.x === null ? size : `${size} — you are at ${g.x},${g.y}`;
+
+    const art = document.createElement('pre');
+    art.className = 'gmap';
+    art.textContent = g.rows.map((row, y) => {
+      if (y !== g.y || g.x === null || g.x < 0 || g.x >= row.length) return row;
+      return row.slice(0, g.x) + MARKER + row.slice(g.x + 1);
+    }).join('\n');
+    box.append(head, art);
+
+    if (g.legend) {
+      const key = document.createElement('div');
+      key.className = 'gmap-legend';
+      const seen = new Set(g.rows.join(''));
+      for (const [glyph, what] of Object.entries(g.legend)) {
+        // Only what is actually on this map: a legend for the whole world
+        // is a wall of text beside a corner of it.
+        if (!seen.has(glyph)) continue;
+        const one = document.createElement('span');
+        one.textContent = `${glyph} ${what}`;
+        key.append(one);
+      }
+      if (key.children.length) box.append(key);
+    }
+  }
+
+  function rows(body, drawn) {
     const box = $('guild-rows');
     box.replaceChildren();
     // A field that is some other field's ceiling is shown beside it, not
     // again on a line of its own.
     const paired = new Set(Object.keys(body)
       .filter((k) => k.endsWith('_max') && body[k.slice(0, -4)] !== undefined));
+    // What the drawing above already says is not said again as rows of
+    // glyph strings underneath it.
+    const shown = drawn ? GRID_KEYS : [];
     const keys = Object.keys(body)
-      .filter((k) => !PLUMBING.has(k) && !paired.has(k))
+      .filter((k) => !PLUMBING.has(k) && !paired.has(k) && !shown.includes(k))
       .sort();
     for (const key of keys) {
       const [text, off] = show(key, body[key], body);
@@ -102,16 +199,42 @@
     }
   }
 
+  // "Guild.Systems" is "Systems" here: the panel is already Guild.
+  const shortName = (name) => name.replace(/^Guild\./, '');
+
+  /* A tab per package up to a point.  One guild sends seven, which wraps to
+     two rows and reads at a glance; others send sixteen, and sixteen wrapped
+     buttons fill the panel before a single number shows.  Past this many it
+     becomes one dropdown instead -- a click to see what else is there, in
+     exchange for the space the numbers are the point of. */
+  const MANY = 8;
+
   function tabs(names) {
     const strip = $('guild-tabs');
     strip.replaceChildren();
+    if (names.length > MANY) {
+      const pick = document.createElement('select');
+      pick.setAttribute('aria-label', 'Which guild package to show');
+      for (const name of names) {
+        const o = document.createElement('option');
+        o.value = name;
+        o.textContent = shortName(name);
+        pick.append(o);
+      }
+      pick.value = chosen;
+      pick.onchange = () => {
+        chosen = pick.value;
+        render(data, true);
+      };
+      strip.append(pick);
+      return;
+    }
     for (const name of names) {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(name === chosen));
-      // "Guild.Systems" is "Systems" here: the panel is already Guild.
-      b.textContent = name.replace(/^Guild\./, '');
+      b.textContent = shortName(name);
       b.onclick = () => {
         chosen = name;
         render(data, true);
@@ -136,7 +259,9 @@
     const who = data[chosen].guild || '';
     $('guild-name').textContent = who;
     tabs(names);
-    rows(data[chosen]);
+    const g = grid(data[chosen]);
+    drawGrid(g, data[chosen]);
+    rows(data[chosen], !!g && !g.unreadable);
   }
 
   window.renderGuilds = render;

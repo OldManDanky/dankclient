@@ -912,11 +912,29 @@ def test_a_gauge_name_belongs_to_the_character_not_the_browser():
     `ownLabel` read localStorage, which is this browser's rather than this
     character's.  Both are fixed here, so both are pinned here."""
     app = (UI / "app.js").read_text()
-    assert "myLabels[key] || mipLabels[key]" in app, \
-        "the player's own name for a gauge must beat the MUD's"
+    assert "myLabels[key] || guildLabels[key] || mipLabels[key]" in app, \
+        "the player's own name for a gauge must beat every name the MUD sends"
     assert "localStorage.getItem('label:" not in app, \
         "a gauge's name is kept with the character, not in the browser"
     assert "op: 'label'" in app, "renaming has to reach the server to be kept"
+
+
+def test_the_guild_may_name_its_own_two_pools():
+    """3Scapes' `Guild.Info` carries `gp1_name` and `gp2_name` -- the MUD's
+    own answer to "every guild has gp1 and gp2, they are just called
+    different things".  A guild that says so gets its name used with nobody
+    typing anything, but it is still only a fallback: it sits above the
+    generic MIP label and below the name the player typed and meant.
+    """
+    app = (UI / "app.js").read_text()
+    assert "`${key}_name`" in app, \
+        "the guild's own name for a pool has to be read off Guild.Info"
+    assert "takeGuildLabels(s.guilds)" in app, \
+        "it comes off the state payload, with the rest of the guild feed"
+    # Clearing your own name must offer the guild's, not jump to the
+    # generic one underneath it.
+    assert "fallbackFor(key)" in app, \
+        "what clearing your name goes back to is the best name left"
 
 
 def test_disconnect_brings_the_character_screen_back():

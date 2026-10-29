@@ -244,8 +244,21 @@
   #guild-tabs button{padding:2px 7px;font-size:.85em;border:1px solid var(--line);
                      border-radius:3px;background:transparent;color:var(--dim);cursor:pointer}
   #guild-tabs button:hover{color:var(--ink)}
+  /* Past eight packages the strip is a dropdown instead; it is the only
+     thing on its row, so it takes the width. */
+  #guild-tabs select{width:100%;font-size:.85em}
   #guild-tabs button[aria-selected="true"]{background:var(--accent);color:var(--bg);
                                            border-color:var(--accent)}
+  /* A guild that sends a grid gets it drawn.  Monospaced and tight: the
+     glyphs are a picture, and a line height that breathes pulls it apart
+     into stripes.  It scrolls sideways on its own rather than widening the
+     sidebar. */
+  #guild-map{margin-bottom:6px}
+  #guild-map .gmap-head{color:var(--dim);font-size:.85em;margin-bottom:3px}
+  #guild-map pre.gmap{margin:0;overflow-x:auto;font-size:.8em;line-height:1.05;
+    white-space:pre;font-family:var(--mono,monospace)}
+  #guild-map .gmap-legend{display:flex;flex-wrap:wrap;gap:2px 10px;
+    margin-top:4px;color:var(--dim);font-size:.8em}
   #guild-rows{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;font-size:.9em}
   #guild-rows .k{color:var(--dim);white-space:nowrap}
   #guild-rows .v{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -944,6 +957,7 @@
     <section id="guildpanel" hidden>
       <h2 title="Click to collapse">Guild <span id="guild-name"></span><span class="cm-toggle">&minus;</span></h2>
       <div id="guild-tabs" role="tablist"></div>
+      <div id="guild-map" hidden></div>
       <div id="guild-rows"></div>
     </section>
 

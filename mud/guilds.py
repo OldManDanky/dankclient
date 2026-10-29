@@ -6,9 +6,9 @@ own**.  A gentech has `dna`, `hypergen` and `tacshield`; another guild has
 nothing of the sort.  Only the package names are shared.
 
 So this does not know, and must not pretend to know, what any field means.
-It assembles them -- a payload marked ``full`` replaces, one without it
-merges, a paged one is collected -- and hands over what the MUD said, under
-the names the MUD used.  A guess at a friendlier label is a guess that can
+It assembles them -- the first push of a package replaces what is held and
+every push after it merges, which is the rule the guild's own `vhelp gmcp`
+states -- and hands over what the MUD said, under the names the MUD used.  A guess at a friendlier label is a guess that can
 be wrong, and wrong is worse here than terse: these are the names the
 player already reads in the game.
 
@@ -57,16 +57,27 @@ class GuildFeed:
         before = self.packages.get(package)
         held = dict(before) if before else {}
 
-        if body.get("pages"):
-            # Paged: the pages are one answer sent in instalments, so page
-            # one starts a fresh set and the rest add to it.  Shown as they
-            # arrive rather than held back -- a page is right the moment it
-            # lands, and waiting only means an empty panel for a second.
-            if int(body.get("page") or 0) <= 1:
-                held = {}
-        elif body.get("full"):
-            # A whole snapshot: a field it does not carry is a field the
-            # MUD has dropped, not one it forgot to mention.
+        # The guild's own `vhelp gmcp` states the rule, and it is not the one
+        # the flags suggest.  `full: 1` comes on the FIRST push of a package
+        # after you subscribe, log in or reconnect, and carries every key.
+        # Everything after it is only the keys that changed: "merge them into
+        # what you hold, never replace it."  So a push without `full` must
+        # never clear anything.
+        #
+        # Paging is reassembly and nothing more.  A push too big for one frame
+        # is split, and **every page of a full push carries `full: 1` as well**
+        # -- which is the trap: read page two as a snapshot of its own and it
+        # throws page one away.  One guild's `Guild.Map` sends the territory's
+        # terrain and its two edge grids that way, so the whole map is exactly
+        # the thing that gets lost.  A delta can be paged too, and clearing on
+        # its first page would wipe the package just as badly.
+        #
+        # Hence: clear only where both say so -- a full push, at its first
+        # page.  Pages are merged as they land rather than held back until the
+        # set completes; a page is right the moment it arrives, waiting only
+        # means an empty panel for a second, and a page that never comes would
+        # otherwise strand the ones that did.
+        if body.get("full") and int(body.get("page") or 1) <= 1:
             held = {}
 
         held.update({k: v for k, v in body.items() if k not in PLUMBING})

@@ -723,9 +723,36 @@ let mipLabels = {};
    player who has typed a name has said what they want it called. */
 let myLabels = {};
 let playing = null;
+/* What the guild calls its own two pools.  3Scapes' `Guild.Info` carries
+   `gp1_name` and `gp2_name` -- the MUD's own answer to "every guild has
+   gp1 and gp2, they are just called different things" -- so a guild that
+   says so gets its name used without anybody typing it.  Below your own
+   name, which you typed and meant; above the MIP label, which is the
+   generic one where the guild's is the specific one. */
+let guildLabels = {};
 
 function labelFor(key) {
-  return myLabels[key] || mipLabels[key] || DEFAULT_LABELS[key];
+  return myLabels[key] || guildLabels[key] || mipLabels[key]
+    || DEFAULT_LABELS[key];
+}
+
+function fallbackFor(key) {
+  return guildLabels[key] || mipLabels[key] || DEFAULT_LABELS[key];
+}
+
+/* Read off the state payload rather than wired to a package name in the
+   UI: if some other guild names its pools somewhere else one day, this is
+   the one place that has to learn it. */
+function takeGuildLabels(guilds) {
+  const info = (guilds && guilds['Guild.Info']) || {};
+  const next = {};
+  for (const key of ['gp1', 'gp2']) {
+    const said = info[`${key}_name`];
+    if (typeof said === 'string' && said.trim()) next[key] = said.trim();
+  }
+  if (JSON.stringify(next) === JSON.stringify(guildLabels)) return false;
+  guildLabels = next;
+  return true;
 }
 
 function paintLabels() {
@@ -735,7 +762,7 @@ function paintLabels() {
     el.textContent = labelFor(key);
     el.title = myLabels[key]
       ? 'Your name for it. Click to change, or clear it to go back to '
-        + (mipLabels[key] || DEFAULT_LABELS[key])
+        + fallbackFor(key)
       : playing
         ? 'Click to rename this gauge'
         : 'Log in a character to rename this gauge';
@@ -759,7 +786,7 @@ for (const key of Object.keys(DEFAULT_LABELS)) {
     if (!playing) return;       // it is kept with a character; there is none
     const next = prompt(
       `Name for ${DEFAULT_LABELS[key]} (empty for `
-        + `${mipLabels[key] || DEFAULT_LABELS[key]})`,
+        + `${fallbackFor(key)})`,
       myLabels[key] || '');
     if (next === null) return;
     if (ws) ws.send(JSON.stringify({
@@ -897,6 +924,7 @@ function render(s) {
   if (window.renderVersion) window.renderVersion(s.release, s.where && s.where.version);
 
   if (window.renderGuilds) window.renderGuilds(s.guilds);
+  if (takeGuildLabels(s.guilds)) paintLabels();
 
   if (s.labels && JSON.stringify(s.labels) !== JSON.stringify(mipLabels)) {
     mipLabels = s.labels;
