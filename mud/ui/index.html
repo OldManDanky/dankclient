@@ -254,7 +254,12 @@
      into stripes.  It scrolls sideways on its own rather than widening the
      sidebar. */
   #guild-map{margin-bottom:6px}
-  #guild-map .gmap-head{color:var(--dim);font-size:.85em;margin-bottom:3px}
+  #guild-map .gmap-head{color:var(--dim);font-size:.85em;margin-bottom:3px;
+    display:flex;align-items:baseline;gap:8px}
+  #guild-map .gmap-out{margin-left:auto;padding:0 6px;font-size:.9em;
+    border:1px solid var(--line);background:none;color:var(--dim);
+    border-radius:3px;cursor:pointer}
+  #guild-map .gmap-out:hover{color:var(--ink)}
   #guild-map pre.gmap{margin:0;overflow-x:auto;font-size:.8em;line-height:1.05;
     white-space:pre;font-family:var(--mono,monospace)}
   #guild-map .gmap-legend{display:flex;flex-wrap:wrap;gap:2px 10px;
@@ -268,6 +273,20 @@
      set in from the margin with a rule down the side so it reads as
      belonging to the line above it. */
   #guild-rows .ghead{grid-column:1/-1;color:var(--ink);margin-top:5px}
+  /* Which package a block of rows came from, where a tab gathers several
+     of them.  Set apart harder than a field heading, because it is a
+     boundary rather than a nesting. */
+  #guild-rows .gpack{grid-column:1/-1;margin-top:8px;padding-bottom:1px;
+    border-bottom:1px solid var(--line);color:var(--dim);
+    text-transform:uppercase;letter-spacing:.06em;font-size:.8em}
+  #guild-rows .gpack:first-child{margin-top:0}
+  /* How full, drawn under the pair it belongs to.  Deliberately one
+     colour: a pool you want full and a poison you want empty are the
+     same shape, and nothing in the feed says which this is. */
+  #guild-rows .gbar{grid-column:1/-1;height:2px;margin:0 0 2px;
+    background:var(--line);border-radius:1px}
+  #guild-rows .gbar::before{content:'';display:block;height:100%;
+    width:var(--fill,0);background:var(--accent);border-radius:1px}
   #guild-rows .gsub{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr;
     gap:1px 10px;margin:1px 0 2px 2px;padding-left:7px;
     border-left:1px solid var(--line)}
@@ -2124,6 +2143,7 @@ HP: 31207/31207  SP: 3971/3971  0123456789</pre>
   <script src="about.js"></script>
   <script src="panels.js"></script>
   <script src="tracking.js"></script>
+  <script src="guildlayout.js"></script>
   <script src="guild.js"></script>
   <script src="fonts.js"></script>
   <script src="numpad.js"></script>

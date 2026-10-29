@@ -9,11 +9,16 @@ const p = page({
   guildpanel: 'section', 'guild-name': 'span',
   'guild-tabs': 'div', 'guild-map': 'div', 'guild-rows': 'div',
 }, {});
+load('guildlayout.js');
 load('guild.js');
 const el = (id) => p.els[id];
 const text = (node) => node.textContent;
 const pairs = () => {
-  const kids = el('guild-rows').children;
+  // Only the flat key/value cells: a bar, a heading, a block or a table
+  // is not one, and counting it would put the walk below out by one.
+  const NOT = ['gbar', 'gpack', 'ghead', 'gsub', 'gtable'];
+  const kids = el('guild-rows').children
+    .filter((n) => !NOT.includes(n.className));
   const out = [];
   for (let i = 0; i < kids.length; i += 2) {
     out.push([text(kids[i]), kids[i + 1] ? text(kids[i + 1]) : null]);
@@ -57,7 +62,8 @@ check('clicking a tab switches to it',
 
 const rows = Object.fromEntries(pairs());
 check('a ceiling is shown beside its own field, not on a line of its own',
-  rows['pu'] === '9,393 / 12,000' && rows['pu_max'] === undefined, rows['pu']);
+  rows['pu'] === '9,393 / 12,000  78%' && rows['pu_max'] === undefined,
+  rows['pu']);
 check('an underscore reads as a space', rows['pu store'] === '4,215');
 check('_pct is a percentage', rows['g2n_pct'] === undefined && rows['g2n pct'] === '42%');
 check('_secs is a duration', rows['edna secs'] === '27m 0s', rows['edna secs']);
@@ -130,12 +136,12 @@ check('the dropdown names the packages the same way the tabs did',
   text(strip[0].children[0]) === 'Actives'
   && text(strip[0].children[8]) === 'SpellsAdvanced');
 check('and it opens on the first package, as the tabs do',
-  strip[0].value === 'Guild.Actives');
+  strip[0].value === 'Actives', strip[0].value);
 
-strip[0].value = 'Guild.SpellsSummon';
+strip[0].value = 'SpellsSummon';
 strip[0].onchange();
 check('picking one shows it, and the dropdown stays on it',
-  el('guild-tabs').children[0].value === 'Guild.SpellsSummon'
+  el('guild-tabs').children[0].value === 'SpellsSummon'
   && Object.fromEntries(pairs())['mana'] === '42');
 
 renderGuilds(FEED);
@@ -217,6 +223,10 @@ renderGuilds({ 'Guild.Map': {
   south: ['10001111111', '11111111111'],
 } });
 const live = el('guild-map').children;
+check('the map offers a window of its own',
+  live[0].children.length === 1
+  && text(live[0].children[0]) === 'pop out',
+  live[0].children.map(text));
 check('a live world map draws, though it says active: 0',
   el('guild-map').hidden === false && live[1].tagName === 'pre',
   el('guild-map').hidden);
@@ -239,15 +249,21 @@ renderGuilds({ 'Guild.State': {
   daler: 14230,
 } });
 const st = () => el('guild-rows').children;
-check('a current and a ceiling is one line, not a block of its own',
-  text(st()[st().findIndex((n) => text(n) === 'sp') + 1]) === '926 / 53',
+check('a current and a ceiling is one line, with the division done for you',
+  text(st()[st().findIndex((n) => text(n) === 'sp') + 1]) === '926 / 53  1747%',
   text(st()[st().findIndex((n) => text(n) === 'sp') + 1]));
+// 926 of a maximum 53 is what the live feed really sends; the bar cannot
+// draw past its end, and the numbers beside it still say what happened.
+check('a bar is drawn under it, and never past full',
+  st()[st().findIndex((n) => text(n) === 'sp') + 2].style
+    .getPropertyValue('--fill') === '100%');
 const barsAt = st().findIndex(
   (n) => n.className === 'ghead' && text(n) === 'bars');
 check('a record with more in it becomes a block under its own heading',
   barsAt >= 0 && st()[barsAt + 1].className === 'gsub');
 check('and inside the block the usual pairing still applies',
-  st()[barsAt + 1].children.map(text).join('|') === 'gp1|12 / 40|gp2|0 / 0',
+  st()[barsAt + 1].children.filter((n) => n.className !== 'gbar')
+    .map(text).join('|') === 'gp1|12 / 40  30%|gp2|0',
   st()[barsAt + 1].children.map(text));
 check('a plain number is still a plain number',
   text(st()[st().findIndex((n) => text(n) === 'daler') + 1]) === '14,230');
@@ -275,6 +291,75 @@ check('and so is one that is zero the whole way down',
 check('and a record missing one of them leaves that cell empty',
   wt.children[1].children.map(text).join('|') === '20|ore|100%|',
   wt.children[1].children.map(text));
+
+/* Plain values first, then the blocks, then the tables.  Alphabetical
+   all together, the ships land between two numbers and push what you
+   came to read off the bottom of the panel. */
+renderGuilds({ 'Guild.Fleet': {
+  guild: 'viking',
+  ships: [{ name: 'Skidbladnir', tier: 1 }],
+  berths: { used: 2, cap: 5 },
+  renown: 40,
+  zzz_last: 7,
+} });
+const order = el('guild-rows').children
+  .filter((n) => n.className !== 'gbar')
+  .map((n) => text(n));
+check('the small facts come first and the bulk underneath',
+  order.indexOf('renown') < order.indexOf('berths')
+  && order.indexOf('zzz last') < order.indexOf('berths')
+  && order.indexOf('berths') < order.indexOf('ships'), order);
+
+/* Two ceiling conventions in one live package: `pu` with `pu_max`, and
+   the points, where the maximum of `fury` is `mfury`. */
+renderGuilds({ 'Guild.State': { guild: 'viking', points: {
+  fury: 31, mfury: 100, vitka: 8, mvitka: 20, vitka_delta: 3,
+  viga_delta: 0, mode: 'raiding' } } });
+const pts = el('guild-rows').children
+  .find((n) => n.className === 'gsub').children
+  .filter((n) => n.className !== 'gbar').map(text);
+check('an m-prefixed maximum pairs with its own field',
+  pts.join('|') === 'fury|31 / 100  31%|mode|raiding|viga delta|0'
+    + '|vitka|8 / 20  40%|vitka delta|+3', pts);
+check("and `mode` is not paired with an `ode` that does not exist",
+  pts.includes('mode') && pts.includes('raiding'));
+
+/* A guild with a layout: its packages are gathered into tabs that mean
+   something, and nothing it sends can be lost by that. */
+const VIK = {
+  'Guild.State': { guild: 'viking', daler: 10 },
+  'Guild.Info': { guild: 'viking', rank: 3 },
+  'Guild.Trade': { guild: 'viking', carts: 2 },
+  'Guild.Warehouse': { guild: 'viking', wstock_cap: 50 },
+  'Guild.Surprise': { guild: 'viking', something: 'new' },
+};
+renderGuilds(VIK);
+const vtabs = el('guild-tabs').children.map(text);
+check('a guild with a layout gets its packages gathered into tabs',
+  vtabs.join('|') === 'Status|Trade|Other', vtabs);
+check('a tab the guild sent nothing for is not drawn',
+  !vtabs.includes('City') && !vtabs.includes('Fleet'));
+check('two packages on one tab are both shown, each under its own name',
+  Object.fromEntries(pairs())['daler'] === '10'
+  && Object.fromEntries(pairs())['rank'] === '3'
+  && el('guild-rows').children.filter((n) => n.className === 'gpack')
+    .map(text).join('|') === 'State|Info');
+
+el('guild-tabs').children[2].onclick();
+check('a package no layout mentions is not lost, it lands on Other',
+  Object.fromEntries(pairs())['something'] === 'new');
+
+/* The same packages without the guild that has a layout: a tab each,
+   exactly as before. */
+renderGuilds({
+  'Guild.State': { guild: 'gentech', daler: 10 },
+  'Guild.Trade': { guild: 'gentech', carts: 2 },
+});
+check('a guild with no layout still gets one tab per package',
+  el('guild-tabs').children.map(text).join('|') === 'State|Trade',
+  el('guild-tabs').children.map(text));
+check('and no package heading, since the tab already names it',
+  !el('guild-rows').children.some((n) => n.className === 'gpack'));
 
 renderGuilds({});
 check('and it goes away again when the feed does',

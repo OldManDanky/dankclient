@@ -29,10 +29,14 @@ class GuildFeed:
     def __init__(self) -> None:
         #: package name -> the assembled tree, the MUD's own field names
         self.packages: dict[str, dict] = {}
+        #: package name -> the paged run in progress, so a list that
+        #: continues on the next page is added to rather than replaced
+        self._runs: dict[str, dict] = {}
 
     def clear(self) -> None:
         """A new character, or a new connection: none of it carries over."""
         self.packages.clear()
+        self._runs.clear()
 
     @property
     def guild(self) -> str:
@@ -54,6 +58,7 @@ class GuildFeed:
         said = str(body.get("guild") or "")
         if said and self.guild and said != self.guild:
             self.packages.clear()
+            self._runs.clear()
         before = self.packages.get(package)
         held = dict(before) if before else {}
 
@@ -77,10 +82,43 @@ class GuildFeed:
         # set completes; a page is right the moment it arrives, waiting only
         # means an empty panel for a second, and a page that never comes would
         # otherwise strand the ones that did.
-        if body.get("full") and int(body.get("page") or 1) <= 1:
+        page = int(body.get("page") or 1)
+        pages = int(body.get("pages") or 1)
+        if body.get("full") and page <= 1:
             held = {}
 
-        held.update({k: v for k, v in body.items() if k not in PLUMBING})
+        # And a list that does not fit on one page CONTINUES on the next:
+        # "page 1 entries first, then page 2".  So a list arriving on a
+        # later page is added to the one being built, not put in its place.
+        # A thirty-five row map comes over twenty-five pages about four rows
+        # at a time; replacing meant holding the last four and drawing a
+        # seventh of the territory under a heading that said 70x35.
+        #
+        # Only ever within an unbroken run from page one of the same set.
+        # A page two whose page one we never saw is not a continuation of
+        # anything, and appending it to whatever is held would quietly
+        # double the map instead of losing most of it -- which is worse,
+        # because it looks right.
+        run = self._runs.get(package)
+        run_on = (pages > 1 and page > 1 and run is not None
+                  and run["pages"] == pages and run["page"] == page - 1)
+
+        for key, value in body.items():
+            if key in PLUMBING:
+                continue
+            if (run_on and key in run["keys"]
+                    and isinstance(value, list)
+                    and isinstance(held.get(key), list)):
+                held[key] = held[key] + value
+            else:
+                held[key] = value
+
+        if pages > 1 and page < pages:
+            seen = set(run["keys"]) if run_on else set()
+            seen.update(k for k in body if k not in PLUMBING)
+            self._runs[package] = {"page": page, "pages": pages, "keys": seen}
+        else:
+            self._runs.pop(package, None)
         if held == before:
             return False
         self.packages[package] = held

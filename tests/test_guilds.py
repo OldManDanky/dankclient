@@ -156,3 +156,52 @@ def test_it_rolls_up_by_its_heading_like_the_others():
     ui = P(__file__).resolve().parents[1] / "mud" / "ui"
     assert "'guildpanel'" in (ui / "panels.js").read_text()
     assert "#guildpanel.collapsed" in (ui / "index.html").read_text()
+
+
+def test_a_list_too_long_for_one_page_continues_on_the_next():
+    """"A list that spills over a page boundary continues: page 1 entries
+    first, then page 2."  A guild's world map is thirty-five rows of
+    terrain and two more grids of edges, sent about four rows at a time
+    over twenty-five pages.  Replacing the list on each page held the last
+    four rows and drew a seventh of the territory under a heading that
+    said 70x35.
+    """
+    f = GuildFeed()
+    for page in (1, 2, 3):
+        f.take("Guild.Map", {"full": 1, "pages": 3, "page": page,
+                             "guild": "viking",
+                             "terrain": [f"row{page}a", f"row{page}b"]})
+    assert f.packages["Guild.Map"]["terrain"] == [
+        "row1a", "row1b", "row2a", "row2b", "row3a", "row3b"]
+
+
+def test_the_next_push_of_the_same_map_starts_the_rows_again():
+    """The map is rebuilt every few seconds.  Each rebuild is its own
+    answer, so the rows must not pile up on the last one's."""
+    f = GuildFeed()
+    for push in ("a", "b"):
+        for page in (1, 2):
+            f.take("Guild.Map", {"full": 1, "pages": 2, "page": page,
+                                 "guild": "viking", "terrain": [f"{push}{page}"]})
+    assert f.packages["Guild.Map"]["terrain"] == ["b1", "b2"]
+
+
+def test_a_page_whose_beginning_was_missed_is_not_glued_on():
+    """A page two whose page one never arrived continues nothing.  Adding
+    it to what is held would double the map rather than lose most of it --
+    worse, because it looks right."""
+    f = GuildFeed()
+    f.take("Guild.Map", {"full": 1, "guild": "viking", "terrain": ["kept"]})
+    f.take("Guild.Map", {"pages": 4, "page": 3, "guild": "viking",
+                         "terrain": ["orphan"]})
+    assert f.packages["Guild.Map"]["terrain"] == ["orphan"]
+
+
+def test_an_ordinary_update_replaces_its_list_rather_than_adding_to_it():
+    """Only a continuation adds.  A plain push saying what the routes are
+    now is the whole answer, not more of the last one."""
+    f = GuildFeed()
+    f.take("Guild.Trade", {"full": 1, "guild": "viking",
+                           "routes": ["north", "south"]})
+    f.take("Guild.Trade", {"guild": "viking", "routes": ["east"]})
+    assert f.packages["Guild.Trade"]["routes"] == ["east"]
